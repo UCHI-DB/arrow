@@ -135,6 +135,9 @@ class BitReader {
   template <typename T>
   int GetBatch(int num_bits, T* v, int batch_size);
 
+  /// Skip a number of values from the buffer.
+  int Skip(int num_bits, int batch_size);
+
   /// Reads a 'num_bytes'-sized value from the buffer and stores it in 'v'. T
   /// needs to be a little-endian native type and big enough to store
   /// 'num_bytes'. The value is assumed to be byte-aligned so the stream will
@@ -357,6 +360,33 @@ inline int BitReader::GetBatch(int num_bits, T* v, int batch_size) {
   buffered_values_ = buffered_values;
 
   return batch_size;
+}
+
+inline int BitReader::Skip(int num_bits, int batch_size) {
+    // TODO: revisit this limit if necessary
+            DCHECK_LE(num_bits, 32);
+
+    int bit_offset = bit_offset_;
+    int byte_offset = byte_offset_;
+    uint64_t buffered_values = buffered_values_;
+    int max_bytes = max_bytes_;
+
+    uint64_t needed_bits = num_bits * batch_size;
+    uint64_t remaining_bits = (max_bytes - byte_offset) * 8 - bit_offset;
+    if (remaining_bits < needed_bits) {
+        batch_size = static_cast<int>(remaining_bits) / num_bits;
+    }
+
+    bit_offset += num_bits * batch_size;
+    byte_offset += (bit_offset >> 6);
+    bit_offset &= 0x3F;
+    memcpy(&buffered_values, buffer_ + byte_offset, 8);
+
+    bit_offset_ = bit_offset;
+    byte_offset_ = byte_offset;
+    buffered_values_ = buffered_values;
+
+    return batch_size;
 }
 
 template <typename T>

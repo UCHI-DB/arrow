@@ -116,6 +116,10 @@ class RleDecoder {
   template <typename T>
   int GetBatch(T* values, int batch_size);
 
+  /// Skip a batch of values. return the number of skipped elements.
+  template <typename T>
+  int Skip(int batch_size);
+
   /// Like GetBatch but add spacing for null entries
   template <typename T>
   int GetBatchSpaced(int batch_size, int null_count, const uint8_t* valid_bits,
@@ -316,6 +320,33 @@ inline int RleDecoder::GetBatch(T* values, int batch_size) {
   }
 
   return values_read;
+}
+
+template <typename T>
+int RleDecoder::Skip(int batch_size) {
+    DCHECK_GE(bit_width_, 0);
+    int values_read = 0;
+
+    while (values_read < batch_size) {
+        if (repeat_count_ > 0) {
+            int repeat_batch =
+                    std::min(batch_size - values_read, static_cast<int>(repeat_count_));
+            repeat_count_ -= repeat_batch;
+            values_read += repeat_batch;
+        } else if (literal_count_ > 0) {
+            int literal_batch =
+                    std::min(batch_size - values_read, static_cast<int>(literal_count_));
+            int actual_read =
+                    bit_reader_.Skip(bit_width_, literal_batch);
+            DCHECK_EQ(actual_read, literal_batch);
+            literal_count_ -= literal_batch;
+            values_read += literal_batch;
+        } else {
+            if (!NextCounts<T>()) return values_read;
+        }
+    }
+
+    return values_read;
 }
 
 template <typename T>
