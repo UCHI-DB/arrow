@@ -903,6 +903,8 @@ class PlainDecoder : public DecoderImpl, virtual public TypedDecoder<DType> {
 
   int Decode(T* buffer, int max_values) override;
 
+  int Skip(int max_values) override;
+
   int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
                   int64_t valid_bits_offset,
                   typename EncodingTraits<DType>::Accumulator* builder) override;
@@ -1065,6 +1067,46 @@ int PlainDecoder<DType>::Decode(T* buffer, int max_values) {
   return max_values;
 }
 
+// Decode routine templated on C++ type rather than type enum
+template <typename T>
+inline int SkipPlain(const uint8_t* data, int64_t data_size, int num_values,
+                       int type_length) {
+    return num_values * static_cast<int>(sizeof(T));
+}
+
+template<>
+inline int SkipPlain<ByteArray>(const uint8_t* data, int64_t data_size, int num_values,
+                                        int type_length) {
+    int bytes_decoded = 0;
+    int increment;
+    for (int i = 0; i < num_values; ++i) {
+        uint32_t len = arrow::util::SafeLoadAs<uint32_t>(data);
+        increment = static_cast<int>(sizeof(uint32_t) + len);
+        if (data_size < increment) ParquetException::EofException();
+        data += increment;
+        data_size -= increment;
+        bytes_decoded += increment;
+    }
+    return bytes_decoded;
+}
+
+template<>
+inline int SkipPlain<FixedLenByteArray>(const uint8_t* data, int64_t data_size, int num_values,
+                                        int type_length) {
+    return type_length * num_values;
+}
+
+template<typename DType>
+int PlainDecoder<DType>::Skip(int max_values) {
+    max_values = std::min(max_values, num_values_);
+    int bytes_skipped = SkipPlain<T>(data_, len_, max_values, type_length_);
+    data_ += bytes_skipped;
+    len_ -= bytes_skipped;
+    num_values_ -= max_values;
+    return max_values;
+}
+
+
 class PlainBooleanDecoder : public DecoderImpl,
                             virtual public TypedDecoder<BooleanType>,
                             virtual public BooleanDecoder {
@@ -1074,6 +1116,7 @@ class PlainBooleanDecoder : public DecoderImpl,
 
   // Two flavors of bool decoding
   int Decode(uint8_t* buffer, int max_values) override;
+  int Skip(int max_values) override;
   int Decode(bool* buffer, int max_values) override;
   int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
                   int64_t valid_bits_offset,
@@ -1143,6 +1186,13 @@ int PlainBooleanDecoder::Decode(uint8_t* buffer, int max_values) {
   bit_writer.Finish();
   num_values_ -= max_values;
   return max_values;
+}
+
+int PlainBooleanDecoder::Skip(int max_values) {
+    max_values = std::min(max_values, num_values_);
+    bit_reader_->Skip(1, max_values);
+    num_values_ -= max_values;
+    return max_values;
 }
 
 int PlainBooleanDecoder::Decode(bool* buffer, int max_values) {
@@ -1462,6 +1512,16 @@ class DictDecoderImpl : public DecoderImpl, virtual public DictDecoder<Type> {
         reinterpret_cast<const T*>(dictionary_->data()), buffer, num_values);
     if (decoded_values != num_values) {
       ParquetException::EofException();
+    }
+    num_values_ -= num_values;
+    return num_values;
+  }
+
+  int Skip(int num_values) override {
+    num_values = std::min(num_values, num_values_);
+    int skipped_values = idx_decoder_.Skip<T>(num_values);
+    if(skipped_values != num_values) {
+        ParquetException::EofException();
     }
     num_values_ -= num_values;
     return num_values;
@@ -2033,6 +2093,17 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
     return GetInternal(buffer, max_values);
   }
 
+  int Skip(int max_values) override {
+     int remain = max_values;
+     int skipped = 0;
+     while(remain > 0) {
+        int current_batch = std::min(remain, SKIP_BUFFER_SIZE);
+        skipped += GetInternal(SKIP_BUFFER, current_batch);
+        remain -= current_batch;
+     }
+     return skipped;
+  }
+
   int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
                   int64_t valid_bits_offset,
                   typename EncodingTraits<DType>::Accumulator* out) override {
@@ -2127,6 +2198,8 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   int delta_bit_width_;
 
   int32_t last_value_;
+
+  int32_t SKIP_BUFFER[SKIP_BUFFER_SIZE];
 };
 
 // ----------------------------------------------------------------------
@@ -2164,6 +2237,19 @@ class DeltaLengthByteArrayDecoder : public DecoderImpl,
     }
     this->num_values_ -= max_values;
     return max_values;
+  }
+
+  int Skip(int max_values) override {
+      using VectorT = ArrowPoolVector<int>;
+      max_values = std::min(max_values, num_values_);
+      VectorT lengths(max_values, 0, ::arrow::stl::allocator<int>(pool_));
+      len_decoder_.Decode(lengths.data(), max_values);
+      for (int i = 0; i < max_values; ++i) {
+          this->data_ += lengths[i];
+          this->len_ -= lengths[i];
+      }
+      this->num_values_ -= max_values;
+      return max_values;
   }
 
   int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
@@ -2225,6 +2311,18 @@ class DeltaByteArrayDecoder : public DecoderImpl,
 
       buffer[i].ptr = result;
       last_value_ = buffer[i];
+    }
+    this->num_values_ -= max_values;
+    return max_values;
+  }
+
+  virtual int Skip(int max_values) {
+    max_values = std::min(max_values, this->num_values_);
+    for (int i = 0; i < max_values; ++i) {
+        int prefix_len = 0;
+        prefix_len_decoder_.Decode(&prefix_len, 1);
+        ByteArray suffix = {0, nullptr};
+        suffix_decoder_.Decode(&suffix, 1);
     }
     this->num_values_ -= max_values;
     return max_values;

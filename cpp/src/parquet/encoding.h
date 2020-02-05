@@ -26,6 +26,8 @@
 #include "parquet/platform.h"
 #include "parquet/types.h"
 
+#define SKIP_BUFFER_SIZE 1000
+
 namespace arrow {
 
 class Array;
@@ -278,6 +280,9 @@ class TypedDecoder : virtual public Decoder {
   /// at the end of the current data page.
   virtual int Decode(T* buffer, int max_values) = 0;
 
+  /// Skip values without decoding them if possible
+  virtual int Skip(int max_values) = 0;
+
   /// \brief Decode the values in this data page but leave spaces for null entries.
   ///
   /// \param[in] buffer destination for decoded values
@@ -377,6 +382,7 @@ class BooleanDecoder : virtual public TypedDecoder<BooleanType> {
  public:
   using TypedDecoder<BooleanType>::Decode;
   virtual int Decode(uint8_t* buffer, int max_values) = 0;
+  virtual int Skip(int max_values) = 0;
 };
 
 class FLBADecoder : virtual public TypedDecoder<FLBAType> {

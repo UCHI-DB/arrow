@@ -805,6 +805,8 @@ endif()
 
 add_subdirectory(src/arrow)
 
+add_subdirectory(src/chidata)
+
 if(ARROW_PARQUET)
   add_subdirectory(src/parquet)
   add_subdirectory(tools/parquet)
@@ -812,6 +814,7 @@ if(ARROW_PARQUET)
     add_subdirectory(examples/parquet)
   endif()
 endif()
+
 
 if(ARROW_JNI)
   add_subdirectory(src/jni)
