@@ -15,4 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-add_custom_target(chidata-all)
+
+add_custom_target(chidata)
+
+set(CHIDATA_SRC
+        bitmap.cpp)
+
+add_library(chidata_objlib OBJECT ${CHIDATA_SRC})
+set_property(TARGET chidata_objlib PROPERTY POSITION_INDEPENDENT_CODE 1)
