@@ -18,8 +18,30 @@
 
 add_custom_target(chidata)
 
-set(CHIDATA_SRC
-        bitmap.cpp)
+set(CHIDATA_SRCS
+        bitmap.cc)
 
-add_library(chidata_objlib OBJECT ${CHIDATA_SRC})
-set_property(TARGET chidata_objlib PROPERTY POSITION_INDEPENDENT_CODE 1)
+add_arrow_lib(chidata
+        BUILD_STATIC
+        BUILD_SHARED
+        SOURCES
+        ${CHIDATA_SRCS}
+        OUTPUTS
+        CHIDATA_LIBRARIES
+        )
+
+target_compile_options(chidata_objlib PUBLIC "-mavx2")
+
+set(CHIDATA_TEST_SRC
+        bitmap_test.cc)
+
+add_test_case(all-test
+        PREFIX
+        chidata
+        SOURCES
+        ${CHIDATA_TEST_SRC}
+        STATIC_LINK_LIBS
+        chidata_static
+        GTest::GTest
+        GTest::Main
+        )
