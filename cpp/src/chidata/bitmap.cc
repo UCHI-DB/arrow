@@ -191,6 +191,10 @@ namespace chidata {
         this->size_ = size;
     }
 
+    FullBitmap::~FullBitmap() {
+
+    }
+
     bool FullBitmap::check(uint64_t pos) {
         return true;
     }

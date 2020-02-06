@@ -124,6 +124,8 @@ namespace chidata {
     public:
         FullBitmap(uint64_t size);
 
+        virtual ~FullBitmap();
+
         virtual bool check(uint64_t pos) override;
 
         virtual void put(uint64_t pos) override;

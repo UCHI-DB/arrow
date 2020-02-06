@@ -23,7 +23,6 @@ set(CHIDATA_SRCS
 
 add_arrow_lib(chidata
         BUILD_STATIC
-        BUILD_SHARED
         SOURCES
         ${CHIDATA_SRCS}
         OUTPUTS
@@ -45,3 +44,5 @@ add_test_case(all-test
         GTest::GTest
         GTest::Main
         )
+
+arrow_install_all_headers(chidata)

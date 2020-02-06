@@ -5,6 +5,34 @@
 #include <vector>
 #include "bitmap.h"
 
+TEST(FullBitmap, Cardinality) {
+    using namespace chidata;
+    FullBitmap *bitmap = new FullBitmap(1000);
+    ASSERT_EQ(1000, bitmap->cardinality());
+    ASSERT_TRUE(bitmap->is_full());
+    ASSERT_EQ(1000, bitmap->size());
+    ASSERT_EQ(1, bitmap->ratio());
+
+    delete bitmap;
+}
+
+TEST(FullBitmap, Iterator) {
+    using namespace chidata;
+    FullBitmap *bitmap = new FullBitmap(1000);
+    BitmapIterator *ite = bitmap->iterator();
+
+    std::vector<uint64_t> buffer = std::vector<uint64_t>();
+
+    while(ite->has_next()) {
+        buffer.push_back(ite->next());
+    }
+
+    ASSERT_EQ(1000,buffer.size());
+
+    delete ite;
+    delete bitmap;
+}
+
 TEST(SimpleBitmap, Cardinality) {
     using namespace chidata;
     SimpleBitmap *sb = new SimpleBitmap(150000);
