@@ -27,6 +27,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <chidata/validate.h>
 
 #include "arrow/array.h"
 #include "arrow/builder.h"
@@ -793,6 +794,55 @@ int64_t TypedColumnReaderImpl<DType>::ReadBatchSpaced(
 template <typename DType>
 int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
   int64_t rows_to_skip = num_rows_to_skip;
+
+  if(rows_to_skip < this->num_buffered_values_ - this->num_decoded_values_) {
+      // Can be done in current page
+      rows_to_skip -= this->num_buffered_values_ - this->num_decoded_values_;
+      this->num_decoded_values_ += rows_to_skip;
+      this->current_decoder_->Skip(rows_to_skip);
+  } else {
+      rows_to_skip -= this->num_buffered_values_ - this->num_decoded_values_;
+      // This code here is similar to what we have in ReadNewPage, but as we only decode
+      // a page when it contains the next record we want to read, we have to read a
+      // page header without decode the content.
+      while (true) {
+          this->current_page_ = this->pager_.get()->NextPage();
+          const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
+          chidata::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE);
+          if (pagedata->num_values() <= rows_to_skip) {
+              rows_to_skip -= pagedata->num_values();
+          } else {
+              break;
+          }
+      }
+      // Decode the page
+      const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
+      if (pagedata->type() == PageType::DATA_PAGE) {
+          const auto page = std::static_pointer_cast<DataPageV1>(this->current_page_);
+          const int64_t levels_byte_size = this->InitializeLevelDecoders(
+                  *page, page->repetition_level_encoding(), page->definition_level_encoding());
+          this->InitializeDataDecoder(*page, levels_byte_size);
+      } else if (this->current_page_->type() == PageType::DATA_PAGE_V2) {
+          const auto page = std::static_pointer_cast<DataPageV2>(this->current_page_);
+          // Repetition and definition levels are always encoded using RLE encoding
+          // in the DataPageV2 format.
+          const int64_t levels_byte_size =
+                  this->InitializeLevelDecoders(*page, Encoding::RLE, Encoding::RLE);
+          this->InitializeDataDecoder(*page, levels_byte_size);
+      } else {
+          // We don't know what this page type is. We're allowed to skip non-data
+          // pages.
+      }
+      if (rows_to_skip > 0) {
+          this->current_decoder_->Skip(rows_to_skip);
+          this->num_decoded_values_+= rows_to_skip;
+          rows_to_skip = 0;
+      }
+  }
+
+  return num_rows_to_skip - rows_to_skip;
+
+  /*
   while (HasNext() && rows_to_skip > 0) {
     // If the number of rows to skip is more than the number of undecoded values, skip the
     // Page.
@@ -822,6 +872,7 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
     }
   }
   return num_rows_to_skip - rows_to_skip;
+   */
 }
 
 // ----------------------------------------------------------------------

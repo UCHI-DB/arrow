@@ -19,7 +19,7 @@ TEST(FullBitmap, Cardinality) {
 TEST(FullBitmap, Iterator) {
     using namespace chidata;
     FullBitmap *bitmap = new FullBitmap(1000);
-    BitmapIterator *ite = bitmap->iterator();
+    BitmapIterator *ite = bitmap->iterator().get();
 
     std::vector<uint64_t> buffer = std::vector<uint64_t>();
 
@@ -53,7 +53,7 @@ TEST(SimpleBitmap, MoveTo) {
     sb->put(336);
     sb->put(855);
 
-    BitmapIterator *fi = sb->iterator();
+    BitmapIterator *fi = sb->iterator().get();
     ASSERT_EQ(195, fi->next());
     fi->move_to(200);
     ASSERT_EQ(241, fi->next());
@@ -67,7 +67,7 @@ TEST(SimpleBitmap, MoveTo) {
 
     SimpleBitmap *sb2 = new SimpleBitmap(150);
     sb2->put(75);
-    BitmapIterator *fi2 = sb2->iterator();
+    BitmapIterator *fi2 = sb2->iterator().get();
     fi2->move_to(76);
     ASSERT_FALSE(fi2->has_next());
     delete fi2;
@@ -80,7 +80,7 @@ TEST(SimpleBitmap, Iterator) {
     for (int i = 1410112; i < 1410141; i++) {
         sb->put(i);
     }
-    BitmapIterator *ite = sb->iterator();
+    BitmapIterator *ite = sb->iterator().get();
     std::vector<uint64_t> data = std::vector<uint64_t>();
     while (ite->has_next()) {
         uint64_t value = ite->next();

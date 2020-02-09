@@ -117,7 +117,7 @@ class PARQUET_EXPORT ColumnReader {
       const ColumnDescriptor* descr, std::unique_ptr<PageReader> pager,
       ::arrow::MemoryPool* pool = ::arrow::default_memory_pool());
 
-  // Returns true if there are still values in this column.
+  // Returns true if there are scurrent_page_till values in this column.
   virtual bool HasNext() = 0;
 
   virtual Type::type type() const = 0;

@@ -79,7 +79,7 @@ namespace chidata {
 
         virtual double ratio() = 0;
 
-        virtual BitmapIterator *iterator() = 0;
+        virtual std::unique_ptr<BitmapIterator> iterator() = 0;
 
         virtual Bitmap *clone() {
             return this;
@@ -117,7 +117,7 @@ namespace chidata {
 
         virtual double ratio() override;
 
-        virtual BitmapIterator *iterator() override;
+        virtual std::unique_ptr<BitmapIterator> iterator() override;
     };
 
     class FullBitmap : public Bitmap {
@@ -146,7 +146,7 @@ namespace chidata {
 
         virtual double ratio() override;
 
-        virtual BitmapIterator *iterator() override;
+        virtual std::unique_ptr<BitmapIterator> iterator() override;
 
     private:
         uint64_t size_;

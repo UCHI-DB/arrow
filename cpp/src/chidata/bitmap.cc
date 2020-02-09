@@ -183,8 +183,8 @@ namespace chidata {
         return (double) cardinality() / size_;
     }
 
-    BitmapIterator *SimpleBitmap::iterator() {
-        return new SimpleBitmapIterator(this->bitmap_, this->array_size_, this->size_);
+    std::unique_ptr<BitmapIterator> SimpleBitmap::iterator() {
+        return std::unique_ptr<BitmapIterator>(new SimpleBitmapIterator(this->bitmap_, this->array_size_, this->size_));
     }
 
     FullBitmap::FullBitmap(uint64_t size) {
@@ -235,7 +235,7 @@ namespace chidata {
         return 1;
     }
 
-    BitmapIterator *FullBitmap::iterator() {
-        return new FullBitmapIterator(this->size_);
+    std::unique_ptr<BitmapIterator> FullBitmap::iterator() {
+        return std::unique_ptr<BitmapIterator>(new FullBitmapIterator(this->size_));
     }
 }
