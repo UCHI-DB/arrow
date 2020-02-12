@@ -8,148 +8,149 @@
 #include <cstdint>
 
 namespace chidata {
+    namespace util {
+        class BitmapIterator {
+        public:
+            virtual ~BitmapIterator() = 0;
 
-    class BitmapIterator {
-    public:
-        virtual ~BitmapIterator() = 0;
+            virtual void moveTo(uint64_t pos) = 0;
 
-        virtual void move_to(uint64_t pos) = 0;
+            virtual bool hasNext() = 0;
 
-        virtual bool has_next() = 0;
-
-        virtual uint64_t next() = 0;
-    };
-
-    class SimpleBitmapIterator : public BitmapIterator {
-    private:
-        uint64_t *content_;
-        uint64_t content_size_;
-        uint64_t num_bits_;
-        uint64_t pointer_;
-        uint64_t cached_;
-        uint64_t final_mask_;
-    public :
-        SimpleBitmapIterator(uint64_t *content, uint64_t content_size, uint64_t bit_size);
-
-        virtual ~SimpleBitmapIterator();
-
-        virtual void move_to(uint64_t pos) override;
-
-        virtual bool has_next() override;
-
-        virtual uint64_t next() override;
-    };
-
-    class FullBitmapIterator : public BitmapIterator {
-    private:
-        uint64_t size_;
-        uint64_t counter_;
-    public :
-        FullBitmapIterator(uint64_t size);
-
-        virtual ~FullBitmapIterator();
-
-        virtual void move_to(uint64_t pos) override;
-
-        virtual bool has_next() override;
-
-        virtual uint64_t next() override;
-    };
-
-    class Bitmap {
-
-    public:
-        virtual bool check(uint64_t pos) = 0;
-
-        virtual void put(uint64_t pos) = 0;
-
-        virtual void clear() = 0;
-
-        virtual Bitmap *land(Bitmap *x1) = 0;
-
-        virtual Bitmap *lor(Bitmap *x1) = 0;
-
-        virtual uint64_t cardinality() = 0;
-
-        virtual uint64_t size() = 0;
-
-        virtual bool is_full() = 0;
-
-        virtual bool is_empty() = 0;
-
-        virtual double ratio() = 0;
-
-        virtual std::unique_ptr<BitmapIterator> iterator() = 0;
-
-        virtual Bitmap *clone() {
-            return this;
+            virtual uint64_t next() = 0;
         };
-    };
 
-    class SimpleBitmap : public Bitmap {
-    private:
-        uint64_t *bitmap_;
-        uint64_t array_size_;
-        uint64_t size_;
-        uint64_t first_valid_ = -1;
-    public:
-        SimpleBitmap(uint64_t size);
+        class SimpleBitmapIterator : public BitmapIterator {
+        private:
+            uint64_t *content_;
+            uint64_t content_size_;
+            uint64_t num_bits_;
+            uint64_t pointer_;
+            uint64_t cached_;
+            uint64_t final_mask_;
+        public :
+            SimpleBitmapIterator(uint64_t *content, uint64_t content_size, uint64_t bit_size);
 
-        virtual ~SimpleBitmap();
+            virtual ~SimpleBitmapIterator();
 
-        virtual bool check(uint64_t pos) override;
+            virtual void moveTo(uint64_t pos) override;
 
-        virtual void put(uint64_t pos) override;
+            virtual bool hasNext() override;
 
-        virtual void clear() override;
+            virtual uint64_t next() override;
+        };
 
-        virtual Bitmap *land(Bitmap *x1) override;
+        class FullBitmapIterator : public BitmapIterator {
+        private:
+            uint64_t size_;
+            uint64_t counter_;
+        public :
+            FullBitmapIterator(uint64_t size);
 
-        virtual Bitmap *lor(Bitmap *x1) override;
+            virtual ~FullBitmapIterator();
 
-        virtual uint64_t cardinality() override;
+            virtual void moveTo(uint64_t pos) override;
 
-        virtual uint64_t size() override;
+            virtual bool hasNext() override;
 
-        virtual bool is_full() override;
+            virtual uint64_t next() override;
+        };
 
-        virtual bool is_empty() override;
+        class Bitmap {
 
-        virtual double ratio() override;
+        public:
+            virtual bool check(uint64_t pos) = 0;
 
-        virtual std::unique_ptr<BitmapIterator> iterator() override;
-    };
+            virtual void put(uint64_t pos) = 0;
 
-    class FullBitmap : public Bitmap {
-    public:
-        FullBitmap(uint64_t size);
+            virtual void clear() = 0;
 
-        virtual ~FullBitmap();
+            virtual Bitmap *land(Bitmap *x1) = 0;
 
-        virtual bool check(uint64_t pos) override;
+            virtual Bitmap *lor(Bitmap *x1) = 0;
 
-        virtual void put(uint64_t pos) override;
+            virtual uint64_t cardinality() = 0;
 
-        virtual void clear() override;
+            virtual uint64_t size() = 0;
 
-        virtual Bitmap *land(Bitmap *x1) override;
+            virtual bool isFull() = 0;
 
-        virtual Bitmap *lor(Bitmap *x1) override;
+            virtual bool isEmpty() = 0;
 
-        virtual uint64_t cardinality() override;
+            virtual double ratio() = 0;
 
-        virtual uint64_t size() override;
+            virtual std::unique_ptr<BitmapIterator> iterator() = 0;
 
-        virtual bool is_full() override;
+            virtual Bitmap *clone() {
+                return this;
+            };
+        };
 
-        virtual bool is_empty() override;
+        class SimpleBitmap : public Bitmap {
+        private:
+            uint64_t *bitmap_;
+            uint64_t array_size_;
+            uint64_t size_;
+            uint64_t first_valid_ = -1;
+        public:
+            SimpleBitmap(uint64_t size);
 
-        virtual double ratio() override;
+            virtual ~SimpleBitmap();
 
-        virtual std::unique_ptr<BitmapIterator> iterator() override;
+            virtual bool check(uint64_t pos) override;
 
-    private:
-        uint64_t size_;
-    };
+            virtual void put(uint64_t pos) override;
+
+            virtual void clear() override;
+
+            virtual Bitmap *land(Bitmap *x1) override;
+
+            virtual Bitmap *lor(Bitmap *x1) override;
+
+            virtual uint64_t cardinality() override;
+
+            virtual uint64_t size() override;
+
+            virtual bool isFull() override;
+
+            virtual bool isEmpty() override;
+
+            virtual double ratio() override;
+
+            virtual std::unique_ptr<BitmapIterator> iterator() override;
+        };
+
+        class FullBitmap : public Bitmap {
+        public:
+            FullBitmap(uint64_t size);
+
+            virtual ~FullBitmap();
+
+            virtual bool check(uint64_t pos) override;
+
+            virtual void put(uint64_t pos) override;
+
+            virtual void clear() override;
+
+            virtual Bitmap *land(Bitmap *x1) override;
+
+            virtual Bitmap *lor(Bitmap *x1) override;
+
+            virtual uint64_t cardinality() override;
+
+            virtual uint64_t size() override;
+
+            virtual bool isFull() override;
+
+            virtual bool isEmpty() override;
+
+            virtual double ratio() override;
+
+            virtual std::unique_ptr<BitmapIterator> iterator() override;
+
+        private:
+            uint64_t size_;
+        };
+    }
 }
 #endif //CHIDATA_BITMAP_H

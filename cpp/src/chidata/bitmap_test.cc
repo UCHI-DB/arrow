@@ -6,10 +6,10 @@
 #include "bitmap.h"
 
 TEST(FullBitmap, Cardinality) {
-    using namespace chidata;
+    using namespace chidata::util;
     FullBitmap *bitmap = new FullBitmap(1000);
     ASSERT_EQ(1000, bitmap->cardinality());
-    ASSERT_TRUE(bitmap->is_full());
+    ASSERT_TRUE(bitmap->isFull());
     ASSERT_EQ(1000, bitmap->size());
     ASSERT_EQ(1, bitmap->ratio());
 
@@ -17,13 +17,13 @@ TEST(FullBitmap, Cardinality) {
 }
 
 TEST(FullBitmap, Iterator) {
-    using namespace chidata;
+    using namespace chidata::util;
     FullBitmap *bitmap = new FullBitmap(1000);
     BitmapIterator *ite = bitmap->iterator().get();
 
     std::vector<uint64_t> buffer = std::vector<uint64_t>();
 
-    while(ite->has_next()) {
+    while(ite->hasNext()) {
         buffer.push_back(ite->next());
     }
 
@@ -34,7 +34,7 @@ TEST(FullBitmap, Iterator) {
 }
 
 TEST(SimpleBitmap, Cardinality) {
-    using namespace chidata;
+    using namespace chidata::util;
     SimpleBitmap *sb = new SimpleBitmap(150000);
     sb->put(9311);
     ASSERT_EQ(1, sb->cardinality());
@@ -45,7 +45,7 @@ TEST(SimpleBitmap, Cardinality) {
 }
 
 TEST(SimpleBitmap, MoveTo) {
-    using namespace chidata;
+    using namespace chidata::util;
     SimpleBitmap *sb = new SimpleBitmap(1000);
     sb->put(241);
     sb->put(195);
@@ -55,11 +55,11 @@ TEST(SimpleBitmap, MoveTo) {
 
     BitmapIterator *fi = sb->iterator().get();
     ASSERT_EQ(195, fi->next());
-    fi->move_to(200);
+    fi->moveTo(200);
     ASSERT_EQ(241, fi->next());
-    fi->move_to(336);
+    fi->moveTo(336);
     ASSERT_EQ(336, fi->next());
-    fi->move_to(400);
+    fi->moveTo(400);
     ASSERT_EQ(855, fi->next());
 
     delete fi;
@@ -68,21 +68,21 @@ TEST(SimpleBitmap, MoveTo) {
     SimpleBitmap *sb2 = new SimpleBitmap(150);
     sb2->put(75);
     BitmapIterator *fi2 = sb2->iterator().get();
-    fi2->move_to(76);
-    ASSERT_FALSE(fi2->has_next());
+    fi2->moveTo(76);
+    ASSERT_FALSE(fi2->hasNext());
     delete fi2;
     delete sb2;
 }
 
 TEST(SimpleBitmap, Iterator) {
-    using namespace chidata;
+    using namespace chidata::util;
     SimpleBitmap *sb = new SimpleBitmap(1410141);
     for (int i = 1410112; i < 1410141; i++) {
         sb->put(i);
     }
     BitmapIterator *ite = sb->iterator().get();
     std::vector<uint64_t> data = std::vector<uint64_t>();
-    while (ite->has_next()) {
+    while (ite->hasNext()) {
         uint64_t value = ite->next();
         data.push_back(value);
         ASSERT_TRUE(value < sb->size());

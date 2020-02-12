@@ -5,13 +5,15 @@
 #ifndef CHIDATA_VALIDATE_H
 #define CHIDATA_VALIDATE_H
 
-#include <exception>
+#include <stdexcept>
 
 namespace chidata {
+    namespace util {
 
-    void validate_true(bool condition) {
-        if(!condition) {
-            throw std::invalid_argument("");
+        inline void validate_true(bool condition) {
+            if (!condition) {
+                throw std::invalid_argument("");
+            }
         }
     }
 }

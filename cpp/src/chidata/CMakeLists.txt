@@ -46,3 +46,6 @@ add_test_case(all-test
         )
 
 arrow_install_all_headers(chidata)
+
+add_executable(scan_column tool/scan_column.cc)
+target_link_libraries(scan_column chidata_static parquet_static)

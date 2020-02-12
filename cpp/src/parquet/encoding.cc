@@ -2085,8 +2085,25 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   void SetData(int num_values, const uint8_t* data, int len) override {
     this->num_values_ = num_values;
     decoder_ = arrow::BitUtil::BitReader(data, len);
-    values_current_block_ = 0;
-    values_current_mini_block_ = 0;
+
+    if (!decoder_.GetVlqInt(&block_size_)) ParquetException::EofException();
+    if (!decoder_.GetVlqInt(&num_mini_blocks_)) ParquetException::EofException();
+
+    values_per_mini_block_ = block_size_ / num_mini_blocks_;
+    block_buffer_ = std::make_shared<std::vector<int32_t>>(block_size_+1);
+
+    if (!decoder_.GetVlqInt(&total_values_)) {
+        ParquetException::EofException();
+    }
+
+    // The last value of previous block
+    if (!decoder_.GetZigZagVlqInt(&last_value_)) ParquetException::EofException();
+
+    delta_bit_widths_ = AllocateBuffer(pool_, num_mini_blocks_);
+
+    block_buffer_->data()[0]= last_value_;
+    num_buffered_ = 1;
+    ReadBlock();
   }
 
   int Decode(T* buffer, int max_values) override {
@@ -2132,70 +2149,68 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   }
 
  private:
-  void InitBlock() {
-    int32_t block_size;
-    if (!decoder_.GetVlqInt(&block_size)) ParquetException::EofException();
-    if (!decoder_.GetVlqInt(&num_mini_blocks_)) ParquetException::EofException();
-    if (!decoder_.GetVlqInt(&values_current_block_)) {
-      ParquetException::EofException();
-    }
-    if (!decoder_.GetZigZagVlqInt(&last_value_)) ParquetException::EofException();
-
-    delta_bit_widths_ = AllocateBuffer(pool_, num_mini_blocks_);
+  void ReadBlock() {
     uint8_t* bit_width_data = delta_bit_widths_->mutable_data();
-
     if (!decoder_.GetZigZagVlqInt(&min_delta_)) ParquetException::EofException();
+
     for (int i = 0; i < num_mini_blocks_; ++i) {
       if (!decoder_.GetAligned<uint8_t>(1, bit_width_data + i)) {
         ParquetException::EofException();
       }
     }
-    values_per_mini_block_ = block_size / num_mini_blocks_;
-    mini_block_idx_ = 0;
-    delta_bit_width_ = bit_width_data[0];
-    values_current_mini_block_ = values_per_mini_block_;
+
+    int32_t* buffer = block_buffer_->data();
+    int buffer_start = num_buffered_;
+    for(int i = 0 ; i < num_mini_blocks_;++i) {
+        decoder_.GetBatch(bit_width_data[i], buffer + num_buffered_, values_per_mini_block_);
+        num_buffered_ += values_per_mini_block_;
+    }
+    // TODO This delta computation can be speed up using SBoost
+    buffer[buffer_start] += last_value_+min_delta_;
+    for(uint32_t i = buffer_start+1 ; i < num_buffered_;++i) {
+       buffer[i] += min_delta_ + buffer[i-1];
+    }
+    last_value_ = buffer[num_buffered_-1];
+    num_buffer_read_ = 0;
   }
 
   template <typename T>
   int GetInternal(T* buffer, int max_values) {
-    max_values = std::min(max_values, this->num_values_);
-    const uint8_t* bit_width_data = delta_bit_widths_->data();
-    for (int i = 0; i < max_values; ++i) {
-      if (ARROW_PREDICT_FALSE(values_current_mini_block_ == 0)) {
-        ++mini_block_idx_;
-        if (mini_block_idx_ < static_cast<size_t>(delta_bit_widths_->size())) {
-          delta_bit_width_ = bit_width_data[mini_block_idx_];
-          values_current_mini_block_ = values_per_mini_block_;
-        } else {
-          InitBlock();
-          buffer[i] = last_value_;
-          continue;
-        }
+      max_values = std::min(max_values, this->num_values_);
+      int *bufferdata = block_buffer_->data();
+
+      int remain = max_values;
+      int read_in_block = std::min(max_values, static_cast<int>(num_buffered_ - num_buffer_read_));
+      memcpy(buffer, bufferdata + num_buffer_read_, sizeof(int32_t)*read_in_block);
+      remain -= read_in_block;
+      num_buffer_read_ += read_in_block;
+
+      while (remain > 0) {
+          num_buffered_ = 0;
+          ReadBlock();
+          read_in_block = std::min(remain, static_cast<int>(num_buffered_ - num_buffer_read_));
+          memcpy(buffer, bufferdata + num_buffer_read_, sizeof(int32_t)*read_in_block);
+          remain -= read_in_block;
+          num_buffer_read_ += read_in_block;
       }
 
-      // TODO: the key to this algorithm is to decode the entire miniblock at once.
-      int64_t delta;
-      if (!decoder_.GetValue(delta_bit_width_, &delta)) ParquetException::EofException();
-      delta += min_delta_;
-      last_value_ += static_cast<int32_t>(delta);
-      buffer[i] = last_value_;
-      --values_current_mini_block_;
-    }
-    this->num_values_ -= max_values;
-    return max_values;
+      this->num_values_ -= max_values;
+      return max_values;
   }
 
   MemoryPool* pool_;
   arrow::BitUtil::BitReader decoder_;
-  int32_t values_current_block_;
+  int32_t total_values_;
+  int32_t block_size_;
   int32_t num_mini_blocks_;
   uint64_t values_per_mini_block_;
-  uint64_t values_current_mini_block_;
+
+  uint64_t num_buffered_;
+  uint64_t num_buffer_read_;
 
   int32_t min_delta_;
-  size_t mini_block_idx_;
   std::shared_ptr<ResizableBuffer> delta_bit_widths_;
-  int delta_bit_width_;
+  std::shared_ptr<std::vector<int32_t>> block_buffer_;
 
   int32_t last_value_;
 
@@ -2359,6 +2374,8 @@ std::unique_ptr<Decoder> MakeDecoder(Type::type type_num, Encoding::type encodin
       default:
         break;
     }
+  } else if (encoding == Encoding::DELTA_BINARY_PACKED) {
+      return std::unique_ptr<Decoder>(new DeltaBitPackDecoder<Int32Type>(descr));
   } else {
     ParquetException::NYI("Selected encoding is not supported");
   }

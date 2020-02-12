@@ -380,6 +380,7 @@ class ColumnReaderImplBase {
         max_rep_level_(descr->max_repetition_level()),
         num_buffered_values_(0),
         num_decoded_values_(0),
+        num_read_values_(0),
         pool_(pool),
         current_decoder_(nullptr),
         current_encoding_(Encoding::UNKNOWN) {}
@@ -578,14 +579,17 @@ class ColumnReaderImplBase {
           decoders_[static_cast<int>(encoding)] = std::move(decoder);
           break;
         }
+        case Encoding::DELTA_BINARY_PACKED: {
+          auto decoder = MakeTypedDecoder<DType>(Encoding::DELTA_BINARY_PACKED, descr_);
+          current_decoder_ = decoder.get();
+          decoders_[static_cast<int>(encoding)] = std::move(decoder);
+          break;
+        }
         case Encoding::RLE_DICTIONARY:
           throw ParquetException("Dictionary page must be before data page.");
-
-        case Encoding::DELTA_BINARY_PACKED:
         case Encoding::DELTA_LENGTH_BYTE_ARRAY:
         case Encoding::DELTA_BYTE_ARRAY:
           ParquetException::NYI("Unsupported encoding");
-
         default:
           throw ParquetException("Unknown encoding type.");
       }
@@ -620,6 +624,9 @@ class ColumnReaderImplBase {
   // into memory
   int64_t num_decoded_values_;
 
+  // Total number of values read so far
+  int64_t num_read_values_;
+
   ::arrow::MemoryPool* pool_;
 
   using DecoderType = TypedDecoder<DType>;
@@ -635,7 +642,10 @@ class ColumnReaderImplBase {
   // plain-encoded data.
   std::unordered_map<int, std::unique_ptr<DecoderType>> decoders_;
 
-  void ConsumeBufferedValues(int64_t num_values) { num_decoded_values_ += num_values; }
+  void ConsumeBufferedValues(int64_t num_values) {
+      num_decoded_values_ += num_values;
+      num_read_values_ += num_values;
+  }
 };
 
 // ----------------------------------------------------------------------
@@ -664,6 +674,8 @@ class TypedColumnReaderImpl : public TypedColumnReader<DType>,
                           int64_t* null_count) override;
 
   int64_t Skip(int64_t num_rows_to_skip) override;
+
+  int64_t MoveTo(int64_t move_to_pos) override;
 
   Type::type type() const override { return this->descr_->physical_type(); }
 
@@ -797,20 +809,23 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
 
   if(rows_to_skip < this->num_buffered_values_ - this->num_decoded_values_) {
       // Can be done in current page
-      rows_to_skip -= this->num_buffered_values_ - this->num_decoded_values_;
-      this->num_decoded_values_ += rows_to_skip;
       this->current_decoder_->Skip(rows_to_skip);
+      this->ConsumeBufferedValues(rows_to_skip);
+      rows_to_skip = 0;
   } else {
-      rows_to_skip -= this->num_buffered_values_ - this->num_decoded_values_;
+      int64_t remain = this->num_buffered_values_ - this->num_decoded_values_;
+      rows_to_skip -= remain;
+      this->ConsumeBufferedValues(remain);
       // This code here is similar to what we have in ReadNewPage, but as we only decode
       // a page when it contains the next record we want to read, we have to read a
       // page header without decode the content.
       while (true) {
           this->current_page_ = this->pager_.get()->NextPage();
           const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
-          chidata::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE);
+          chidata::util::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE);
           if (pagedata->num_values() <= rows_to_skip) {
               rows_to_skip -= pagedata->num_values();
+              this->num_read_values_ += pagedata->num_values();
           } else {
               break;
           }
@@ -835,7 +850,7 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
       }
       if (rows_to_skip > 0) {
           this->current_decoder_->Skip(rows_to_skip);
-          this->num_decoded_values_+= rows_to_skip;
+          this->ConsumeBufferedValues(rows_to_skip);
           rows_to_skip = 0;
       }
   }
@@ -873,6 +888,13 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
   }
   return num_rows_to_skip - rows_to_skip;
    */
+}
+
+template <typename DType>
+int64_t TypedColumnReaderImpl<DType>::MoveTo(int64_t move_to_pos) {
+    int64_t current_pos = this->num_read_values_;
+    chidata::util::validate_true(move_to_pos >= current_pos);
+    return Skip(move_to_pos - current_pos);
 }
 
 // ----------------------------------------------------------------------

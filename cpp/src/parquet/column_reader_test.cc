@@ -285,6 +285,7 @@ TEST_F(TestPrimitiveReader, TestInt32FlatRequiredSkip) {
       values_.begin() + static_cast<int>(2.5 * static_cast<double>(levels_per_page)));
   ASSERT_TRUE(vector_equal(sub_values, vresult));
 
+
   // 2) skip_size == page_size (skip across two pages)
   levels_skipped = reader->Skip(levels_per_page);
   ASSERT_EQ(levels_per_page, levels_skipped);

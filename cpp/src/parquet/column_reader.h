@@ -193,6 +193,9 @@ class TypedColumnReader : public ColumnReader {
   // Skip reading levels
   // Returns the number of levels skipped
   virtual int64_t Skip(int64_t num_rows_to_skip) = 0;
+
+  // Move to a given position in current row group
+  virtual int64_t MoveTo(int64_t move_to_pos) = 0;
 };
 
 namespace internal {
