@@ -34,62 +34,62 @@ int main(int argc, char **argv) {
     std::vector<int32_t> buffer(batchSize);
     int result[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-//    for (int rg_idx = 0; rg_idx < 1; rg_idx++) {
-//
-//        auto rowGroup = fileReader->RowGroup(rg_idx);
-//        auto rowGroupSize = rowGroup->metadata()->num_rows();
-//        Bitmap *bitmap = new SimpleBitmap(rowGroupSize);
-//        auto columnReader = std::static_pointer_cast<Int32Reader>(rowGroup->Column(filterIndex));
-//        int64_t values_read = 0;
-//
-//        // Read data from column A and generate bitmap
-//        int64_t offset = 0;
-//        while (offset < rowGroupSize) {
-//            uint32_t num_read_values = columnReader->ReadBatch(batchSize, nullptr, nullptr, buffer.data(),
-//                                                               &values_read);
-//            for (uint32_t idx = 0; idx < num_read_values; idx++) {
-//                if (predicate(buffer[idx])) {
-//                    bitmap->put(offset + idx);
-//                }
-//            }
-//            offset += num_read_values;
-//        }
-//
-//        // Use Bitmap to fetch data from column B
-//
-//
-//        auto itr = bitmap->iterator();
-//
-//        auto secondColumnReader = std::static_pointer_cast<Int32Reader>(rowGroup->Column(displayIndex));
-//        int32_t value = 0;
-//        while (itr->hasNext()) {
-//            uint64_t pos = itr->next();
-//            secondColumnReader->MoveTo(pos);
-////            printf("%d,%lu\n", rg_idx, pos);
-//            secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
-//            // Print out value
-//            output << pos << ":" << value << std::endl;
-//            result[value % 10] += 1;
-//        }
-//    }
-//    for (int i = 0; i < 10; ++i) {
-//        printf("%d\n", result[i]);
-//    }
-    auto rowGroup = fileReader->RowGroup(0);
-    auto secondColumnReader = std::static_pointer_cast<Int32Reader>(rowGroup->Column(displayIndex));
-    int32_t value = 0;
-    int64_t values_read = 0;
-//    for (int i = 0; i < 100; i++) {
-//        secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
-////            // Print out value
-//        printf("%d:%d\n", i, value);
-//    }
-//    secondColumnReader->MoveTo(2);
+    for (int rg_idx = 0; rg_idx < numRowGroup; rg_idx++) {
+
+        auto rowGroup = fileReader->RowGroup(rg_idx);
+        auto rowGroupSize = rowGroup->metadata()->num_rows();
+        Bitmap *bitmap = new SimpleBitmap(rowGroupSize);
+        auto columnReader = std::static_pointer_cast<Int32Reader>(rowGroup->Column(filterIndex));
+        int64_t values_read = 0;
+
+        // Read data from column A and generate bitmap
+        int64_t offset = 0;
+        while (offset < rowGroupSize) {
+            uint32_t num_read_values = columnReader->ReadBatch(batchSize, nullptr, nullptr, buffer.data(),
+                                                               &values_read);
+            for (uint32_t idx = 0; idx < num_read_values; idx++) {
+                if (predicate(buffer[idx])) {
+                    bitmap->put(offset + idx);
+                }
+            }
+            offset += num_read_values;
+        }
+
+        // Use Bitmap to fetch data from column B
+
+
+        auto itr = bitmap->iterator();
+
+        auto secondColumnReader = std::static_pointer_cast<Int32Reader>(rowGroup->Column(displayIndex));
+        int32_t value = 0;
+        while (itr->hasNext()) {
+            uint64_t pos = itr->next();
+            secondColumnReader->MoveTo(pos);
+//            printf("%d,%lu\n", rg_idx, pos);
+            secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
+            // Print out value
+            output << pos << ":" << value << std::endl;
+            result[value % 10] += 1;
+        }
+    }
+    for (int i = 0; i < 10; ++i) {
+        printf("%d\n", result[i]);
+    }
+//    auto rowGroup = fileReader->RowGroup(0);
+//    auto secondColumnReader = std::static_pointer_cast<Int32Reader>(rowGroup->Column(displayIndex));
+//    int32_t value = 0;
+//    int64_t values_read = 0;
+////    for (int i = 0; i < 100; i++) {
+////        secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
+//////            // Print out value
+////        printf("%d:%d\n", i, value);
+////    }
+////    secondColumnReader->MoveTo(2);
+////    secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
+////    printf("%d\n", value);
+//    secondColumnReader->MoveTo(6145);
 //    secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
 //    printf("%d\n", value);
-    secondColumnReader->MoveTo(6145);
-    secondColumnReader->ReadBatch(1, nullptr, nullptr, &value, &values_read);
-    printf("%d\n", value);
 
     output.close();
 
