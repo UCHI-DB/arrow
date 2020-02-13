@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
     std::vector<int32_t> buffer(batchSize);
     int result[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    for (int rg_idx = 0; rg_idx < 1; rg_idx++) {
+    for (int rg_idx = 0; rg_idx < numRowGroup; rg_idx++) {
 
         auto rowGroup = fileReader->RowGroup(rg_idx);
         auto rowGroupSize = rowGroup->metadata()->num_rows();
