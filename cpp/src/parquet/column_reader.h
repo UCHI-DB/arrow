@@ -120,6 +120,8 @@ class PARQUET_EXPORT ColumnReader {
   // Returns true if there are scurrent_page_till values in this column.
   virtual bool HasNext() = 0;
 
+  virtual int64_t MoveTo(int64_t move_to_pos) = 0;
+
   virtual Type::type type() const = 0;
 
   virtual const ColumnDescriptor* descr() const = 0;

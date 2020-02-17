@@ -19,7 +19,9 @@
 add_custom_target(chidata)
 
 set(CHIDATA_SRCS
-        bitmap.cc)
+        bitmap.cc
+        lqf/data_model.cc
+        )
 
 add_arrow_lib(chidata
         BUILD_STATIC
@@ -27,12 +29,17 @@ add_arrow_lib(chidata
         ${CHIDATA_SRCS}
         OUTPUTS
         CHIDATA_LIBRARIES
+        STATIC_LINK_LIBS
+        parquet_static
         )
 
 target_compile_options(chidata_objlib PUBLIC "-mavx2")
 
 set(CHIDATA_TEST_SRC
-        bitmap_test.cc)
+        bitmap_test.cc
+        stream_test.cc
+        lqf/data_model_test.cc
+        )
 
 add_test_case(all-test
         PREFIX
