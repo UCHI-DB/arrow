@@ -21,7 +21,11 @@ add_custom_target(chidata)
 set(CHIDATA_SRCS
         bitmap.cc
         lqf/data_model.cc
+        lqf/operator/filter.cc
+        lqf/operator/agg.cc
         )
+
+include_directories(chidata)
 
 add_arrow_lib(chidata
         BUILD_STATIC
@@ -32,7 +36,6 @@ add_arrow_lib(chidata
         STATIC_LINK_LIBS
         parquet_static
         )
-
 target_compile_options(chidata_objlib PUBLIC "-mavx2")
 
 set(CHIDATA_TEST_SRC
@@ -51,6 +54,14 @@ add_test_case(all-test
         GTest::GTest
         GTest::Main
         )
+
+# Copy all test files
+file(GLOB TEST_RES_FILES "resources/*")
+string(TOLOWER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_LOWER)
+foreach (TEST_RES_FILE ${TEST_RES_FILES})
+    get_filename_component(TEST_RES_NAME ${TEST_RES_FILE} NAME)
+    configure_file(${TEST_RES_FILE} ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE_LOWER}/${TEST_RES_NAME} COPYONLY)
+endforeach ()
 
 arrow_install_all_headers(chidata)
 

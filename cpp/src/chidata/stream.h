@@ -38,6 +38,14 @@ namespace chidata {
             return buffer;
         }
 
+        TYPE reduce(function<TYPE(TYPE &, TYPE &)> reducer) {
+            TYPE current = next();
+            while(!isEmpty()) {
+                current = reducer(current, next());
+            }
+            return current;
+        }
+
         virtual bool isEmpty() = 0;
 
         virtual TYPE next() = 0;

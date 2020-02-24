@@ -117,9 +117,15 @@ class PARQUET_EXPORT ColumnReader {
       const ColumnDescriptor* descr, std::unique_ptr<PageReader> pager,
       ::arrow::MemoryPool* pool = ::arrow::default_memory_pool());
 
-  // Returns true if there are scurrent_page_till values in this column.
+  // Returns true if there are still values in this column.
   virtual bool HasNext() = 0;
 
+
+  // Skip reading levels
+  // Returns the number of levels skipped
+  virtual int64_t Skip(int64_t num_rows_to_skip) = 0;
+
+  // Move to a given position in current row group
   virtual int64_t MoveTo(int64_t move_to_pos) = 0;
 
   virtual Type::type type() const = 0;
@@ -192,12 +198,6 @@ class TypedColumnReader : public ColumnReader {
                                   int64_t valid_bits_offset, int64_t* levels_read,
                                   int64_t* values_read, int64_t* null_count) = 0;
 
-  // Skip reading levels
-  // Returns the number of levels skipped
-  virtual int64_t Skip(int64_t num_rows_to_skip) = 0;
-
-  // Move to a given position in current row group
-  virtual int64_t MoveTo(int64_t move_to_pos) = 0;
 };
 
 namespace internal {

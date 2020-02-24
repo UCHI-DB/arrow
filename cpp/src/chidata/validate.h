@@ -8,12 +8,10 @@
 #include <stdexcept>
 
 namespace chidata {
-    namespace util {
-
-        inline void validate_true(bool condition) {
-            if (!condition) {
-                throw std::invalid_argument("");
-            }
+    inline void validate_true(bool condition) {
+        if (__builtin_expect(condition, 1)) {
+        } else {
+            throw std::invalid_argument("");
         }
     }
 }
