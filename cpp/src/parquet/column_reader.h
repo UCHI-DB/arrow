@@ -130,6 +130,9 @@ class PARQUET_EXPORT ColumnReader {
 
   virtual Type::type type() const = 0;
 
+  virtual int64_t ReadBatch(int64_t batch_size, int16_t* def_levels, int16_t* rep_levels,
+                              void* values, int64_t* values_read) = 0;
+
   virtual const ColumnDescriptor* descr() const = 0;
 };
 
@@ -198,6 +201,10 @@ class TypedColumnReader : public ColumnReader {
                                   int64_t valid_bits_offset, int64_t* levels_read,
                                   int64_t* values_read, int64_t* null_count) = 0;
 
+  virtual int64_t ReadBatch(int64_t batch_size, int16_t* def_levels, int16_t* rep_levels,
+                              void* values, int64_t* values_read) override {
+      return ReadBatch(batch_size, def_levels, rep_levels, (T*)values, values_read);
+  }
 };
 
 namespace internal {

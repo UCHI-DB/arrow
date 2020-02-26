@@ -372,13 +372,13 @@ inline int BitReader::Skip(int num_bits, int batch_size) {
     int max_bytes = max_bytes_;
 
     uint64_t needed_bits = num_bits * batch_size;
-    uint64_t remaining_bits = (max_bytes - byte_offset) * 8 - bit_offset;
+    uint64_t remaining_bits = (max_bytes - byte_offset) * 8 - (64-bit_offset);
     if (remaining_bits < needed_bits) {
         batch_size = static_cast<int>(remaining_bits) / num_bits;
     }
 
     bit_offset += num_bits * batch_size;
-    byte_offset += (bit_offset >> 6);
+    byte_offset += (bit_offset >> 6)<<3;
     bit_offset &= 0x3F;
     memcpy(&buffered_values, buffer_ + byte_offset, 8);
 

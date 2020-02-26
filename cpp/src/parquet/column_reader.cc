@@ -821,8 +821,13 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
       // page header without decode the content.
       while (true) {
           this->current_page_ = this->pager_.get()->NextPage();
+          if(__builtin_expect(this->current_page_->type() == PageType::DICTIONARY_PAGE, 0)) {
+              // This is a dictionary page and the first page
+              this->ConfigureDictionary(static_cast<const DictionaryPage *>(this->current_page_.get()));
+              continue;
+          }
           const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
-          chidata::util::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE);
+          chidata::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE, "wrong page encoding");
           if (pagedata->num_values() <= rows_to_skip) {
               rows_to_skip -= pagedata->num_values();
               this->num_read_values_ += pagedata->num_values();
@@ -893,7 +898,7 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
 template <typename DType>
 int64_t TypedColumnReaderImpl<DType>::MoveTo(int64_t move_to_pos) {
     int64_t current_pos = this->num_read_values_;
-    chidata::util::validate_true(move_to_pos >= current_pos);
+    chidata::validate_true(move_to_pos >= current_pos, "MoveTo cannot move backward");
     return Skip(move_to_pos - current_pos);
 }
 

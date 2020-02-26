@@ -8,10 +8,10 @@
 #include <stdexcept>
 
 namespace chidata {
-    inline void validate_true(bool condition) {
+    inline void validate_true(bool condition, const std::string& message) {
         if (__builtin_expect(condition, 1)) {
         } else {
-            throw std::invalid_argument("");
+            throw std::invalid_argument(message);
         }
     }
 }

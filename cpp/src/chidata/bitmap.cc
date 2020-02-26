@@ -113,7 +113,7 @@ namespace chidata {
     }
 
     SimpleBitmap::SimpleBitmap(uint64_t size) {
-        validate_true(size < 0xFFFFFFFFL);
+        validate_true(size < 0xFFFFFFFFL, "size overflow");
         array_size_ = (size >> 6) + 1;
         bitmap_ = new uint64_t[array_size_];
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
@@ -142,7 +142,7 @@ namespace chidata {
 
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
-        validate_true(size_ == sx1.size_);
+        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
         uint64_t limit = array_size_ >> 2;
         uint64_t i = 0;
@@ -160,7 +160,7 @@ namespace chidata {
 
     shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
-        validate_true(size_ == sx1.size_);
+        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
         uint64_t limit = array_size_ >> 2;
         uint64_t i = 0;

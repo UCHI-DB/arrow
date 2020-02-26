@@ -49,32 +49,68 @@ TEST(MemBlockTest, Mask) {
 
 class ParquetBlockTest : public ::testing::Test {
 protected:
+    shared_ptr<ParquetFileReader> fileReader_;
     shared_ptr<RowGroupReader> rowGroup_;
 public:
     virtual void SetUp() override {
-        auto fileReader = ParquetFileReader::OpenFile("lineitem");
-        rowGroup_ = fileReader->RowGroup(0);
+        fileReader_ = ParquetFileReader::OpenFile("lineitem");
+        rowGroup_ = fileReader_->RowGroup(0);
+        return;
     }
 };
 
 TEST_F(ParquetBlockTest, Column) {
-    auto block = unique_ptr<ParquetBlock>(new ParquetBlock(rowGroup_, 0, 3));
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
     auto col = block->col(1);
+//    std::vector<int32_t> buffer;
+//    for(int i = 0 ;i<100;++i) {
+//        buffer.push_back((*col)[i].asInt());
+//    }
     EXPECT_EQ(156, (*col)[0].asInt());
     EXPECT_EQ(68, (*col)[1].asInt());
     EXPECT_EQ(64, (*col)[2].asInt());
+//    EXPECT_EQ(3, (*col)[3].asInt());
+//    EXPECT_EQ(25, (*col)[4].asInt());
+//    EXPECT_EQ(16, (*col)[5].asInt());
+//    EXPECT_EQ(107, (*col)[6].asInt());
+//    EXPECT_EQ(5, (*col)[7].asInt());
+//    EXPECT_EQ(20, (*col)[8].asInt());
+    EXPECT_EQ(129, (*col)[9].asInt());
+    EXPECT_EQ(30, (*col)[10].asInt());
+//    EXPECT_EQ(184, (*col)[11].asInt());
+    EXPECT_EQ(63, (*col)[12].asInt());
+//    EXPECT_EQ(89, (*col)[13].asInt());
+//    EXPECT_EQ(109, (*col)[14].asInt());
+    EXPECT_EQ(21, (*col)[52].asInt());
+    EXPECT_EQ(55, (*col)[53].asInt());
+    EXPECT_EQ(95, (*col)[54].asInt());
+
+    auto col2 = block->col(1);
+    EXPECT_EQ(156, col2->next().asInt());
+    EXPECT_EQ(68, col2->next().asInt());
+    EXPECT_EQ(64, col2->next().asInt());
 }
 
 TEST_F(ParquetBlockTest, Row) {
-    auto block = unique_ptr<ParquetBlock>(new ParquetBlock(rowGroup_, 0, 3));
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 7);
     auto rows = block->rows();
 
-    EXPECT_EQ(1, (*rows)[2][0]);
-    EXPECT_EQ(25, (*rows)[4][1]);
+    EXPECT_EQ(1, (*rows)[2][0].asInt());
+    EXPECT_EQ(25, (*rows)[4][1].asInt());
+
+    auto rows2 = block->rows();
+    DataRow &row = rows2->next();
+    EXPECT_EQ(1, row[0].asInt());
+    EXPECT_EQ(156, row[1].asInt());
+    EXPECT_EQ(4, row[2].asInt());
+    row = rows2->next();
+    EXPECT_EQ(1, row[0].asInt());
+    EXPECT_EQ(68, row[1].asInt());
+    EXPECT_EQ(9, row[2].asInt());
 }
 
 TEST_F(ParquetBlockTest, Mask) {
-    auto block = unique_ptr<ParquetBlock>(new ParquetBlock(rowGroup_, 0, 3));
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
 
     shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(100);
     bitmap->put(4);
@@ -85,8 +121,75 @@ TEST_F(ParquetBlockTest, Mask) {
     EXPECT_EQ(3, masked->size());
     auto rows = masked->rows();
     EXPECT_EQ(1, (*rows)[0][0].asInt());
-    EXPECT_EQ(7, (*rows)[1][0].asInt());
-    EXPECT_EQ(97, (*rows)[2][0].asInt());
+    EXPECT_EQ(0, rows->pos());
+    EXPECT_EQ(3, (*rows)[10][0].asInt());
+    EXPECT_EQ(10, rows->pos());
+    EXPECT_EQ(32, (*rows)[25][0].asInt());
+    EXPECT_EQ(25, rows->pos());
+
+    auto row2 = masked->rows();
+    EXPECT_EQ(1, row2->next()[0].asInt());
+    EXPECT_EQ(4, row2->pos());
+    EXPECT_EQ(7, row2->next()[0].asInt());
+    EXPECT_EQ(20, row2->pos());
+    EXPECT_EQ(97, row2->next()[0].asInt());
+    EXPECT_EQ(95, row2->pos());
+}
+
+TEST_F(ParquetBlockTest, MaskOnMask) {
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+
+    shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(100);
+    bitmap->put(4);
+    bitmap->put(20);
+    bitmap->put(95);
+    bitmap->put(128);
+    bitmap->put(37);
+
+    auto masked = block->mask(bitmap);
+
+    shared_ptr<Bitmap> bitmap2 = make_shared<SimpleBitmap>(100);
+    bitmap2->put(20);
+    bitmap2->put(95);
+
+    auto masked2 = masked->mask(bitmap2);
+
+    EXPECT_EQ(2, masked->size());
+    auto rows = masked->rows();
+    EXPECT_EQ(1, (*rows)[0][0].asInt());
+    EXPECT_EQ(3, (*rows)[10][0].asInt());
+    EXPECT_EQ(32, (*rows)[25][0].asInt());
+
+    auto row2 = masked->rows();
+    EXPECT_EQ(7, row2->next()[0].asInt());
+    EXPECT_EQ(97, row2->next()[0].asInt());
+}
+
+class RawDataAccessorForTest : public Int32Accessor {
+protected:
+    int dict_value_;
+    uint64_t pos_ = 0;
+public:
+    virtual void dict(DictionaryPage *dictPage) override {
+        Int32Accessor::dict(dictPage);
+        dict_value_ = dict_->lookup(102);
+    }
+
+    virtual void filter(parquet::DataPage *page, shared_ptr<Bitmap> bitmap) override {
+//        auto dpv1 = static_cast<DataPageV1 *>(page);
+
+        pos_ += page->num_values();
+    }
+};
+
+using namespace parquet;
+
+TEST_F(ParquetBlockTest, Raw) {
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    shared_ptr<Int32Accessor> accessor = make_shared<RawDataAccessorForTest>();
+    auto bitmap = block->raw(0, accessor.get());
+
+    EXPECT_EQ(0, bitmap->cardinality());
 }
 
 TEST(MemTableTest, Create) {

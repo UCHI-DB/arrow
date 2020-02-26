@@ -9,6 +9,7 @@
 #include <parquet/file_reader.h>
 #include <chidata/stream.h>
 #include <chidata/bitmap.h>
+#include <parquet/column_page.h>
 
 namespace chidata {
     namespace lqf {
@@ -29,6 +30,8 @@ namespace chidata {
             virtual void operator=(double) = 0;
 
             virtual void operator=(void *) = 0;
+
+            virtual void operator=(DataField &) = 0;
         };
 
         /*
@@ -44,6 +47,8 @@ namespace chidata {
             virtual DataRow &operator[](uint64_t idx) = 0;
 
             virtual DataRow &next() = 0;
+
+            virtual uint64_t pos() = 0;
         };
 
         class ColumnIterator {
@@ -51,6 +56,8 @@ namespace chidata {
             virtual DataField &next() = 0;
 
             virtual DataField &operator[](uint64_t idx) = 0;
+
+            virtual uint64_t pos() = 0;
         };
 
         class Block : public enable_shared_from_this<Block> {
@@ -62,7 +69,7 @@ namespace chidata {
 
             virtual unique_ptr<DataRowIterator> rows() = 0;
 
-            virtual shared_ptr<Block> mask(shared_ptr<Bitmap> &mask) = 0;
+            virtual shared_ptr<Block> mask(shared_ptr<Bitmap> mask) = 0;
         };
 
         class MemDataField : public DataField {
@@ -97,6 +104,10 @@ namespace chidata {
                 value_ = (uint64_t) value;
             }
 
+            virtual void operator=(DataField &value) override {
+                value_ = ((MemDataField &) value).value_;
+            }
+
             uint64_t *data() {
                 return &value_;
             }
@@ -115,6 +126,15 @@ namespace chidata {
             virtual DataField &operator[](uint64_t i) override {
                 return data_[i];
             }
+
+            inline void operator=(MemDataRow &row) {
+                auto mdr = static_cast<MemDataRow &>(row);
+                memcpy(data_.data(), mdr.data_.data(), sizeof(MemDataField) * data_.size());
+            }
+
+            inline uint32_t size() {
+                return data_.size();
+            }
         };
 
         class MemBlock : public Block {
@@ -127,7 +147,7 @@ namespace chidata {
 
             virtual ~MemBlock();
 
-            virtual uint64_t size() override;
+            uint64_t size() override;
 
             /**
              * Increase the block row
@@ -135,12 +155,46 @@ namespace chidata {
              */
             void inc(uint32_t row_to_inc);
 
-            virtual unique_ptr<ColumnIterator> col(uint32_t col_index) override;
+            void compact(uint32_t newsize);
 
-            virtual unique_ptr<DataRowIterator> rows() override;
+            unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
-            shared_ptr<Block> mask(shared_ptr<Bitmap> &mask) override;
+            unique_ptr<DataRowIterator> rows() override;
+
+            shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
         };
+
+        template<typename DTYPE>
+        class Dictionary {
+        private:
+            using T = typename DTYPE::c_type;
+            vector<T> buffer_;
+        public:
+            Dictionary(DictionaryPage *data);
+
+            uint32_t lookup(T key);
+        };
+
+        using Int32Dictionary = Dictionary<Int32Type>;
+        using DoubleDictionary = Dictionary<DoubleType>;
+
+        template<typename DTYPE>
+        class RawAccessor {
+        protected:
+            unique_ptr<Dictionary<DTYPE>> dict_;
+
+            uint8_t *data(DataPage *);
+
+        public:
+            virtual void dict(parquet::DictionaryPage *dictPage) {
+                dict_ = unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictPage));
+            }
+
+            virtual void filter(parquet::DataPage *, shared_ptr<Bitmap>) = 0;
+        };
+
+        using Int32Accessor = RawAccessor<Int32Type>;
+        using DoubleAccessor = RawAccessor<DoubleType>;
 
         class ParquetBlock : public Block {
         private:
@@ -152,13 +206,16 @@ namespace chidata {
 
             virtual ~ParquetBlock();
 
-            virtual uint64_t size() override;
+            uint64_t size() override;
 
-            virtual unique_ptr<ColumnIterator> col(uint32_t col_index) override;
+            template<typename DTYPE>
+            shared_ptr<Bitmap> raw(uint32_t col_index, RawAccessor<DTYPE> *);
 
-            virtual unique_ptr<DataRowIterator> rows() override;
+            unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
-            shared_ptr<Block> mask(shared_ptr<Bitmap> &mask) override;
+            unique_ptr<DataRowIterator> rows() override;
+
+            shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
         };
 
         class MaskedBlock : public Block {
@@ -169,13 +226,13 @@ namespace chidata {
 
             virtual ~MaskedBlock();
 
-            virtual uint64_t size() override;
+            uint64_t size() override;
 
-            virtual unique_ptr<ColumnIterator> col(uint32_t col_index) override;
+            unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
-            virtual unique_ptr<DataRowIterator> rows() override;
+            unique_ptr<DataRowIterator> rows() override;
 
-            shared_ptr<Block> mask(shared_ptr<Bitmap> &mask) override;
+            shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
         };
 
         class Table {
@@ -192,6 +249,10 @@ namespace chidata {
             virtual ~ParquetTable();
 
             virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
+
+            void updateColumns(uint64_t columns);
+
+            static shared_ptr<ParquetTable> Open(const string &filename);
 
         protected:
 

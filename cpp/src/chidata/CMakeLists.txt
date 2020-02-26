@@ -21,8 +21,9 @@ add_custom_target(chidata)
 set(CHIDATA_SRCS
         bitmap.cc
         lqf/data_model.cc
-        lqf/operator/filter.cc
-        lqf/operator/agg.cc
+        lqf/filter.cc
+        lqf/agg.cc
+        lqf/join.cc
         )
 
 include_directories(chidata)
@@ -42,6 +43,9 @@ set(CHIDATA_TEST_SRC
         bitmap_test.cc
         stream_test.cc
         lqf/data_model_test.cc
+        lqf/filter_test.cc
+        lqf/agg_test.cc
+        lqf/join_test.cc
         )
 
 add_test_case(all-test

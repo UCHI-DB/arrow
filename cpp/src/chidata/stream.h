@@ -26,7 +26,8 @@ namespace chidata {
 
         void foreach(function<void(TYPE &)> f) {
             while (!isEmpty()) {
-                f(next());
+                TYPE n = next();
+                f(n);
             }
         }
 
@@ -40,8 +41,9 @@ namespace chidata {
 
         TYPE reduce(function<TYPE(TYPE &, TYPE &)> reducer) {
             TYPE current = next();
-            while(!isEmpty()) {
-                current = reducer(current, next());
+            while (!isEmpty()) {
+                TYPE n = next();
+                current = reducer(current, n);
             }
             return current;
         }
@@ -83,7 +85,7 @@ namespace chidata {
         IntStream(int32_t from, int32_t to, int32_t step = 1) : to_(to), step_(step), pointer_(from) {}
 
         virtual bool isEmpty() override {
-            return pointer_ > to_;
+            return pointer_ >= to_;
         }
 
         virtual int32_t next() override {

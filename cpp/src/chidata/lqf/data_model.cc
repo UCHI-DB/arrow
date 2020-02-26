@@ -5,6 +5,9 @@
 #include <exception>
 #include "data_model.h"
 #include <parquet/column_reader.h>
+#include <chidata/validate.h>
+#include <parquet/encoding.h>
+#include <arrow/util/bit_stream_utils.h>
 
 namespace chidata {
     namespace lqf {
@@ -25,16 +28,25 @@ namespace chidata {
 
         void MemBlock::inc(uint32_t row_to_inc) {
             content_.resize(content_.size() + num_fields_ * row_to_inc);
+            size_ += row_to_inc;
         }
+
+        void MemBlock::compact(uint32_t newsize) {
+            content_.resize(newsize * num_fields_);
+            size_ = newsize;
+        }
+
+        class MemDataRowIterator;
 
         class MemDataRowView : public DataRow {
         private:
             vector<MemDataField> &data_;
             uint64_t index_;
             uint8_t num_fields_;
+            friend MemDataRowIterator;
         public:
             MemDataRowView(vector<MemDataField> &data, uint8_t num_fields)
-                    : data_(data), num_fields_(num_fields) {}
+                    : data_(data), index_(-1), num_fields_(num_fields) {}
 
             virtual ~MemDataRowView() {
 
@@ -69,6 +81,10 @@ namespace chidata {
                 reference_.next();
                 return reference_;
             }
+
+            virtual uint64_t pos() override {
+                return reference_.index_;
+            }
         };
 
         class MemColumnIterator : public ColumnIterator {
@@ -79,7 +95,7 @@ namespace chidata {
             uint64_t rowindex_;
         public:
             MemColumnIterator(vector<MemDataField> &data, uint8_t num_fields, uint8_t colindex)
-                    : num_fields_(num_fields), data_(data), colindex_(colindex), rowindex_(0) {}
+                    : num_fields_(num_fields), data_(data), colindex_(colindex), rowindex_(-1) {}
 
             virtual DataField &operator[](uint64_t idx) override {
                 rowindex_ = idx;
@@ -89,6 +105,10 @@ namespace chidata {
             DataField &next() override {
                 ++rowindex_;
                 return data_[rowindex_ * num_fields_ + colindex_];
+            }
+
+            uint64_t pos() override {
+                return rowindex_;
             }
 
         };
@@ -101,8 +121,21 @@ namespace chidata {
             return unique_ptr<ColumnIterator>(new MemColumnIterator(content_, num_fields_, col_index));
         }
 
-        shared_ptr<Block> MemBlock::mask(shared_ptr<Bitmap> &mask) {
-            throw std::invalid_argument("unsupported");
+        shared_ptr<Block> MemBlock::mask(shared_ptr<Bitmap> mask) {
+            auto newBlock = make_shared<MemBlock>(mask->cardinality(), num_fields_);
+            auto ite = mask->iterator();
+
+            auto newData = newBlock->content_.data();
+            auto oldData = content_.data();
+
+            auto newCounter = 0;
+            while (ite->hasNext()) {
+                auto next = ite->next();
+                memcpy((void *) (newData + (newCounter++) * num_fields_),
+                       (void *) (oldData + next * num_fields_),
+                       sizeof(MemDataField) * num_fields_);
+            }
+            return newBlock;
         }
 
         MaskedBlock::MaskedBlock(shared_ptr<ParquetBlock> inner, shared_ptr<Bitmap> mask)
@@ -129,6 +162,10 @@ namespace chidata {
             virtual DataField &next() override {
                 return (*inner_)[bite_->next()];
             }
+
+            uint64_t pos() override {
+                return inner_->pos();
+            }
         };
 
         unique_ptr<ColumnIterator> MaskedBlock::col(uint32_t col_index) {
@@ -151,15 +188,66 @@ namespace chidata {
             virtual DataRow &next() override {
                 return (*inner_)[bite_->next()];
             }
+
+            uint64_t pos() override {
+                return inner_->pos();
+            }
         };
 
         unique_ptr<DataRowIterator> MaskedBlock::rows() {
             return unique_ptr<MaskedRowIterator>(new MaskedRowIterator(inner_->rows(), mask_->iterator()));
         }
 
-        shared_ptr<Block> MaskedBlock::mask(shared_ptr<Bitmap> &mask) {
+        shared_ptr<Block> MaskedBlock::mask(shared_ptr<Bitmap> mask) {
             this->mask_ = (*this->mask_) & *mask;
             return this->shared_from_this();
+        }
+
+        using namespace parquet;
+
+        template<typename DTYPE>
+        Dictionary<DTYPE>::Dictionary(DictionaryPage *dpage):buffer_() {
+            auto decoder = parquet::MakeTypedDecoder<DTYPE>(Encoding::PLAIN, nullptr);
+            decoder->SetData(dpage->num_values(), dpage->data(), dpage->size());
+            buffer_.resize(dpage->num_values());
+            decoder->Decode(buffer_.data(), buffer_.size());
+        }
+
+        template<typename DTYPE>
+        uint32_t Dictionary<DTYPE>::lookup(T key) {
+            uint32_t low = 0;
+            uint32_t high = buffer_.size();
+
+            while (low <= high) {
+                uint32_t mid = (low + high) >> 1;
+                T midVal = buffer_[mid];
+
+                if (midVal < key)
+                    low = mid + 1;
+                else if (midVal > key)
+                    high = mid - 1;
+                else
+                    return mid; // key found
+            }
+            return -(low + 1);  // key not found.
+        }
+
+        template<typename DTYPE>
+        uint8_t *RawAccessor<DTYPE>::data(DataPage *dpage) {
+            uint8_t *data_base = const_cast<uint8_t *>(dpage->data());
+            uint64_t offset = 0;
+            uint64_t buffer = 0;
+            arrow::BitUtil::BitReader reader(data_base, dpage->size());
+            if (dpage->type() == PageType::DATA_PAGE) {
+                reader.GetValue(32, &buffer);
+                offset += buffer + 4;
+                reader.Skip(8, buffer);
+                reader.GetValue(32, &buffer);
+                offset += buffer + 4;
+            } else {
+                throw invalid_argument("DataPageV2 not supported");
+            }
+            return data_base + offset;
         }
 
         ParquetBlock::ParquetBlock(shared_ptr<RowGroupReader> rowGroup, uint32_t index, uint64_t columns)
@@ -173,21 +261,42 @@ namespace chidata {
             return rowGroup_->metadata()->num_rows();
         }
 
+        class ParquetRowIterator;
+
         class ParquetRowView : public DataRow {
         protected:
-            vector<unique_ptr<ColumnIterator>> columns_;
+            vector<unique_ptr<ColumnIterator>> &columns_;
             uint64_t index_;
+            friend ParquetRowIterator;
         public:
-            ParquetRowView(vector<unique_ptr<ColumnIterator>> &cols) : columns_(cols), index_(0) {}
+            ParquetRowView(vector<unique_ptr<ColumnIterator>> &cols) : columns_(cols), index_(-1) {}
 
             virtual DataField &operator[](uint64_t colindex) override {
-                return (*columns_[index_])[colindex];
+                validate_true(colindex < columns_.size(), "column not available");
+                return (*(columns_[colindex]))[index_];
             }
 
             void setIndex(uint64_t index) {
                 this->index_ = index;
             }
         };
+
+        template<typename DTYPE>
+        shared_ptr<Bitmap> ParquetBlock::raw(uint32_t col_index, RawAccessor<DTYPE> *accessor) {
+            auto pageReader = rowGroup_->GetColumnPageReader(col_index);
+
+            shared_ptr<Dictionary<DTYPE>> dict = nullptr;
+            shared_ptr<Page> page = nullptr;
+            shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(size());
+            while ((page = pageReader->NextPage())) {
+                if (page->type() == PageType::DICTIONARY_PAGE) {
+                    accessor->dict((DictionaryPage *) page.get());
+                } else {
+                    accessor->filter((DataPage *) page.get(), bitmap);
+                }
+            }
+            return bitmap;
+        }
 
         class ParquetColumnIterator;
 
@@ -209,17 +318,17 @@ namespace chidata {
             }
 
             virtual DataRow &operator[](uint64_t index) override {
-                view_.setIndex(index);
+                view_.index_ = index;
                 return view_;
             }
 
             virtual DataRow &next() override {
-                auto it = columns_.begin();
-                while (it < columns_.end()) {
-                    (*it)->next();
-                    it++;
-                }
+                view_.index_++;
                 return view_;
+            }
+
+            uint64_t pos() override {
+                return columns_[0]->pos();
             }
         };
 
@@ -227,61 +336,33 @@ namespace chidata {
             return unique_ptr<DataRowIterator>(new ParquetRowIterator(*this, columns_));
         }
 
-        class ParquetColumnIterator : public ColumnIterator, DataField {
+        class ParquetColumnIterator : public ColumnIterator {
         private:
             shared_ptr<ColumnReader> columnReader_;
             MemDataField dataField_;
             int64_t read_counter_;
-            bool consumed_;
+            uint64_t pos_;
         public:
             ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader), dataField_(),
-                                                                        read_counter_(0), consumed_(0) {}
+                                                                        read_counter_(0), pos_(-1) {}
 
             virtual ~ParquetColumnIterator() {}
 
             virtual DataField &operator[](uint64_t idx) override {
                 columnReader_->MoveTo(idx);
-                consumed_ = false;
-                return *this;
+                columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
+                pos_ = idx;
+                return dataField_;
             }
 
             virtual DataField &next() override {
-                // Do nothing as the asXX method will automatically move forward
-                if (!consumed_) {
-                    columnReader_->Skip(1);
-                }
-                consumed_ = false;
+                columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
+                ++pos_;
+                return dataField_;
             }
 
-            virtual int32_t asInt() override {
-                auto res = static_pointer_cast<Int32Reader>(columnReader_);
-                res->ReadBatch(1, nullptr, nullptr, (int32_t *) (dataField_.data()), &read_counter_);
-                consumed_ = true;
-                return dataField_.asInt();
-            }
-
-            virtual double asDouble() override {
-                auto res = static_pointer_cast<DoubleReader>(columnReader_);
-                res->ReadBatch(1, nullptr, nullptr, (double *) (dataField_.data()), &read_counter_);
-                consumed_ = true;
-                return dataField_.asInt();
-            }
-
-            virtual void *asString() override {
-                auto res = static_pointer_cast<ByteArrayReader>(columnReader_);
-                throw invalid_argument("");
-            };
-
-            virtual void operator=(int32_t) override {
-                throw invalid_argument("");
-            }
-
-            virtual void operator=(double) override {
-                throw invalid_argument("");
-            }
-
-            virtual void operator=(void *) override {
-                throw invalid_argument("");
+            uint64_t pos() override {
+                return pos_;
             }
         };
 
@@ -289,12 +370,20 @@ namespace chidata {
             return unique_ptr<ColumnIterator>(new ParquetColumnIterator(rowGroup_->Column(col_index)));
         }
 
-        shared_ptr<Block> ParquetBlock::mask(shared_ptr<Bitmap> &mask) {
+        shared_ptr<Block> ParquetBlock::mask(shared_ptr<Bitmap> mask) {
             return make_shared<MaskedBlock>(dynamic_pointer_cast<ParquetBlock>(this->shared_from_this()), mask);
         }
 
         ParquetTable::ParquetTable(const string &fileName) {
             fileReader_ = ParquetFileReader::OpenFile(fileName);
+        }
+
+        void ParquetTable::updateColumns(uint64_t columns) {
+            columns_ = columns;
+        }
+
+        shared_ptr<ParquetTable> ParquetTable::Open(const string &filename) {
+            return make_shared<ParquetTable>(filename);
         }
 
         ParquetTable::~ParquetTable() {
@@ -307,7 +396,8 @@ namespace chidata {
             function<shared_ptr<Block>(const int &)> mapper = [=](const int &idx) {
                 return this->createParquetBlock(idx);
             };
-            auto stream = IntStream::Make(0, 10)->map(mapper);
+            uint32_t numRowGroups = fileReader_->metadata()->num_row_groups();
+            auto stream = IntStream::Make(0, numRowGroups)->map(mapper);
             return stream;
         }
 

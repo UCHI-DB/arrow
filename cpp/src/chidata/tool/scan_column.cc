@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     int displayIndex = 1;
 
     using namespace parquet;
-    using namespace chidata::util;
+    using namespace chidata;
     auto fileReader = ParquetFileReader::OpenFile(std::string(fileName));
     auto metadata = fileReader->metadata();
     int numRowGroup = metadata->num_row_groups();

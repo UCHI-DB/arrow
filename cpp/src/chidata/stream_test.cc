@@ -16,8 +16,8 @@ TEST(IntStream, CreateStream) {
     while (!stream->isEmpty()) {
         buffer.push_back(stream->next());
     }
-    ASSERT_EQ(10, buffer.size());
-    for (int i = 1; i <= 10; i++) {
+    ASSERT_EQ(9, buffer.size());
+    for (int i = 1; i < 10; i++) {
         ASSERT_EQ(i, buffer[i - 1]);
     }
 }
@@ -54,7 +54,7 @@ TEST(Stream, Map) {
 
     auto buffer = mapped->collect();
 
-    ASSERT_EQ(10, buffer->size());
+    ASSERT_EQ(9, buffer->size());
 
     for (int i = 0; i < 10; ++i) {
         ASSERT_EQ(i + 1, (*buffer)[i]->GetValue());
