@@ -56,7 +56,7 @@ TEST(Stream, Map) {
 
     ASSERT_EQ(9, buffer->size());
 
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 9; ++i) {
         ASSERT_EQ(i + 1, (*buffer)[i]->GetValue());
     }
 
@@ -64,6 +64,6 @@ TEST(Stream, Map) {
 
     buffer->clear();
 
-    ASSERT_EQ(10, TestClass::counter);
+    ASSERT_EQ(9, TestClass::counter);
 }
 

@@ -16,7 +16,7 @@ namespace chidata {
 
 
         MemBlock::MemBlock(uint32_t size, uint8_t num_fields) : size_(size), num_fields_(num_fields) {
-            content_ = vector<MemDataField>(size * num_fields);
+            content_ = vector<uint64_t>(size * num_fields);
         }
 
         MemBlock::~MemBlock() {
@@ -40,12 +40,13 @@ namespace chidata {
 
         class MemDataRowView : public DataRow {
         private:
-            vector<MemDataField> &data_;
+            vector<uint64_t> &data_;
             uint64_t index_;
             uint8_t num_fields_;
+            DataField view_;
             friend MemDataRowIterator;
         public:
-            MemDataRowView(vector<MemDataField> &data, uint8_t num_fields)
+            MemDataRowView(vector<uint64_t> &data, uint8_t num_fields)
                     : data_(data), index_(-1), num_fields_(num_fields) {}
 
             virtual ~MemDataRowView() {
@@ -61,7 +62,8 @@ namespace chidata {
             }
 
             virtual DataField &operator[](uint64_t i) override {
-                return data_[index_ * num_fields_ + i];
+                view_ = data_.data() + index_ * num_fields_ + i;
+                return view_;
             }
         };
 
@@ -69,7 +71,7 @@ namespace chidata {
         private:
             MemDataRowView reference_;
         public:
-            MemDataRowIterator(vector<MemDataField> &data, uint8_t num_fields)
+            MemDataRowIterator(vector<uint64_t> &data, uint8_t num_fields)
                     : reference_(data, num_fields) {}
 
             virtual DataRow &operator[](uint64_t idx) override {
@@ -90,21 +92,24 @@ namespace chidata {
         class MemColumnIterator : public ColumnIterator {
         private:
             uint8_t num_fields_;
-            vector<MemDataField> &data_;
+            vector<uint64_t> &data_;
             uint8_t colindex_;
             uint64_t rowindex_;
+            DataField view_;
         public:
-            MemColumnIterator(vector<MemDataField> &data, uint8_t num_fields, uint8_t colindex)
+            MemColumnIterator(vector<uint64_t> &data, uint8_t num_fields, uint8_t colindex)
                     : num_fields_(num_fields), data_(data), colindex_(colindex), rowindex_(-1) {}
 
             virtual DataField &operator[](uint64_t idx) override {
                 rowindex_ = idx;
-                return data_[idx * num_fields_ + colindex_];
+                view_ = data_.data() + idx * num_fields_ + colindex_;
+                return view_;
             }
 
             DataField &next() override {
                 ++rowindex_;
-                return data_[rowindex_ * num_fields_ + colindex_];
+                view_ = data_.data() + rowindex_ * num_fields_ + colindex_;
+                return view_;
             }
 
             uint64_t pos() override {
@@ -133,7 +138,7 @@ namespace chidata {
                 auto next = ite->next();
                 memcpy((void *) (newData + (newCounter++) * num_fields_),
                        (void *) (oldData + next * num_fields_),
-                       sizeof(MemDataField) * num_fields_);
+                       sizeof(uint64_t) * num_fields_);
             }
             return newBlock;
         }
@@ -339,12 +344,15 @@ namespace chidata {
         class ParquetColumnIterator : public ColumnIterator {
         private:
             shared_ptr<ColumnReader> columnReader_;
-            MemDataField dataField_;
+            uint64_t buffer_;
+            DataField dataField_;
             int64_t read_counter_;
             uint64_t pos_;
         public:
-            ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader), dataField_(),
-                                                                        read_counter_(0), pos_(-1) {}
+            ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader), buffer_(),
+                                                                        dataField_(), read_counter_(0), pos_(-1) {
+                dataField_ = &buffer_;
+            }
 
             virtual ~ParquetColumnIterator() {}
 

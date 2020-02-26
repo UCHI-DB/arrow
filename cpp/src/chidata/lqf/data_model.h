@@ -18,20 +18,23 @@ namespace chidata {
         using namespace parquet;
 
         class DataField {
+        private:
+            uint64_t *value_;
         public:
-            virtual int32_t asInt() = 0;
+            inline int32_t asInt() { return static_cast<int32_t>(*value_); }
 
-            virtual double asDouble() = 0;
+            inline double asDouble() { return *((double *) value_); }
 
-            virtual void *asString() = 0;
+            inline void operator=(int32_t value) { *value_ = value; }
 
-            virtual void operator=(int32_t) = 0;
+            inline void operator=(double value) { *value_ = *((uint64_t *) &value); }
 
-            virtual void operator=(double) = 0;
+            inline void operator=(DataField &df) { *value_ = *df.value_; }
 
-            virtual void operator=(void *) = 0;
+            inline void operator=(uint64_t *value) { value_ = value; }
 
-            virtual void operator=(DataField &) = 0;
+            inline uint64_t *data() { return value_; }
+
         };
 
         /*
@@ -40,6 +43,32 @@ namespace chidata {
         class DataRow {
         public:
             virtual DataField &operator[](uint64_t i) = 0;
+        };
+
+        class MemDataRow : public DataRow {
+        private:
+            vector<uint64_t> data_;
+            DataField view_;
+        public:
+            MemDataRow(uint8_t num_fields) : data_(num_fields) {}
+
+            virtual ~MemDataRow() {
+
+            }
+
+            virtual DataField &operator[](uint64_t i) override {
+                view_ = data_.data() + i;
+                return view_;
+            }
+
+            inline void operator=(MemDataRow &row) {
+                memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.data_.data()),
+                       sizeof(uint64_t) * data_.size());
+            }
+
+            inline uint32_t size() {
+                return data_.size();
+            }
         };
 
         class DataRowIterator {
@@ -72,76 +101,11 @@ namespace chidata {
             virtual shared_ptr<Block> mask(shared_ptr<Bitmap> mask) = 0;
         };
 
-        class MemDataField : public DataField {
-        private:
-            uint64_t value_;
-        public:
-            virtual int32_t asInt() override {
-                return static_cast<int32_t>(value_);
-            }
-
-            virtual double asDouble() override {
-                return *((double *) &value_);
-            }
-
-            virtual void *asString() override {
-                return *((void **) &value_);
-            }
-
-            virtual void operator=(uint64_t value) {
-                value_ = value;
-            }
-
-            virtual void operator=(int32_t value) override {
-                value_ = value;
-            }
-
-            virtual void operator=(double value) override {
-                value_ = *((uint64_t *) &value);
-            }
-
-            virtual void operator=(void *value) override {
-                value_ = (uint64_t) value;
-            }
-
-            virtual void operator=(DataField &value) override {
-                value_ = ((MemDataField &) value).value_;
-            }
-
-            uint64_t *data() {
-                return &value_;
-            }
-        };
-
-        class MemDataRow : public DataRow {
-        private:
-            vector<MemDataField> data_;
-        public:
-            MemDataRow(uint8_t num_fields) : data_(num_fields) {}
-
-            virtual ~MemDataRow() {
-
-            }
-
-            virtual DataField &operator[](uint64_t i) override {
-                return data_[i];
-            }
-
-            inline void operator=(MemDataRow &row) {
-                auto mdr = static_cast<MemDataRow &>(row);
-                memcpy(data_.data(), mdr.data_.data(), sizeof(MemDataField) * data_.size());
-            }
-
-            inline uint32_t size() {
-                return data_.size();
-            }
-        };
-
         class MemBlock : public Block {
         private:
             uint32_t size_;
             uint8_t num_fields_;
-            vector<MemDataField> content_;
+            vector<uint64_t> content_;
         public:
             MemBlock(uint32_t size, uint8_t num_fields);
 
