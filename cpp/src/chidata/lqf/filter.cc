@@ -3,9 +3,12 @@
 //
 
 #include "filter.h"
+#include <chidata/sboost/encoding/rlehybrid.h>
 
 using namespace std;
 using namespace std::placeholders;
+using namespace sboost::encoding;
+
 namespace chidata {
     namespace lqf {
 
@@ -20,13 +23,20 @@ namespace chidata {
             return input->mask(result);
         }
 
-        shared_ptr<Bitmap> SimpleColPredicate::filter(Block &block, Bitmap &skip) {
+        ColPredicate::ColPredicate(uint32_t index) : index_(index) {}
+
+        ColPredicate::~ColPredicate() {}
+
+        SimpleColPredicate::SimpleColPredicate(uint32_t index, function<bool(DataField &)> pred)
+                : ColPredicate(index), predicate_(pred) {}
+
+        shared_ptr<Bitmap> SimpleColPredicate::filterBlock(Block &block, Bitmap &skip) {
             auto result = make_shared<SimpleBitmap>(block.size());
             uint64_t block_size = block.size();
             auto ite = block.col(index_);
             if (skip.isFull()) {
                 for (uint64_t i = 0; i < block_size; ++i) {
-                    if (pred_((*ite)[i])) {
+                    if (predicate_((*ite)[i])) {
                         result->put(i);
                     }
                 }
@@ -34,7 +44,7 @@ namespace chidata {
                 auto posite = skip.iterator();
                 while (posite->hasNext()) {
                     auto pos = posite->next();
-                    if (pred_((*ite)[pos])) {
+                    if (predicate_((*ite)[pos])) {
                         result->put(pos);
                     }
                 }
@@ -42,25 +52,22 @@ namespace chidata {
             return result;
         }
 
-        shared_ptr<Bitmap> SBoostPredicate::filter(Block &block, Bitmap &mask) {
-            ParquetBlock &pblock = static_cast<ParquetBlock &>(block);
-
-            throw invalid_argument("not implemented");
+        ColFilter::ColFilter(initializer_list<ColPredicate *> preds) {
+            predicates_ = vector<unique_ptr<ColPredicate>>();
+            auto it = preds.begin();
+            while (it < preds.end()) {
+                predicates_.push_back(unique_ptr<ColPredicate>(*it));
+                it++;
+            }
         }
-
-        ColFilter::ColFilter() {}
 
         ColFilter::~ColFilter() { predicates_.clear(); }
 
-        void ColFilter::install(unique_ptr<ColPredicate> pred) {
-            predicates_.push_back(move(pred));
-        }
-
         shared_ptr<Bitmap> ColFilter::filterBlock(Block &input) {
-            shared_ptr<Bitmap> result = make_shared<SimpleBitmap>(input.size());
+            shared_ptr<Bitmap> result = make_shared<FullBitmap>(input.size());
             auto it = predicates_.begin();
             while (it != predicates_.end()) {
-                result = (*it)->filter(input, *result);
+                result = (*it)->filterBlock(input, *result);
                 it++;
             }
             return result;

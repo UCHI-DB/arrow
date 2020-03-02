@@ -205,6 +205,10 @@ namespace chidata {
                 new SimpleBitmapIterator(this->bitmap_, this->array_size_, this->size_));
     }
 
+    uint64_t * SimpleBitmap::raw() {
+        return bitmap_;
+    }
+
     FullBitmap::FullBitmap(uint64_t size) {
         this->size_ = size;
     }
@@ -256,4 +260,5 @@ namespace chidata {
     std::unique_ptr<BitmapIterator> FullBitmap::iterator() {
         return std::unique_ptr<BitmapIterator>(new FullBitmapIterator(this->size_));
     }
+
 }

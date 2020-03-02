@@ -24,6 +24,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <immintrin.h>
+#include <chidata/sboost/sboost.h>
 
 #include "arrow/array.h"
 #include "arrow/builder.h"
@@ -2165,11 +2167,23 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
         decoder_.GetBatch(bit_width_data[i], buffer + num_buffered_, values_per_mini_block_);
         num_buffered_ += values_per_mini_block_;
     }
-    // TODO This delta computation can be speed up using SBoost
-    buffer[buffer_start] += last_value_+min_delta_;
-    for(uint32_t i = buffer_start+1 ; i < num_buffered_;++i) {
-       buffer[i] += min_delta_ + buffer[i-1];
+
+    // Speed up Delta computation using Sboost
+    for(uint32_t i = buffer_start ; i < buffer_start+num_buffered_;i+=8) {
+        int32_t* position = buffer+i;
+        __m256i lv256 = _mm256_set1_epi32(last_value_);
+        __m256i loaded = _mm256_loadu_si256((const __m256i*)position);
+        loaded = _mm256_add_epi32(lv256,loaded);
+        __m256i result = ::sboost::cumsum32(loaded);
+        _mm256_storeu_si256((__m256i*)position,result);
     }
+
+//     TODO This delta computation can be speed up using SBoost
+//    buffer[buffer_start] += last_value_+min_delta_;
+//    for(uint32_t i = buffer_start+1 ; i < num_buffered_;++i) {
+//       buffer[i] += min_delta_ + buffer[i-1];
+//    }
+
     last_value_ = buffer[num_buffered_-1];
     num_buffer_read_ = 0;
   }

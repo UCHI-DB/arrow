@@ -16,45 +16,53 @@
 # under the License.
 
 
-add_custom_target(chidata)
+add_custom_target(lqf)
 
-set(CHIDATA_SRCS
+add_subdirectory(sboost)
+
+set(LQF_SRCS
         bitmap.cc
         lqf/data_model.cc
         lqf/filter.cc
         lqf/agg.cc
         lqf/join.cc
+        lqf/print.cc
+        lqf/sort.cc
         )
 
 include_directories(chidata)
 
-add_arrow_lib(chidata
+add_arrow_lib(lqf
         BUILD_STATIC
         SOURCES
-        ${CHIDATA_SRCS}
+        ${LQF_SRCS}
         OUTPUTS
-        CHIDATA_LIBRARIES
+        LQF_LIBRARIES
         STATIC_LINK_LIBS
         parquet_static
+        sboost_static
         )
-target_compile_options(chidata_objlib PUBLIC "-mavx2")
+target_compile_options(lqf_objlib PUBLIC "-mavx2")
 
-set(CHIDATA_TEST_SRC
+set(LQF_TEST_SRC
         bitmap_test.cc
         stream_test.cc
+        heap_test.cc
         lqf/data_model_test.cc
         lqf/filter_test.cc
         lqf/agg_test.cc
         lqf/join_test.cc
+        lqf/print_test.cc
+        lqf/sort_test.cc
         )
 
-add_test_case(all-test
+add_test_case(lqf-test
         PREFIX
         chidata
         SOURCES
-        ${CHIDATA_TEST_SRC}
+        ${LQF_TEST_SRC}
         STATIC_LINK_LIBS
-        chidata_static
+        lqf_static
         GTest::GTest
         GTest::Main
         )
@@ -70,4 +78,4 @@ endforeach ()
 arrow_install_all_headers(chidata)
 
 add_executable(scan_column tool/scan_column.cc)
-target_link_libraries(scan_column chidata_static parquet_static)
+target_link_libraries(scan_column lqf_static parquet_static)

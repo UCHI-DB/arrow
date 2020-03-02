@@ -112,7 +112,7 @@ class TestPrimitiveReader : public ::testing::Test {
     }
     // catch improper writes at EOS
     batch_actual =
-        static_cast<int>(reader->ReadBatch(5, nullptr, nullptr, nullptr, &values_read));
+        static_cast<int>(reader->ReadBatch(5, nullptr, nullptr, (int32_t*)nullptr, &values_read));
     ASSERT_EQ(0, batch_actual);
     ASSERT_EQ(0, values_read);
   }

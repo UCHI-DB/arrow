@@ -166,31 +166,32 @@ TEST_F(ParquetBlockTest, MaskOnMask) {
 }
 
 class RawDataAccessorForTest : public Int32Accessor {
-protected:
+public:
     int dict_value_;
     uint64_t pos_ = 0;
-public:
-    virtual void dict(DictionaryPage *dictPage) override {
-        Int32Accessor::dict(dictPage);
+
+    void processDict(Int32Dictionary &dict) override {
         dict_value_ = dict_->lookup(102);
     }
 
-    virtual void filter(parquet::DataPage *page, shared_ptr<Bitmap> bitmap) override {
+    void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {
 //        auto dpv1 = static_cast<DataPageV1 *>(page);
 
-        pos_ += page->num_values();
+        pos_ += numEntry;
     }
 };
 
 using namespace parquet;
 
-TEST_F(ParquetBlockTest, Raw) {
+TEST_F(ParquetBlockTest, RawAndDict) {
     auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
-    shared_ptr<Int32Accessor> accessor = make_shared<RawDataAccessorForTest>();
+    shared_ptr<RawDataAccessorForTest> accessor = make_shared<RawDataAccessorForTest>();
     auto bitmap = block->raw(0, accessor.get());
 
     EXPECT_EQ(0, bitmap->cardinality());
+    EXPECT_EQ(29, accessor->dict_value_);
 }
+
 
 TEST(MemTableTest, Create) {
     auto mt = MemTable::Make(5);
@@ -209,3 +210,24 @@ TEST(MemTableTest, Create) {
     ASSERT_EQ(300, list[2]->size());
 }
 
+TEST(DataRowTest, Copy) {
+
+    auto table = MemTable::Make(4);
+    auto block = table->allocate(100);
+    auto block2 = table->allocate(100);
+
+    vector<MemDataRow> buffer;
+
+    auto rows1 = block->rows();
+    auto rows2 = block2->rows();
+
+    srand(time(NULL));
+
+    for (int i = 0; i < 100; ++i) {
+        (*rows1)[i][0] = rand();
+        buffer.push_back(MemDataRow(4));
+        buffer[i] = (*rows1)[i];
+        (*rows2)[i] = buffer[i];
+        EXPECT_EQ((*rows1)[i][0].asInt(), (*rows2)[i][0].asInt());
+    }
+}

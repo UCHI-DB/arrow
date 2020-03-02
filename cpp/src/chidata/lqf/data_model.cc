@@ -14,6 +14,27 @@ namespace chidata {
         using namespace std;
         using namespace chidata;
 
+        DataRow::~DataRow() {
+
+        }
+
+        MemDataRow::MemDataRow(uint8_t num_fields) : data_(num_fields, 0x0) {}
+
+        MemDataRow::~MemDataRow() {}
+
+        DataField &MemDataRow::operator[](uint64_t i) {
+            view_ = data_.data() + i;
+            return view_;
+        }
+
+        void MemDataRow::operator=(DataRow &row) {
+            memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.raw()),
+                   sizeof(uint64_t) * data_.size());
+        }
+
+        uint64_t *MemDataRow::raw() {
+            return data_.data();
+        }
 
         MemBlock::MemBlock(uint32_t size, uint8_t num_fields) : size_(size), num_fields_(num_fields) {
             content_ = vector<uint64_t>(size * num_fields);
@@ -34,6 +55,10 @@ namespace chidata {
         void MemBlock::compact(uint32_t newsize) {
             content_.resize(newsize * num_fields_);
             size_ = newsize;
+        }
+
+        vector<uint64_t> &MemBlock::content() {
+            return content_;
         }
 
         class MemDataRowIterator;
@@ -61,10 +86,20 @@ namespace chidata {
                 ++index_;
             }
 
-            virtual DataField &operator[](uint64_t i) override {
+            DataField &operator[](uint64_t i) override {
                 view_ = data_.data() + index_ * num_fields_ + i;
                 return view_;
             }
+
+            uint64_t *raw() override {
+                return data_.data() + index_ * num_fields_;
+            }
+
+            void operator=(DataRow &row) override {
+                memcpy(static_cast<void *>(data_.data() + index_ * num_fields_), static_cast<void *>(row.raw()),
+                       sizeof(uint64_t) * num_fields_);
+            }
+
         };
 
         class MemDataRowIterator : public DataRowIterator {
@@ -237,24 +272,6 @@ namespace chidata {
             return -(low + 1);  // key not found.
         }
 
-        template<typename DTYPE>
-        uint8_t *RawAccessor<DTYPE>::data(DataPage *dpage) {
-            uint8_t *data_base = const_cast<uint8_t *>(dpage->data());
-            uint64_t offset = 0;
-            uint64_t buffer = 0;
-            arrow::BitUtil::BitReader reader(data_base, dpage->size());
-            if (dpage->type() == PageType::DATA_PAGE) {
-                reader.GetValue(32, &buffer);
-                offset += buffer + 4;
-                reader.Skip(8, buffer);
-                reader.GetValue(32, &buffer);
-                offset += buffer + 4;
-            } else {
-                throw invalid_argument("DataPageV2 not supported");
-            }
-            return data_base + offset;
-        }
-
         ParquetBlock::ParquetBlock(shared_ptr<RowGroupReader> rowGroup, uint32_t index, uint64_t columns)
                 : rowGroup_(rowGroup), index_(index), columns_(columns) {}
 
@@ -288,19 +305,19 @@ namespace chidata {
 
         template<typename DTYPE>
         shared_ptr<Bitmap> ParquetBlock::raw(uint32_t col_index, RawAccessor<DTYPE> *accessor) {
+            accessor->init(this->size());
             auto pageReader = rowGroup_->GetColumnPageReader(col_index);
-
-            shared_ptr<Dictionary<DTYPE>> dict = nullptr;
+            shared_ptr<Dictionary<DTYPE>>
+                    dict = nullptr;
             shared_ptr<Page> page = nullptr;
-            shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(size());
             while ((page = pageReader->NextPage())) {
                 if (page->type() == PageType::DICTIONARY_PAGE) {
                     accessor->dict((DictionaryPage *) page.get());
                 } else {
-                    accessor->filter((DataPage *) page.get(), bitmap);
+                    accessor->data((DataPage *) page.get());
                 }
             }
-            return bitmap;
+            return accessor->result();
         }
 
         class ParquetColumnIterator;
@@ -333,7 +350,7 @@ namespace chidata {
             }
 
             uint64_t pos() override {
-                return columns_[0]->pos();
+                return view_.index_;
             }
         };
 
@@ -382,7 +399,7 @@ namespace chidata {
             return make_shared<MaskedBlock>(dynamic_pointer_cast<ParquetBlock>(this->shared_from_this()), mask);
         }
 
-        ParquetTable::ParquetTable(const string &fileName) {
+        ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : columns_(columns) {
             fileReader_ = ParquetFileReader::OpenFile(fileName);
         }
 
@@ -390,8 +407,8 @@ namespace chidata {
             columns_ = columns;
         }
 
-        shared_ptr<ParquetTable> ParquetTable::Open(const string &filename) {
-            return make_shared<ParquetTable>(filename);
+        shared_ptr<ParquetTable> ParquetTable::Open(const string &filename, uint64_t columns) {
+            return make_shared<ParquetTable>(filename, columns);
         }
 
         ParquetTable::~ParquetTable() {

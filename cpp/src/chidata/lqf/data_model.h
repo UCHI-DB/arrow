@@ -10,6 +10,7 @@
 #include <chidata/stream.h>
 #include <chidata/bitmap.h>
 #include <parquet/column_page.h>
+#include <arrow/util/bit_stream_utils.h>
 
 namespace chidata {
     namespace lqf {
@@ -42,7 +43,17 @@ namespace chidata {
          */
         class DataRow {
         public:
+            virtual ~DataRow();
+
             virtual DataField &operator[](uint64_t i) = 0;
+
+            virtual void operator=(DataRow &row) {
+
+            }
+
+            virtual uint64_t *raw() {
+                return nullptr;
+            }
         };
 
         class MemDataRow : public DataRow {
@@ -50,21 +61,15 @@ namespace chidata {
             vector<uint64_t> data_;
             DataField view_;
         public:
-            MemDataRow(uint8_t num_fields) : data_(num_fields) {}
+            MemDataRow(uint8_t num_fields);
 
-            virtual ~MemDataRow() {
+            virtual ~MemDataRow();
 
-            }
+            DataField &operator[](uint64_t i) override;
 
-            virtual DataField &operator[](uint64_t i) override {
-                view_ = data_.data() + i;
-                return view_;
-            }
+            void operator=(DataRow &row) override;
 
-            inline void operator=(MemDataRow &row) {
-                memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.data_.data()),
-                       sizeof(uint64_t) * data_.size());
-            }
+            uint64_t *raw() override;
 
             inline uint32_t size() {
                 return data_.size();
@@ -121,11 +126,14 @@ namespace chidata {
 
             void compact(uint32_t newsize);
 
+            inline vector<uint64_t> &content();
+
             unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
             unique_ptr<DataRowIterator> rows() override;
 
             shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
+
         };
 
         template<typename DTYPE>
@@ -147,14 +155,39 @@ namespace chidata {
         protected:
             unique_ptr<Dictionary<DTYPE>> dict_;
 
-            uint8_t *data(DataPage *);
+            shared_ptr<SimpleBitmap> bitmap_;
+
+            uint64_t offset_;
+
+            virtual void processDict(Dictionary<DTYPE> &) = 0;
+
+            virtual void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) = 0;
 
         public:
-            virtual void dict(parquet::DictionaryPage *dictPage) {
-                dict_ = unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictPage));
+            RawAccessor() : offset_(0) {}
+
+            virtual ~RawAccessor() {}
+
+            void init(uint64_t size) {
+                bitmap_ = make_shared<SimpleBitmap>(size);
             }
 
-            virtual void filter(parquet::DataPage *, shared_ptr<Bitmap>) = 0;
+            void dict(parquet::DictionaryPage *dictPage) {
+                dict_ = unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictPage));
+                processDict(*dict_);
+            }
+
+            void data(DataPage *dpage) {
+                // Assume all fields are mandatory, which is true for TPCH
+//                scanPage(dataPage->num_values(), dataPage->data(), bitmap_->raw(), offset_);
+//                offset_ += dataPage->num_values();
+                scanPage(dpage->num_values(), dpage->data(), bitmap_->raw(), offset_);
+                offset_ += dpage->num_values();
+            }
+
+            shared_ptr<Bitmap> result() {
+                return bitmap_;
+            }
         };
 
         using Int32Accessor = RawAccessor<Int32Type>;
@@ -208,7 +241,7 @@ namespace chidata {
         private:
             uint64_t columns_;
         public:
-            ParquetTable(const string &fileName);
+            ParquetTable(const string &fileName, uint64_t columns = 0);
 
             virtual ~ParquetTable();
 
@@ -216,10 +249,9 @@ namespace chidata {
 
             void updateColumns(uint64_t columns);
 
-            static shared_ptr<ParquetTable> Open(const string &filename);
+            static shared_ptr<ParquetTable> Open(const string &filename, uint64_t columns = 0);
 
         protected:
-
             shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
 
         private:
@@ -231,7 +263,7 @@ namespace chidata {
         public:
             TableView(shared_ptr<Stream<shared_ptr<Block>>>);
 
-            shared_ptr<Stream<shared_ptr<Block> > > blocks() override;
+            shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
         };
 
         class MemTable : public Table {

@@ -131,6 +131,8 @@ namespace chidata {
         virtual double ratio() override;
 
         virtual std::unique_ptr<BitmapIterator> iterator() override;
+
+        uint64_t* raw();
     };
 
     class FullBitmap : public Bitmap {

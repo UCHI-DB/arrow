@@ -6,7 +6,20 @@
 #include "filter.h"
 #include <chidata/lqf/data_model.h>
 
+using namespace std;
 using namespace chidata::lqf;
+
+class ColFilterTest : public ::testing::Test {
+protected:
+    shared_ptr<ParquetFileReader> fileReader_;
+    shared_ptr<RowGroupReader> rowGroup_;
+public:
+    virtual void SetUp() override {
+        fileReader_ = ParquetFileReader::OpenFile("lineitem");
+        rowGroup_ = fileReader_->RowGroup(0);
+        return;
+    }
+};
 
 TEST(RowFilterTest, Filter) {
     auto memTable = MemTable::Make(5);
@@ -38,6 +51,39 @@ TEST(RowFilterTest, Filter) {
 }
 
 
-TEST(ColFilterTest, Filter) {
+TEST_F(ColFilterTest, FilterOnSimpleCol) {
+    auto ptable = ParquetTable::Open("lineitem",7);
+    initializer_list<ColPredicate *> list = {
+            new SimpleColPredicate(0, [](DataField &field) { return field.asInt() % 10 == 0; })};
+    auto filter = make_shared<ColFilter>(list);
 
+    auto filtered = filter->filter(*ptable);
+    auto filteredblocks = filtered->blocks()->collect();
+
+    auto table2 = ParquetTable::Open("lineitem",7);
+    auto rawblocks = table2->blocks()->collect();
+
+    EXPECT_EQ(filteredblocks->size(), rawblocks->size());
+
+    for (uint32_t i = 0; i < rawblocks->size(); ++i) {
+        auto fb = (*filteredblocks)[i];
+        auto rb = (*rawblocks)[i];
+
+        auto bitmap = make_shared<chidata::SimpleBitmap>(rb->size());
+        auto rbrows = rb->rows();
+        for (uint32_t j = 0; j < rb->size(); ++j) {
+            if ((*rbrows)[j][0].asInt() % 10 == 0) {
+                bitmap->put(j);
+            }
+        }
+        EXPECT_EQ(fb->size(), bitmap->cardinality());
+
+        auto fbrows = fb->rows();
+        auto bite = bitmap->iterator();
+
+        for (uint32_t bidx = 0; bidx < bitmap->cardinality(); ++bidx) {
+            fbrows->next();
+            EXPECT_EQ(fbrows->pos(), bite->next());
+        }
+    }
 }
