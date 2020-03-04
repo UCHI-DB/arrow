@@ -401,6 +401,7 @@ function(ADD_BENCHMARK REL_BENCHMARK_NAME)
       EXTRA_LINK_LIBS
       STATIC_LINK_LIBS
       DEPENDENCIES
+      EXTRA_FLAGS
       PREFIX
       LABELS)
   cmake_parse_arguments(ARG
@@ -484,6 +485,10 @@ function(ADD_BENCHMARK REL_BENCHMARK_NAME)
            benchmark
            ${BENCHMARK_PATH}
            ${NO_COLOR})
+
+  if(ARG_EXTRA_FLAGS)
+    target_compile_options(${BENCHMARK_NAME} PUBLIC ${ARG_EXTRA_FLAGS})
+  endif()
   set_property(TEST ${BENCHMARK_NAME} APPEND PROPERTY LABELS ${ARG_LABELS})
 endfunction()
 
@@ -522,6 +527,7 @@ function(ADD_TEST_CASE REL_TEST_NAME)
       STATIC_LINK_LIBS
       EXTRA_LINK_LIBS
       EXTRA_INCLUDES
+      EXTRA_FLAGS
       EXTRA_DEPENDENCIES
       LABELS
       PREFIX)
@@ -589,6 +595,8 @@ function(ADD_TEST_CASE REL_TEST_NAME)
     add_dependencies(${TEST_NAME} ${ARG_EXTRA_DEPENDENCIES})
   endif()
 
+
+
   if(ARROW_TEST_MEMCHECK AND NOT ARG_NO_VALGRIND)
     set_property(TARGET ${TEST_NAME}
                  APPEND_STRING
@@ -607,6 +615,10 @@ function(ADD_TEST_CASE REL_TEST_NAME)
              ${CMAKE_BINARY_DIR}
              test
              ${TEST_PATH})
+  endif()
+
+  if(ARG_EXTRA_FLAGS)
+    target_compile_options(${TEST_NAME} PUBLIC ${ARG_EXTRA_FLAGS})
   endif()
 
   # Add test as dependency of relevant targets
