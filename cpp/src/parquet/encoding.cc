@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 #include <immintrin.h>
-#include <chidata/sboost/sboost.h>
+#include "sboost/sboost.h"
 
 #include "arrow/array.h"
 #include "arrow/builder.h"

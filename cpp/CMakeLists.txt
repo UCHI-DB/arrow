@@ -805,7 +805,7 @@ endif()
 
 add_subdirectory(src/arrow)
 
-add_subdirectory(src/chidata)
+add_subdirectory(src/sboost)
 
 if(ARROW_PARQUET)
   add_subdirectory(src/parquet)
@@ -815,6 +815,7 @@ if(ARROW_PARQUET)
   endif()
 endif()
 
+add_subdirectory(src/lqf)
 
 if(ARROW_JNI)
   add_subdirectory(src/jni)
@@ -838,3 +839,11 @@ config_summary_message()
 if(${ARROW_BUILD_CONFIG_SUMMARY_JSON})
   config_summary_json()
 endif()
+
+# Copy all test files
+file(GLOB TEST_RES_FILES "test/resources/*")
+string(TOLOWER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_LOWER)
+foreach (TEST_RES_FILE ${TEST_RES_FILES})
+  get_filename_component(TEST_RES_NAME ${TEST_RES_FILE} NAME)
+  configure_file(${TEST_RES_FILE} ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE_LOWER}/${TEST_RES_NAME} COPYONLY)
+endforeach ()
