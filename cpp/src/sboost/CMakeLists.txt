@@ -108,8 +108,10 @@ add_test_case(all-test
         sboost_static
         GTest::GTest
         GTest::Main
+        EXTRA_FLAGS
+        ${SBOOST_SIMD_FLAGS}
         )
-target_compile_options(sboost-all-test PUBLIC ${SBOOST_SIMD_FLAGS})
+#target_compile_options(sboost-all-test PUBLIC ${SBOOST_SIMD_FLAGS})
 
 add_custom_target(sboost-benchmarks)
 set(SBOOST_BENCHMARK_LINK_OPTION STATIC_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads
