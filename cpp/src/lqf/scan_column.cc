@@ -13,9 +13,38 @@
 bool predicate(int32_t value) {
     return value % 20 == 0;
 }
+void scanTable2() {
+    auto start = std::chrono::high_resolution_clock::now();
 
-int main(int argc, char **argv) {
+    std::ofstream output;
+    output.open("/home/harper/cpp_res");
+    const char *fileName = "/home/harper/tpch/lqf/5/lineitem/lineitem.parquet";
+    int displayIndex = 10;
 
+    using namespace parquet;
+    using namespace lqf;
+    auto fileReader = ParquetFileReader::OpenFile(std::string(fileName));
+    auto metadata = fileReader->metadata();
+
+    const uint32_t batchSize = 1000;
+    std::vector<int32_t> buffer(batchSize);
+
+    auto rowGroup = fileReader->RowGroup(0);
+
+    auto reader = rowGroup->Column(displayIndex);
+
+
+    output.close();
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
+
+// To get the value of duration use the count()
+// member function on the duration object
+    std::cout << duration.count() << std::endl;
+}
+
+void scanTable() {
     auto start = std::chrono::high_resolution_clock::now();
 
     std::ofstream output;
@@ -99,5 +128,8 @@ int main(int argc, char **argv) {
 // To get the value of duration use the count()
 // member function on the duration object
     std::cout << duration.count() << std::endl;
-    return 0;
+}
+
+int main(int argc, char** argv) {
+    scanTable2();
 }

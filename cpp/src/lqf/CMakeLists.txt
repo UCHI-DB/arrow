@@ -28,11 +28,15 @@ set(LQF_SRCS
 
 add_arrow_lib(lqf
         BUILD_STATIC
+        BUILD_SHARED
         SOURCES
         ${LQF_SRCS}
         OUTPUTS
         LQF_LIBRARIES
         STATIC_LINK_LIBS
+        parquet_static
+        sboost_static
+        SHARED_LINK_LIBS
         parquet_static
         sboost_static
         )
@@ -50,9 +54,9 @@ set(LQF_TEST_SRC
         sort_test.cc
         )
 
-add_test_case(lqf-test
+add_test_case(all-test
         PREFIX
-        chidata
+        lqf
         SOURCES
         ${LQF_TEST_SRC}
         STATIC_LINK_LIBS

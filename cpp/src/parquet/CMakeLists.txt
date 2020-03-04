@@ -50,9 +50,6 @@ function(ADD_PARQUET_TEST REL_TEST_NAME)
 
     set(TEST_ARGUMENTS PREFIX "parquet" LABELS "parquet-tests")
 
-    message(STATUS "Static Test " ${PARQUET_STATIC_TEST_LINK_LIBS})
-    message(STATUS "Shared Test " ${PARQUET_SHARED_TEST_LINK_LIBS})
-
     if (ARROW_TEST_LINKAGE STREQUAL "static")
         add_test_case(${REL_TEST_NAME}
                 STATIC_LINK_LIBS

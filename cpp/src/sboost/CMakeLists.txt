@@ -40,7 +40,7 @@ target_compile_options(sboost_objlib PUBLIC -pthread -fvisibility=hidden ${SBOOS
 
 add_library(sboost_static STATIC $<TARGET_OBJECTS:sboost_objlib>)
 set_target_properties(sboost_static
-        PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}" OUTPUT_NAME sboost_static)
+        PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}" OUTPUT_NAME sboost)
 install(TARGETS sboost_static
         EXPORT sboost_targets
         RUNTIME DESTINATION ${RUNTIME_INSTALL_DIR}
@@ -51,6 +51,19 @@ install(TARGETS sboost_static
 add_library(sboost_shared SHARED $<TARGET_OBJECTS:sboost_objlib>)
 set_target_properties(sboost_shared
         PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}" OUTPUT_NAME sboost)
+set_target_properties(sboost_shared
+        PROPERTIES LIBRARY_OUTPUT_DIRECTORY
+        "${BUILD_OUTPUT_ROOT_DIRECTORY}"
+        RUNTIME_OUTPUT_DIRECTORY
+        "${BUILD_OUTPUT_ROOT_DIRECTORY}"
+        OUTPUT_NAME
+        sboost
+        VERSION
+        1.0.0
+        SOVERSION
+        1.0.0
+        )
+
 install(TARGETS sboost_shared
         EXPORT sboost_targets
         RUNTIME DESTINATION ${RUNTIME_INSTALL_DIR}
