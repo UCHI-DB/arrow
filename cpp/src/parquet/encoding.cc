@@ -1584,8 +1584,16 @@ class DictDecoderImpl : public DecoderImpl, virtual public DictDecoder<Type> {
     return num_values - null_count;
   }
 
+   int DecodeRaw(uint32_t* buffer, int num_values) override {
+       num_values = std::min(num_values, num_values_);
+       if (num_values != idx_decoder_.GetBatch(buffer, num_values)) {
+           ParquetException::EofException();
+       }
+       num_values_ -= num_values;
+       return num_values;
+    }
+
   int DecodeIndices(int num_values, arrow::ArrayBuilder* builder) override {
-    num_values = std::min(num_values, num_values_);
     num_values = std::min(num_values, num_values_);
     if (num_values > 0) {
       // TODO(wesm): Refactor to batch reads for improved memory use. This is

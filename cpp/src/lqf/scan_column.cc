@@ -5,43 +5,38 @@
 #include <chrono>
 #include <cstdio>
 #include <iostream>
+#include <string>
 #include <fstream>
 #include <parquet/api/reader.h>
 #include <parquet/file_reader.h>
 #include "bitmap.h"
+#include "data_model.h"
+#include "tpch/tpch_query.h"
+#include "filter.h"
 
 bool predicate(int32_t value) {
     return value % 20 == 0;
 }
+
 void scanTable2() {
-    auto start = std::chrono::high_resolution_clock::now();
 
     std::ofstream output;
     output.open("/home/harper/cpp_res");
-    const char *fileName = "/home/harper/tpch/lqf/5/lineitem/lineitem.parquet";
-    int displayIndex = 10;
+    const char *fileName = "/local/hajiang/tpch/5/lineitem/lineitem.parquet";
 
     using namespace parquet;
     using namespace lqf;
-    auto fileReader = ParquetFileReader::OpenFile(std::string(fileName));
-    auto metadata = fileReader->metadata();
 
-    const uint32_t batchSize = 1000;
-    std::vector<int32_t> buffer(batchSize);
+    auto dateFrom = ByteArray("1998-09-01");
+    auto dictless = new lqf::sboost::ByteArrayDictLess(lqf::tpch::LineItem::SHIPDATE, dateFrom);
 
-    auto rowGroup = fileReader->RowGroup(0);
+    auto table = ParquetTable::Open(fileName, {tpch::LineItem::SHIPDATE});
+    table->blocks()->foreach([=](shared_ptr<Block> &block) {
+        auto pblock = static_pointer_cast<ParquetBlock>(block);
+        pblock->raw(lqf::tpch::LineItem::SHIPDATE, dictless);
+    });
 
-    auto reader = rowGroup->Column(displayIndex);
-
-
-    output.close();
-
-    auto stop = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
-
-// To get the value of duration use the count()
-// member function on the duration object
-    std::cout << duration.count() << std::endl;
+    delete dictless;
 }
 
 void scanTable() {
@@ -130,6 +125,6 @@ void scanTable() {
     std::cout << duration.count() << std::endl;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
     scanTable2();
 }

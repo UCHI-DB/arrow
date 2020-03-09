@@ -25,9 +25,13 @@ namespace lqf {
 
         inline double asDouble() { return *((double *) value_); }
 
+        inline ByteArray *asByteArray() { return ((ByteArray *) value_); }
+
         inline void operator=(int32_t value) { *value_ = value; }
 
         inline void operator=(double value) { *value_ = *((uint64_t *) &value); }
+
+        inline void operator=(ByteArray *value) { value_ = (uint64_t *) value; }
 
         inline void operator=(DataField &df) { *value_ = *df.value_; }
 
@@ -45,6 +49,10 @@ namespace lqf {
         virtual ~DataRow();
 
         virtual DataField &operator[](uint64_t i) = 0;
+
+        virtual DataField &operator()(uint64_t i) {
+            return (*this)[i];
+        }
 
         virtual void operator=(DataRow &row) {
 
@@ -89,6 +97,10 @@ namespace lqf {
         virtual DataField &next() = 0;
 
         virtual DataField &operator[](uint64_t idx) = 0;
+
+        virtual DataField &operator()(uint64_t idx) {
+            return (*this)[idx];
+        }
 
         virtual uint64_t pos() = 0;
     };
@@ -139,15 +151,19 @@ namespace lqf {
     class Dictionary {
     private:
         using T = typename DTYPE::c_type;
-        vector<T> buffer_;
+        T *buffer_;
+        uint32_t size_;
     public:
         Dictionary(DictionaryPage *data);
 
-        uint32_t lookup(T key);
+        virtual ~Dictionary();
+
+        uint32_t lookup(const T &key);
     };
 
     using Int32Dictionary = Dictionary<Int32Type>;
     using DoubleDictionary = Dictionary<DoubleType>;
+    using ByteArrayDictionary = Dictionary<ByteArrayType>;
 
     template<typename DTYPE>
     class RawAccessor {
@@ -158,9 +174,9 @@ namespace lqf {
 
         uint64_t offset_;
 
-        virtual void processDict(Dictionary<DTYPE> &) = 0;
+        virtual void processDict(Dictionary<DTYPE> &) {};
 
-        virtual void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) = 0;
+        virtual void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) {};
 
     public:
         RawAccessor() : offset_(0) {}
@@ -191,6 +207,7 @@ namespace lqf {
 
     using Int32Accessor = RawAccessor<Int32Type>;
     using DoubleAccessor = RawAccessor<DoubleType>;
+    using ByteArrayAccessor = RawAccessor<ByteArrayType>;
 
     class ParquetBlock : public Block {
     private:
@@ -205,11 +222,13 @@ namespace lqf {
         uint64_t size() override;
 
         template<typename DTYPE>
-        shared_ptr<Bitmap> raw(uint32_t col_index, RawAccessor<DTYPE> *);
+        shared_ptr<Bitmap> raw(uint32_t col_index, RawAccessor<DTYPE> *accessor);
 
         unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
         unique_ptr<DataRowIterator> rows() override;
+
+        unique_ptr<ParquetFileReader> fileReader_;
 
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
     };
@@ -233,45 +252,51 @@ namespace lqf {
 
     class Table {
     public:
-        virtual shared_ptr<Stream < shared_ptr<Block>>>
+        virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() = 0;
 
-        blocks() = 0;
+        /**
+         * The number of columns in the table
+         * @return
+         */
+        virtual uint32_t numFields() = 0;
     };
 
     class ParquetTable : public Table {
     private:
         uint64_t columns_;
+
+        unique_ptr<ParquetFileReader> fileReader_;
     public:
         ParquetTable(const string &fileName, uint64_t columns = 0);
 
         virtual ~ParquetTable();
 
-        virtual shared_ptr<Stream < shared_ptr<Block>>>
+        virtual shared_ptr<Stream<shared_ptr<Block>>>
 
         blocks() override;
+
+        uint32_t numFields() override;
 
         void updateColumns(uint64_t columns);
 
         static shared_ptr<ParquetTable> Open(const string &filename, uint64_t columns = 0);
 
+        static shared_ptr<ParquetTable> Open(const string &filename, std::initializer_list<uint32_t> columns);
+
     protected:
         shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
 
-    private:
-        unique_ptr<ParquetFileReader> fileReader_;
     };
 
     class TableView : public Table {
-        shared_ptr<Stream < shared_ptr<Block>>>
-        stream_;
+        uint32_t num_fields_;
+        shared_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
-        TableView(shared_ptr<Stream < shared_ptr<Block>>
+        TableView(uint32_t, shared_ptr<Stream<shared_ptr<Block>>>);
 
-        >);
+        shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        shared_ptr<Stream < shared_ptr<Block>>>
-
-        blocks() override;
+        uint32_t numFields() override;
     };
 
     class MemTable : public Table {
@@ -288,9 +313,9 @@ namespace lqf {
 
         shared_ptr<MemBlock> allocate(uint32_t num_rows);
 
-        virtual shared_ptr<Stream < shared_ptr<Block>>>
+        shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        blocks() override;
+        uint32_t numFields() override;
     };
 
 }

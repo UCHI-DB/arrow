@@ -263,6 +263,7 @@ class Decoder {
   // the number of values left in this page.
   virtual int values_left() const = 0;
   virtual Encoding::type encoding() const = 0;
+
 };
 
 template <typename DType>
@@ -279,6 +280,11 @@ class TypedDecoder : virtual public Decoder {
   /// \return The number of values decoded. Should be identical to max_values except
   /// at the end of the current data page.
   virtual int Decode(T* buffer, int max_values) = 0;
+
+  /// This is only valid for DictDecoders, we put the method here to avoid dynamic cast
+  virtual int DecodeRaw(uint32_t* buffer, int max_values) {
+    throw ParquetException("not supported");
+  }
 
   /// Skip values without decoding them if possible
   virtual int Skip(int max_values) = 0;

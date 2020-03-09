@@ -507,6 +507,8 @@ struct ByteArray {
   ByteArray() : len(0), ptr(NULLPTR) {}
   ByteArray(uint32_t len, const uint8_t* ptr) : len(len), ptr(ptr) {}
 
+  ByteArray(const char* p): len(strlen(p)),ptr((const uint8_t*)p){}
+
   ByteArray(::arrow::util::string_view view)  // NOLINT implicit conversion
       : ByteArray(static_cast<uint32_t>(view.size()),
                   reinterpret_cast<const uint8_t*>(view.data())) {}
@@ -521,6 +523,20 @@ inline bool operator==(const ByteArray& left, const ByteArray& right) {
 
 inline bool operator!=(const ByteArray& left, const ByteArray& right) {
   return !(left == right);
+}
+
+// Note this may be problematic for Unicode comparison
+inline bool operator>(const ByteArray&left, const ByteArray& right) {
+    uint32_t minlen = std::min(left.len, right.len);
+    auto compared = std::strncmp((const char*)left.ptr,(const char*)right.ptr, minlen);
+    return compared > 0 || (compared == 0 && minlen != left.len);
+}
+
+// Note this may be problematic for Unicode comparison
+inline bool operator<(const ByteArray&left, const ByteArray& right) {
+    uint32_t minlen = std::min(left.len, right.len);
+    auto compared = std::strncmp((const char*)left.ptr,(const char*)right.ptr, minlen);
+    return compared < 0 || (compared == 0 && minlen != right.len);
 }
 
 struct FixedLenByteArray {

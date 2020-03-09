@@ -133,6 +133,8 @@ class PARQUET_EXPORT ColumnReader {
   virtual int64_t ReadBatch(int64_t batch_size, int16_t* def_levels, int16_t* rep_levels,
                               void* values, int64_t* values_read) = 0;
 
+  virtual int64_t ReadBatchRaw(int64_t batch_size, uint32_t* values, int64_t* values_read) = 0;
+
   virtual const ColumnDescriptor* descr() const = 0;
 };
 

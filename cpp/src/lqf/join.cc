@@ -89,7 +89,7 @@ namespace lqf {
         right.blocks()->foreach(buildHash);
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashJoin::probe, this, _1);
-        return make_shared<TableView>(left.blocks()->map(prober));
+        return make_shared<TableView>(rowBuilder_->outputSize(), left.blocks()->map(prober));
     }
 
     void HashJoin::build(shared_ptr<Block> &rightBlock) {
@@ -132,7 +132,7 @@ namespace lqf {
         right.blocks()->foreach(buildHash);
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashFilterJoin::probe, this, _1);
-        return make_shared<TableView>(left.blocks()->map(prober));
+        return make_shared<TableView>(left.numFields(), left.blocks()->map(prober));
     }
 
     void HashFilterJoin::build(shared_ptr<Block> &rightBlock) {

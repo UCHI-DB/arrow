@@ -91,6 +91,17 @@ TEST_F(ParquetBlockTest, Column) {
     EXPECT_EQ(64, col2->next().asInt());
 }
 
+TEST_F(ParquetBlockTest,Raw) {
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    auto col = block->col(0);
+
+    EXPECT_EQ(0, (*col)(0).asInt());
+
+    auto row = block->rows();
+
+    EXPECT_EQ(0, (*row)[0](0).asInt());
+}
+
 TEST_F(ParquetBlockTest, Row) {
     auto block = make_shared<ParquetBlock>(rowGroup_, 0, 7);
     auto rows = block->rows();
@@ -171,7 +182,8 @@ public:
     uint64_t pos_ = 0;
 
     void processDict(Int32Dictionary &dict) override {
-        dict_value_ = dict_->lookup(102);
+        int a = 102;
+        dict_value_ = dict_->lookup(a);
     }
 
     void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {

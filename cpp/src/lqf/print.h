@@ -14,10 +14,9 @@
 #define PDOUBLE(x) row[x].asDouble() << ", " <<
 #define PSTRING " " <<
 
+using namespace std;
+using namespace std::placeholders;
 namespace lqf {
-
-    using namespace std;
-    using namespace std::placeholders;
 
     class Printer {
     protected:

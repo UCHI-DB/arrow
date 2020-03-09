@@ -1,0 +1,3 @@
+
+add_executable(q1_benchmark q1_benchmark.cc)
+target_link_libraries(q1_benchmark PUBLIC lqf_static)

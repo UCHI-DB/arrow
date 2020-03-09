@@ -12,16 +12,16 @@ using namespace std;
 namespace lqf {
     namespace tpch {
 
-        class Config {
-        public:
-            static const string &tablePath(const string &name) {
-                return name;
-            }
-        };
+
+        static const string tablePath(const string &name) {
+            std::ostringstream stringStream;
+            stringStream << "/local/hajiang/tpch/5/" << name << "/" << name << ".parquet";
+            return stringStream.str();
+        }
 
         class LineItem {
         public:
-            static const string &path;
+            static const string path;
             static const int ORDERKEY = 0;
             static const int PARTKEY = 1;
             static const int SUPPKEY = 2;
@@ -40,7 +40,7 @@ namespace lqf {
             static const int COMMENT = 15;
         };
 
-        const string &LineItem::path = Config::tablePath("lineitem");
+        const string LineItem::path = tablePath("lineitem");
     }
 }
 #endif //ARROW_TPCH_QUERY_H

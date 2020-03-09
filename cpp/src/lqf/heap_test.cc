@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 #include "heap.h"
 
-TEST(HeapTest, Test) {
+TEST(HeapTest, TestInt) {
     using namespace lqf;
     Heap<int32_t *> heap(10, []() { return new int(INT32_MAX); },
                          [](int32_t *a, int32_t *b) { return *a < *b; });
@@ -20,5 +20,5 @@ TEST(HeapTest, Test) {
     for (int i = 0; i < 10; i++) {
         EXPECT_EQ(i + 1, *result[i]);
     }
-
 }
+

@@ -38,9 +38,9 @@ namespace lqf {
 
     class SimpleColPredicate : public ColPredicate {
     private:
-        function<bool(DataField & )> predicate_;
+        function<bool(DataField &)> predicate_;
     public:
-        SimpleColPredicate(uint32_t, function<bool(DataField & )>);
+        SimpleColPredicate(uint32_t, function<bool(DataField &)>);
 
         ~SimpleColPredicate() {}
 
@@ -50,126 +50,111 @@ namespace lqf {
     namespace sboost {
 
         template<typename DTYPE>
-        class DictEq : public ColPredicate, public RawAccessor<DTYPE> {
+        class SboostPredicate : public ColPredicate, public RawAccessor<DTYPE> {
+        public:
+            SboostPredicate(uint32_t index) : ColPredicate(index) {}
+
+            shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
+        };
+
+        template<typename DTYPE>
+        class DictEq : public SboostPredicate<DTYPE> {
             using T = typename DTYPE::c_type;
         private:
-            T target_;
+            const T &target_;
             int rawTarget_;
         public:
-            DictEq(uint32_t index, T target) : ColPredicate(index), target_(target) {}
+            DictEq(uint32_t index, const T &target);
 
-            void processDict(Dictionary <DTYPE> &dict) override {
-                rawTarget_ = dict.lookup(target_);
-            }
+            void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
-                          uint64_t *bitmap, uint64_t bitmap_offset) override {
-                uint8_t bitWidth = data[0];
-                ::sboost::encoding::rlehybrid::equal(data + 1, bitmap, bitmap_offset, bitWidth,
-                                                     numEntry, rawTarget_);
-            }
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
         };
 
         using Int32DictEq = DictEq<Int32Type>;
         using DoubleDictEq = DictEq<DoubleType>;
+        using ByteArrayDictEq = DictEq<ByteArrayType>;
 
         template<typename DTYPE>
-        class DictLess : public ColPredicate, public RawAccessor<DTYPE> {
+        class DictLess : public SboostPredicate<DTYPE> {
             using T = typename DTYPE::c_type;
-            T target_;
+            const T &target_;
             int rawTarget_;
         public:
-            DictLess(uint32_t index, T target) : ColPredicate(index), target_(target) {}
+            DictLess(uint32_t index, const T &target);
 
-            void processDict(Int32Dictionary &dict) override {
-                rawTarget_ = dict.lookup(target_);
-            };
+            void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
-                          uint64_t *bitmap, uint64_t bitmap_offset) override {
-                uint8_t bitWidth = data[0];
-                ::sboost::encoding::rlehybrid::less(data + 1, bitmap, bitmap_offset, bitWidth,
-                                                    numEntry, rawTarget_);
-            }
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
         };
 
         using Int32DictLess = DictLess<Int32Type>;
         using DoubleDictLess = DictLess<DoubleType>;
+        using ByteArrayDictLess = DictLess<ByteArrayType>;
 
         template<typename DTYPE>
-        class DictBetween : public ColPredicate, public RawAccessor<DTYPE> {
+        class DictBetween : public SboostPredicate<DTYPE> {
             using T = typename DTYPE::c_type;
-            T lower_;
-            T upper_;
+            const T &lower_;
+            const T &upper_;
             int rawLower_;
             int rawUpper_;
         public:
-            DictBetween(uint32_t index, T lower, T upper) : ColPredicate(index), lower_(lower), upper_(upper) {}
+            DictBetween(uint32_t index, const T &lower, const T &upper);
 
-            void processDict(Int32Dictionary &dict) override {
-                rawLower_ = dict.lookup(lower_);
-                rawUpper_ = dict.lookup(upper_);
-            };
+            void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
-                          uint64_t *bitmap, uint64_t bitmap_offset) override {
-                uint8_t bitWidth = data[0];
-                ::sboost::encoding::rlehybrid::between(data + 1, bitmap, bitmap_offset, bitWidth,
-                                                       numEntry, rawLower_, rawUpper_);
-            }
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
         };
 
         using Int32DictBetween = DictBetween<Int32Type>;
         using DoubleDictBetween = DictBetween<DoubleType>;
+        using ByteArrayDictBetween = DictBetween<ByteArrayType>;
 
-        class DeltaEq : public ColPredicate, public Int32Accessor {
+        class DeltaEq : public SboostPredicate<Int32Type> {
         private:
-            int target_;
+            const int target_;
         public:
-            DeltaEq(uint32_t index, int target) : ColPredicate(index), target_(target) {}
+            DeltaEq(uint32_t index, const int target);
 
-            void processDict(Int32Dictionary &) override {}
+            void processDict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
-                          uint64_t *bitmap, uint64_t bitmap_offset) override {
-                ::sboost::encoding::deltabp::equal(data, bitmap, bitmap_offset, numEntry, target_);
-            }
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
         };
 
-        class DeltaLess : public ColPredicate, public Int32Accessor {
+        class DeltaLess : public SboostPredicate<Int32Type> {
         private:
-            int target_;
+            const int target_;
         public:
-            DeltaLess(uint32_t index, int target) : ColPredicate(index), target_(target) {}
+            DeltaLess(uint32_t index, const int target);
 
-            void processDict(Int32Dictionary &) override {}
+            void processDict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
-                          uint64_t *bitmap, uint64_t bitmap_offset) override {
-                ::sboost::encoding::deltabp::less(data, bitmap, bitmap_offset, numEntry, target_);
-            }
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
         };
 
-        class DeltaBetween : public ColPredicate, public Int32Accessor {
+        class DeltaBetween : public SboostPredicate<Int32Type> {
         private:
-            int lower_;
-            int upper_;
+            const int lower_;
+            const int upper_;
         public:
-            DeltaBetween(uint32_t index, int lower, int upper)
-                    : ColPredicate(index), lower_(lower), upper_(upper) {}
+            DeltaBetween(uint32_t index, const int lower, const int upper);
 
-            void processDict(Int32Dictionary &) override {}
+            void processDict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
-                          uint64_t *bitmap, uint64_t bitmap_offset) override {
-                ::sboost::encoding::deltabp::between(data, bitmap, bitmap_offset, numEntry, lower_, upper_);
-            }
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
         };
     }
 
     class ColFilter : public Filter {
     protected:
-        vector <unique_ptr<ColPredicate>> predicates_;
+        vector<unique_ptr<ColPredicate>> predicates_;
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
 
@@ -181,12 +166,12 @@ namespace lqf {
 
     class RowFilter : public Filter {
     private:
-        function<bool(DataRow & )> predicate_;
+        function<bool(DataRow &)> predicate_;
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
 
     public:
-        RowFilter(function<bool(DataRow & )> pred);
+        RowFilter(function<bool(DataRow &)> pred);
 
         virtual ~RowFilter() {}
     };

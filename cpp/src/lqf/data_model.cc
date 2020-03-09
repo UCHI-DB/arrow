@@ -2,6 +2,7 @@
 // Created by harper on 2/9/20.
 //
 
+#include <iostream>
 #include <exception>
 #include <arrow/util/bit_stream_utils.h>
 #include <parquet/encoding.h>
@@ -245,17 +246,23 @@ namespace lqf {
     using namespace parquet;
 
     template<typename DTYPE>
-    Dictionary<DTYPE>::Dictionary(DictionaryPage *dpage):buffer_() {
+    Dictionary<DTYPE>::Dictionary(DictionaryPage *dpage) {
         auto decoder = parquet::MakeTypedDecoder<DTYPE>(Encoding::PLAIN, nullptr);
         decoder->SetData(dpage->num_values(), dpage->data(), dpage->size());
-        buffer_.resize(dpage->num_values());
-        decoder->Decode(buffer_.data(), buffer_.size());
+        size_ = dpage->num_values();
+        buffer_ = (T *) malloc(sizeof(T *) * size_);
+        decoder->Decode(buffer_, size_);
     }
 
     template<typename DTYPE>
-    uint32_t Dictionary<DTYPE>::lookup(T key) {
+    Dictionary<DTYPE>::~Dictionary() {
+        free(buffer_);
+    }
+
+    template<typename DTYPE>
+    uint32_t Dictionary<DTYPE>::lookup(const T &key) {
         uint32_t low = 0;
-        uint32_t high = buffer_.size();
+        uint32_t high = size_;
 
         while (low <= high) {
             uint32_t mid = (low + high) >> 1;
@@ -297,6 +304,11 @@ namespace lqf {
             return (*(columns_[colindex]))[index_];
         }
 
+        virtual DataField &operator()(uint64_t colindex) override {
+            validate_true(colindex < columns_.size(), "column not available");
+            return (*(columns_[colindex]))(index_);
+        }
+
         void setIndex(uint64_t index) {
             this->index_ = index;
         }
@@ -306,15 +318,23 @@ namespace lqf {
     shared_ptr<Bitmap> ParquetBlock::raw(uint32_t col_index, RawAccessor<DTYPE> *accessor) {
         accessor->init(this->size());
         auto pageReader = rowGroup_->GetColumnPageReader(col_index);
-        shared_ptr<Dictionary<DTYPE>>
-                dict = nullptr;
-        shared_ptr<Page> page = nullptr;
+        shared_ptr<Dictionary<DTYPE>> dict = nullptr;
+        shared_ptr<Page> page = pageReader->NextPage();
+
+        std::cout << "Row Group Size:" << rowGroup_->metadata()->num_rows() <<std::endl;
+        uint32_t counter = 0;
+
+        if (page->type() == PageType::DICTIONARY_PAGE) {
+            accessor->dict((DictionaryPage *) page.get());
+        } else {
+            accessor->data((DataPage *) page.get());
+            counter += static_pointer_cast<DataPage>(page)->num_values();
+            std::cout << "Values Read: "<< counter << std::endl;
+        }
         while ((page = pageReader->NextPage())) {
-            if (page->type() == PageType::DICTIONARY_PAGE) {
-                accessor->dict((DictionaryPage *) page.get());
-            } else {
-                accessor->data((DataPage *) page.get());
-            }
+            accessor->data((DataPage *) page.get());
+            counter += static_pointer_cast<DataPage>(page)->num_values();
+            std::cout << "Values Read: "<< counter << std::endl;
         }
         return accessor->result();
     }
@@ -360,21 +380,29 @@ namespace lqf {
     class ParquetColumnIterator : public ColumnIterator {
     private:
         shared_ptr<ColumnReader> columnReader_;
-        uint64_t buffer_;
         DataField dataField_;
         int64_t read_counter_;
         uint64_t pos_;
     public:
-        ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader), buffer_(),
+        ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader),
                                                                     dataField_(), read_counter_(0), pos_(-1) {
-            dataField_ = &buffer_;
+            dataField_ = (uint64_t*)malloc(sizeof(ByteArray));
         }
 
-        virtual ~ParquetColumnIterator() {}
+        virtual ~ParquetColumnIterator() {
+            free(dataField_.data());
+        }
 
         virtual DataField &operator[](uint64_t idx) override {
             columnReader_->MoveTo(idx);
             columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
+            pos_ = idx;
+            return dataField_;
+        }
+
+        virtual DataField &operator()(uint64_t idx) override {
+            columnReader_->MoveTo(idx);
+            columnReader_->ReadBatchRaw(1, (uint32_t *) dataField_.data(), &read_counter_);
             pos_ = idx;
             return dataField_;
         }
@@ -400,6 +428,9 @@ namespace lqf {
 
     ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : columns_(columns) {
         fileReader_ = ParquetFileReader::OpenFile(fileName);
+        if (!fileReader_) {
+            throw std::invalid_argument("ParquetTable-Open: file not found");
+        }
     }
 
     void ParquetTable::updateColumns(uint64_t columns) {
@@ -408,6 +439,14 @@ namespace lqf {
 
     shared_ptr<ParquetTable> ParquetTable::Open(const string &filename, uint64_t columns) {
         return make_shared<ParquetTable>(filename, columns);
+    }
+
+    shared_ptr<ParquetTable> ParquetTable::Open(const string &filename, std::initializer_list<uint32_t> columns) {
+        uint64_t ccs = 0;
+        for (uint32_t c:columns) {
+            ccs |= 1ul << c;
+        }
+        return Open(filename, ccs);
     }
 
     ParquetTable::~ParquetTable() {
@@ -423,15 +462,24 @@ namespace lqf {
         return stream;
     }
 
+    uint32_t ParquetTable::numFields() {
+        return __builtin_popcount(columns_);
+    }
+
     shared_ptr<ParquetBlock> ParquetTable::createParquetBlock(const int &block_idx) {
         auto rowGroup = fileReader_->RowGroup(block_idx);
         return make_shared<ParquetBlock>(rowGroup, block_idx, columns_);
     }
 
-    TableView::TableView(shared_ptr<Stream<shared_ptr<Block>>> stream) : stream_(stream) {}
+    TableView::TableView(uint32_t num_fields, shared_ptr<Stream<shared_ptr<Block>>> stream)
+            : num_fields_(num_fields), stream_(stream) {}
 
     shared_ptr<Stream<shared_ptr<Block>>> TableView::blocks() {
         return stream_;
+    }
+
+    uint32_t TableView::numFields() {
+        return num_fields_;
     }
 
     shared_ptr<MemTable> MemTable::Make(uint8_t num_fields) {
@@ -446,16 +494,45 @@ namespace lqf {
 
     }
 
+    uint32_t MemTable::numFields() {
+        return num_fields_;
+    }
+
     shared_ptr<MemBlock> MemTable::allocate(uint32_t num_rows) {
         shared_ptr<MemBlock> block = make_shared<MemBlock>(num_rows, num_fields_);
         blocks_.push_back(block);
         return block;
     }
 
-    shared_ptr<Stream<shared_ptr<Block>>>
-
-    MemTable::blocks() {
+    shared_ptr<Stream<shared_ptr<Block>>> MemTable::blocks() {
         return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_));
     }
 
+/**
+ * Initialize the templates
+ */
+    template
+    class Dictionary<Int32Type>;
+
+    template
+    class Dictionary<DoubleType>;
+
+    template
+    class Dictionary<ByteArrayType>;
+
+    template
+    class RawAccessor<Int32Type>;
+
+    template
+    class RawAccessor<DoubleType>;
+
+    template
+    class RawAccessor<ByteArrayType>;
+
+    template shared_ptr<Bitmap> ParquetBlock::raw<Int32Type>(uint32_t col_index, RawAccessor<Int32Type> *accessor);
+
+    template shared_ptr<Bitmap> ParquetBlock::raw<DoubleType>(uint32_t col_index, RawAccessor<DoubleType> *accessor);
+
+    template shared_ptr<Bitmap>
+    ParquetBlock::raw<ByteArrayType>(uint32_t col_index, RawAccessor<ByteArrayType> *accessor);
 }

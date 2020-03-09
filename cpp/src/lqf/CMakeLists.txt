@@ -17,10 +17,10 @@
 
 
 set(LQF_SRCS
+        agg.cc
         bitmap.cc
         data_model.cc
         filter.cc
-        agg.cc
         join.cc
         print.cc
         sort.cc
@@ -70,3 +70,5 @@ arrow_install_all_headers(lqf)
 
 add_executable(scan_column scan_column.cc)
 target_link_libraries(scan_column lqf_static)
+
+add_subdirectory(tpch)

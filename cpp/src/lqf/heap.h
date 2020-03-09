@@ -21,7 +21,7 @@ namespace lqf {
         function<ELEM_PNT()> creator_;
         function<bool(ELEM_PNT, ELEM_PNT)> comparator_;
     public:
-        Heap(uint32_t size, function<ELEM_PNT()> creator, function<int32_t(ELEM_PNT, ELEM_PNT)> comp)
+        Heap(uint32_t size, function<ELEM_PNT()> creator, function<bool(ELEM_PNT, ELEM_PNT)> comp)
                 : size_(size), data_(), creator_(creator), comparator_(comp) {
         }
 

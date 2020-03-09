@@ -387,7 +387,7 @@ class ColumnReaderImplBase {
 
   virtual ~ColumnReaderImplBase() = default;
 
- protected:
+protected:
   // Read up to batch_size values from the current data page into the
   // pre-allocated memory T*
   //
@@ -395,6 +395,10 @@ class ColumnReaderImplBase {
   int64_t ReadValues(int64_t batch_size, T* out) {
     int64_t num_decoded = current_decoder_->Decode(out, static_cast<int>(batch_size));
     return num_decoded;
+  }
+
+  int64_t ReadRawValues(int64_t batch_size, uint32_t* out) {
+      return current_decoder_->DecodeRaw(out, batch_size);
   }
 
   // Read up to batch_size values from the current data page into the
@@ -668,6 +672,9 @@ class TypedColumnReaderImpl : public TypedColumnReader<DType>,
   int64_t ReadBatch(int64_t batch_size, int16_t* def_levels, int16_t* rep_levels,
                     T* values, int64_t* values_read) override;
 
+  int64_t ReadBatchRaw(int64_t batch_size, uint32_t* values, int64_t* values_read) override;
+
+
   int64_t ReadBatchSpaced(int64_t batch_size, int16_t* def_levels, int16_t* rep_levels,
                           T* values, uint8_t* valid_bits, int64_t valid_bits_offset,
                           int64_t* levels_read, int64_t* values_read,
@@ -730,6 +737,29 @@ int64_t TypedColumnReaderImpl<DType>::ReadBatch(int64_t batch_size, int16_t* def
   this->ConsumeBufferedValues(total_values);
 
   return total_values;
+}
+
+template <typename DType>
+int64_t TypedColumnReaderImpl<DType>::ReadBatchRaw(int64_t batch_size, uint32_t* values, int64_t* values_read) {
+    // HasNext invokes ReadNewPage
+    if (!HasNext()) {
+        *values_read = 0;
+        return 0;
+    }
+
+    // TODO(wesm): keep reading data pages until batch_size is reached, or the
+    // row group is finished
+    batch_size =
+            std::min(batch_size, this->num_buffered_values_ - this->num_decoded_values_);
+
+    int64_t values_to_read = 0;
+
+    values_to_read = batch_size;
+
+    *values_read = this->ReadRawValues(values_to_read, values);
+    this->ConsumeBufferedValues(*values_read);
+
+    return *values_read;
 }
 
 template <typename DType>
@@ -862,37 +892,6 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
 
   return num_rows_to_skip - rows_to_skip;
 
-  /*
-  while (HasNext() && rows_to_skip > 0) {
-    // If the number of rows to skip is more than the number of undecoded values, skip the
-    // Page.
-    if (rows_to_skip > (this->num_buffered_values_ - this->num_decoded_values_)) {
-      rows_to_skip -= this->num_buffered_values_ - this->num_decoded_values_;
-      this->num_decoded_values_ = this->num_buffered_values_;
-    } else {
-      // We need to read this Page
-      // Jump to the right offset in the Page
-      int64_t batch_size = 1024;  // ReadBatch with a smaller memory footprint
-      int64_t values_read = 0;
-
-      // This will be enough scratch space to accommodate 16-bit levels or any
-      // value type
-      std::shared_ptr<ResizableBuffer> scratch = AllocateBuffer(
-          this->pool_, batch_size * type_traits<DType::type_num>::value_byte_size);
-
-      do {
-        batch_size = std::min(batch_size, rows_to_skip);
-        values_read =
-            ReadBatch(static_cast<int>(batch_size),
-                      reinterpret_cast<int16_t*>(scratch->mutable_data()),
-                      reinterpret_cast<int16_t*>(scratch->mutable_data()),
-                      reinterpret_cast<T*>(scratch->mutable_data()), &values_read);
-        rows_to_skip -= values_read;
-      } while (values_read > 0 && rows_to_skip > 0);
-    }
-  }
-  return num_rows_to_skip - rows_to_skip;
-   */
 }
 
 template <typename DType>

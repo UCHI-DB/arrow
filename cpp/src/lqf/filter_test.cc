@@ -88,3 +88,7 @@ TEST_F(ColFilterTest, FilterOnSimpleCol) {
         }
     }
 }
+
+TEST_F(ColFilterTest, FilterSboost) {
+
+}
