@@ -246,10 +246,11 @@ namespace lqf {
     using namespace parquet;
 
     template<typename DTYPE>
-    Dictionary<DTYPE>::Dictionary(DictionaryPage *dpage) {
+    Dictionary<DTYPE>::Dictionary(shared_ptr<DictionaryPage> dpage) {
+        this->page_ = dpage;
         auto decoder = parquet::MakeTypedDecoder<DTYPE>(Encoding::PLAIN, nullptr);
-        decoder->SetData(dpage->num_values(), dpage->data(), dpage->size());
         size_ = dpage->num_values();
+        decoder->SetData(size_, dpage->data(), dpage->size());
         buffer_ = (T *) malloc(sizeof(T) * size_);
         decoder->Decode(buffer_, size_);
     }
@@ -300,12 +301,12 @@ namespace lqf {
         ParquetRowView(vector<unique_ptr<ColumnIterator>> &cols) : columns_(cols), index_(-1) {}
 
         virtual DataField &operator[](uint64_t colindex) override {
-            validate_true(colindex < columns_.size(), "column not available");
+            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
             return (*(columns_[colindex]))[index_];
         }
 
         virtual DataField &operator()(uint64_t colindex) override {
-            validate_true(colindex < columns_.size(), "column not available");
+            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
             return (*(columns_[colindex]))(index_);
         }
 
@@ -318,11 +319,10 @@ namespace lqf {
     shared_ptr<Bitmap> ParquetBlock::raw(uint32_t col_index, RawAccessor<DTYPE> *accessor) {
         accessor->init(this->size());
         auto pageReader = rowGroup_->GetColumnPageReader(col_index);
-        shared_ptr<Dictionary<DTYPE>> dict = nullptr;
         shared_ptr<Page> page = pageReader->NextPage();
 
         if (page->type() == PageType::DICTIONARY_PAGE) {
-            accessor->dict((DictionaryPage *) page.get());
+            accessor->dict(static_pointer_cast<DictionaryPage>(page));
         } else {
             accessor->data((DataPage *) page.get());
         }
@@ -340,10 +340,11 @@ namespace lqf {
         ParquetRowView view_;
     public:
         ParquetRowIterator(ParquetBlock &block, uint64_t colindices)
-                : columns_(), view_(columns_) {
+                : columns_(64 - __builtin_clzl(colindices)), view_(columns_) {
             Bitset bitset(colindices);
             while (bitset.hasNext()) {
-                columns_.push_back(block.col(bitset.next()));
+                auto index = bitset.next();
+                columns_[index] = (block.col(index));
             }
         }
 
@@ -379,7 +380,7 @@ namespace lqf {
     public:
         ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader),
                                                                     dataField_(), read_counter_(0), pos_(-1) {
-            dataField_ = (uint64_t*)malloc(sizeof(ByteArray));
+            dataField_ = (uint64_t *) malloc(sizeof(ByteArray));
         }
 
         virtual ~ParquetColumnIterator() {
@@ -387,16 +388,20 @@ namespace lqf {
         }
 
         virtual DataField &operator[](uint64_t idx) override {
-            columnReader_->MoveTo(idx);
-            columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
-            pos_ = idx;
+            if (__builtin_expect(pos_ != idx, 1)) {
+                columnReader_->MoveTo(idx);
+                columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
+                pos_ = idx;
+            }
             return dataField_;
         }
 
         virtual DataField &operator()(uint64_t idx) override {
-            columnReader_->MoveTo(idx);
-            columnReader_->ReadBatchRaw(1, (uint32_t *) dataField_.data(), &read_counter_);
-            pos_ = idx;
+            if (__builtin_expect(pos_ != idx, 1)) {
+                columnReader_->MoveTo(idx);
+                columnReader_->ReadBatchRaw(1, (uint32_t *) dataField_.data(), &read_counter_);
+                pos_ = idx;
+            }
             return dataField_;
         }
 

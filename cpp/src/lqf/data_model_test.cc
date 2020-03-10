@@ -146,21 +146,34 @@ TEST_F(ParquetBlockTest, Raw) {
 }
 
 TEST_F(ParquetBlockTest, Row) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 7);
+    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 0x17);
     auto rows = block->rows();
 
+    // Test reading and repeatable read
     EXPECT_EQ(1, (*rows)[2][0].asInt());
+    EXPECT_EQ(1, (*rows)[2][0].asInt());
+    EXPECT_EQ(25, (*rows)[4][1].asInt());
     EXPECT_EQ(25, (*rows)[4][1].asInt());
 
     auto rows2 = block->rows();
     DataRow &row = rows2->next();
     EXPECT_EQ(1, row[0].asInt());
+    EXPECT_EQ(1, row[0].asInt());
     EXPECT_EQ(156, row[1].asInt());
+    EXPECT_EQ(156, row[1].asInt());
+    EXPECT_EQ(4, row[2].asInt());
     EXPECT_EQ(4, row[2].asInt());
     row = rows2->next();
     EXPECT_EQ(1, row[0].asInt());
     EXPECT_EQ(68, row[1].asInt());
     EXPECT_EQ(9, row[2].asInt());
+
+    try {
+        row[3].asInt();
+        FAIL() << "Should not reach here";
+    } catch (const std::invalid_argument& ia) {
+
+    }
 }
 
 TEST_F(ParquetBlockTest, Mask) {

@@ -151,10 +151,12 @@ namespace lqf {
     class Dictionary {
     private:
         using T = typename DTYPE::c_type;
+        // This page need to be cached. Otherwise when it is released, byte array data may be lost.
+        shared_ptr<DictionaryPage> page_;
         T *buffer_;
         uint32_t size_;
     public:
-        Dictionary(DictionaryPage *data);
+        Dictionary(shared_ptr<DictionaryPage> data);
 
         virtual ~Dictionary();
 
@@ -183,7 +185,7 @@ namespace lqf {
         virtual void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) {};
 
     public:
-        RawAccessor(): offset_(0) {}
+        RawAccessor() : offset_(0) {}
 
         virtual ~RawAccessor() {}
 
@@ -191,7 +193,7 @@ namespace lqf {
             bitmap_ = make_shared<SimpleBitmap>(size);
         }
 
-        inline void dict(parquet::DictionaryPage *dictPage) {
+        inline void dict(shared_ptr<DictionaryPage> dictPage) {
             dict_ = unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictPage));
             processDict(*dict_);
         }
