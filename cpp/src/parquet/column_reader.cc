@@ -897,9 +897,6 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
 template <typename DType>
 int64_t TypedColumnReaderImpl<DType>::MoveTo(int64_t move_to_pos) {
     int64_t current_pos = this->num_read_values_;
-    if(move_to_pos < current_pos) {
-      return 0;
-    }
     lqf::validate_true(move_to_pos >= current_pos, "MoveTo cannot move backward");
     return Skip(move_to_pos - current_pos);
 }

@@ -190,7 +190,17 @@ else()
     # https://docs.microsoft.com/en-us/cpp/build/reference/compiler-option-warning-level
     # TODO: Enable /Wall and disable individual warnings until build compiles without errors
     # /wdnnnn disables a warning where "nnnn" is a warning number
-    string(REPLACE "/W3" "" CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}")
+    string(REPLACE "/W3" "" CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}"
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++98-compat")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++98-compat-pedantic")
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wpedantic")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wextra")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter")
+  else()
+    message(FATAL_ERROR "${UNKNOWN_COMPILER_MESSAGE}")
+  endif())
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} /W3")
   elseif(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"
          OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
@@ -382,12 +392,12 @@ if(NOT MSVC)
     set(ARROW_DEBUG_SYMBOL_TYPE "gdb")
     set(C_FLAGS_DEBUG "-g${ARROW_DEBUG_SYMBOL_TYPE} -O0")
     set(C_FLAGS_FASTDEBUG "-g${ARROW_DEBUG_SYMBOL_TYPE} -O1")
-    set(CXX_FLAGS_DEBUG "-g${ARROW_DEBUG_SYMBOL_TYPE} -O0")
+    set(CXX_FLAGS_DEBUG "-g${ARROW_DEBUG_SYMBOL_TYPE} -O0 -fno-omit-frame-pointer")
     set(CXX_FLAGS_FASTDEBUG "-g${ARROW_DEBUG_SYMBOL_TYPE} -O1")
   else()
     set(C_FLAGS_DEBUG "-g -O0")
     set(C_FLAGS_FASTDEBUG "-g -O1")
-    set(CXX_FLAGS_DEBUG "-g -O0")
+    set(CXX_FLAGS_DEBUG "-g -O0 -fno-omit-frame-pointer")
     set(CXX_FLAGS_FASTDEBUG "-g -O1")
   endif()
 

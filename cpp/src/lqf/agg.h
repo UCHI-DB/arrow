@@ -26,8 +26,13 @@ namespace lqf {
 
     namespace agg {
 
-        struct AsDouble { static double get(DataField& df) {return df.asDouble();} };
-        struct AsInt {static int32_t get(DataField& df) {return df.asInt();}};
+        struct AsDouble {
+            static double get(DataField &df) { return df.asDouble(); }
+        };
+
+        struct AsInt {
+            static int32_t get(DataField &df) { return df.asInt(); }
+        };
 
         template<typename T, typename ACC>
         class Sum : public AggField {
@@ -119,16 +124,17 @@ namespace lqf {
         shared_ptr<CORE> processBlock(const shared_ptr<Block> &block) {
             auto rows = block->rows();
             auto core = coreMaker_();
-            for (uint32_t i = 0; i < block->size(); ++i) {
+            uint64_t blockSize = block->size();
+            for (uint32_t i = 0; i < blockSize; ++i) {
                 core->consume(rows->next());
             }
             return core;
         }
 
     public:
-        Agg(function<shared_ptr<CORE>()> coreMaker):coreMaker_(coreMaker){}
+        Agg(function<shared_ptr<CORE>()> coreMaker) : coreMaker_(coreMaker) {}
 
-        shared_ptr<Table> agg(Table &input)  {
+        shared_ptr<Table> agg(Table &input) {
             function<shared_ptr<CORE>(
                     const shared_ptr<Block> &)> mapper = bind(&Agg::processBlock, this, _1);
 
@@ -151,11 +157,11 @@ namespace lqf {
     private:
         uint32_t numFields_;
         unordered_map<uint64_t, unique_ptr<AggReducer>> container_;
-        function<uint64_t(DataRow &)> hasher_;
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
+        function<uint64_t(DataRow & )> hasher_;
+        function<unique_ptr<AggReducer>(DataRow & )> headerInit_;
     public:
-        HashCore(uint32_t numFields, function<uint64_t(DataRow &)> hasher,
-                 function<unique_ptr<AggReducer>(DataRow &)> headerInit);
+        HashCore(uint32_t numFields, function<uint64_t(DataRow & )> hasher,
+                 function<unique_ptr<AggReducer>(DataRow & )> headerInit);
 
         virtual ~HashCore();
 
@@ -176,11 +182,11 @@ namespace lqf {
     private:
         uint32_t numFields_;
         vector<unique_ptr<AggReducer>> container_;
-        function<uint32_t(DataRow &)> indexer_;
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
+        function<uint32_t(DataRow & )> indexer_;
+        function<unique_ptr<AggReducer>(DataRow & )> headerInit_;
     public:
-        TableCore(uint32_t numFields, uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
-                  function<unique_ptr<AggReducer>(DataRow &)> headerInit);
+        TableCore(uint32_t numFields, uint32_t tableSize, function<uint32_t(DataRow & )> indexer,
+                  function<unique_ptr<AggReducer>(DataRow & )> headerInit);
 
         virtual ~TableCore();
 
@@ -201,10 +207,10 @@ namespace lqf {
     class SimpleCore {
     private:
         uint32_t numFields_;
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
+        function<unique_ptr<AggReducer>(DataRow & )> headerInit_;
         unique_ptr<AggReducer> reducer_;
     public:
-        SimpleCore(uint32_t numFields, function<unique_ptr<AggReducer>(DataRow &)> headerInit);
+        SimpleCore(uint32_t numFields, function<unique_ptr<AggReducer>(DataRow & )> headerInit);
 
         uint32_t size();
 
