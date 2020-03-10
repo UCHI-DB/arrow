@@ -32,6 +32,11 @@ void scanTable2() {
 
     auto table = ParquetTable::Open(fileName, {tpch::LineItem::SHIPDATE});
     table->blocks()->foreach([=](shared_ptr<Block> &block) {
+//        auto col = block->col(lqf::tpch::LineItem::SHIPDATE);
+//        for(uint i = 0 ; i < block->size();++i) {
+//            std::cout << (*col)(i).asInt() << std::endl;
+//        }
+
         auto pblock = static_pointer_cast<ParquetBlock>(block);
         pblock->raw(lqf::tpch::LineItem::SHIPDATE, dictless);
     });

@@ -91,15 +91,58 @@ TEST_F(ParquetBlockTest, Column) {
     EXPECT_EQ(64, col2->next().asInt());
 }
 
-TEST_F(ParquetBlockTest,Raw) {
+class IntDictScanner : public Int32Accessor {
+public:
+    void processDict(Dictionary<PhysicalType<parquet::Type::INT32> > &) override {
+        // Do nothing just maintain a dict
+    }
+
+    void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {
+        // Do nothing just access the page
+    }
+
+    Int32Dictionary *accessDict() {
+        return this->dict_.get();
+    }
+};
+
+class StringDictScanner : public ByteArrayAccessor {
+public:
+    void processDict(Dictionary<ByteArrayType> &) override {
+        // Do nothing just maintain a dict
+    }
+
+    void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {
+        // Do nothing just access the page
+    }
+
+    ByteArrayDictionary *accessDict() {
+        return this->dict_.get();
+    }
+};
+
+
+TEST_F(ParquetBlockTest, Raw) {
     auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
-    auto col = block->col(0);
+    auto scanner = new IntDictScanner();
+    block->raw(1, scanner);
+    auto dict = scanner->accessDict();
+    EXPECT_EQ(200, dict->size());
 
-    EXPECT_EQ(0, (*col)(0).asInt());
+    EXPECT_EQ(-202, dict->lookup(375));
+    EXPECT_EQ(102, dict->lookup(103));
+    EXPECT_EQ(-202, dict->lookup(514));
+    EXPECT_EQ(18, dict->lookup(19));
 
-    auto row = block->rows();
+    delete scanner;
 
-    EXPECT_EQ(0, (*row)[0](0).asInt());
+    auto scanner2 = new StringDictScanner();
+    block->raw(10, scanner2);
+    auto dict2 = scanner2->accessDict();
+
+    EXPECT_EQ(2266, dict2->size());
+    EXPECT_EQ(675, dict2->lookup(ByteArray("1994-02-01")));
+    delete scanner2;
 }
 
 TEST_F(ParquetBlockTest, Row) {

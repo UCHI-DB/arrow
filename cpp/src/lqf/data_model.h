@@ -158,7 +158,11 @@ namespace lqf {
 
         virtual ~Dictionary();
 
-        uint32_t lookup(const T &key);
+        int32_t lookup(const T &key);
+
+        inline uint32_t size() {
+            return size_;
+        }
     };
 
     using Int32Dictionary = Dictionary<Int32Type>;
@@ -179,28 +183,26 @@ namespace lqf {
         virtual void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) {};
 
     public:
-        RawAccessor() : offset_(0) {}
+        RawAccessor(): offset_(0) {}
 
         virtual ~RawAccessor() {}
 
-        void init(uint64_t size) {
+        inline void init(uint64_t size) {
             bitmap_ = make_shared<SimpleBitmap>(size);
         }
 
-        void dict(parquet::DictionaryPage *dictPage) {
+        inline void dict(parquet::DictionaryPage *dictPage) {
             dict_ = unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictPage));
             processDict(*dict_);
         }
 
-        void data(DataPage *dpage) {
+        inline void data(DataPage *dpage) {
             // Assume all fields are mandatory, which is true for TPCH
-//                scanPage(dataPage->num_values(), dataPage->data(), bitmap_->raw(), offset_);
-//                offset_ += dataPage->num_values();
             scanPage(dpage->num_values(), dpage->data(), bitmap_->raw(), offset_);
             offset_ += dpage->num_values();
         }
 
-        shared_ptr<Bitmap> result() {
+        inline shared_ptr<Bitmap> result() {
             return bitmap_;
         }
     };

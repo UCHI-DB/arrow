@@ -250,7 +250,7 @@ namespace lqf {
         auto decoder = parquet::MakeTypedDecoder<DTYPE>(Encoding::PLAIN, nullptr);
         decoder->SetData(dpage->num_values(), dpage->data(), dpage->size());
         size_ = dpage->num_values();
-        buffer_ = (T *) malloc(sizeof(T *) * size_);
+        buffer_ = (T *) malloc(sizeof(T) * size_);
         decoder->Decode(buffer_, size_);
     }
 
@@ -260,7 +260,7 @@ namespace lqf {
     }
 
     template<typename DTYPE>
-    uint32_t Dictionary<DTYPE>::lookup(const T &key) {
+    int32_t Dictionary<DTYPE>::lookup(const T &key) {
         uint32_t low = 0;
         uint32_t high = size_;
 
@@ -321,20 +321,13 @@ namespace lqf {
         shared_ptr<Dictionary<DTYPE>> dict = nullptr;
         shared_ptr<Page> page = pageReader->NextPage();
 
-        std::cout << "Row Group Size:" << rowGroup_->metadata()->num_rows() <<std::endl;
-        uint32_t counter = 0;
-
         if (page->type() == PageType::DICTIONARY_PAGE) {
             accessor->dict((DictionaryPage *) page.get());
         } else {
             accessor->data((DataPage *) page.get());
-            counter += static_pointer_cast<DataPage>(page)->num_values();
-            std::cout << "Values Read: "<< counter << std::endl;
         }
         while ((page = pageReader->NextPage())) {
             accessor->data((DataPage *) page.get());
-            counter += static_pointer_cast<DataPage>(page)->num_values();
-            std::cout << "Values Read: "<< counter << std::endl;
         }
         return accessor->result();
     }
