@@ -6,6 +6,7 @@
 #define CHIDATA_LQF_DATA_MODEL_H
 
 #include <cstdint>
+#include <iostream>
 #include <arrow/util/bit_stream_utils.h>
 #include <parquet/file_reader.h>
 #include <parquet/column_page.h>
@@ -191,6 +192,7 @@ namespace lqf {
 
         inline void init(uint64_t size) {
             bitmap_ = make_shared<SimpleBitmap>(size);
+            offset_ = 0;
         }
 
         inline void dict(shared_ptr<DictionaryPage> dictPage) {

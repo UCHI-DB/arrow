@@ -364,7 +364,7 @@ inline int BitReader::GetBatch(int num_bits, T* v, int batch_size) {
 
 inline int BitReader::Skip(int num_bits, int batch_size) {
     // TODO: revisit this limit if necessary
-            DCHECK_LE(num_bits, 32);
+    DCHECK_LE(num_bits, 32);
 
     int bit_offset = bit_offset_;
     int byte_offset = byte_offset_;
@@ -372,7 +372,7 @@ inline int BitReader::Skip(int num_bits, int batch_size) {
     int max_bytes = max_bytes_;
 
     uint64_t needed_bits = num_bits * batch_size;
-    uint64_t remaining_bits = (max_bytes - byte_offset) * 8 - (64-bit_offset);
+    uint64_t remaining_bits = (max_bytes - byte_offset) * 8 - bit_offset;
     if (remaining_bits < needed_bits) {
         batch_size = static_cast<int>(remaining_bits) / num_bits;
     }

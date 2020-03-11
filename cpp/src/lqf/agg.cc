@@ -199,14 +199,21 @@ namespace lqf {
 
     void TableCore::reduce(TableCore &another) {
         for (uint32_t i = 0; i < container_.size(); ++i) {
-            container_[i]->merge(*(another.container_[i]));
+            if(container_[i]) {
+                container_[i]->merge(*(another.container_[i]));
+            } else {
+                container_[i] = move(another.container_[i]);
+            }
         }
     }
 
     void TableCore::dump(MemBlock &block) {
         auto rows = block.rows();
+        uint32_t counter = 0;
         for (uint32_t i = 0; i < container_.size(); ++i) {
-            container_[i]->dump((*rows)[i]);
+            if(container_[i]) {
+                container_[i]->dump((*rows)[counter++]);
+            }
         }
     }
 
