@@ -2,6 +2,7 @@
 // Created by harper on 3/3/20.
 //
 #include <iostream>
+#include <chrono>
 #include <parquet/types.h>
 #include <lqf/data_model.h>
 #include <lqf/filter.h>
@@ -89,5 +90,12 @@ namespace lqf {
 
 //
 int main(int argc, char **argv) {
+    using namespace std;
+    using namespace std::chrono;
+    auto start = high_resolution_clock::now();
     lqf::tpch::executeQ1();
+    auto stop = high_resolution_clock::now();
+    auto duration = duration_cast<microseconds>(stop - start);
+
+    cout << duration.count() << endl;
 }
