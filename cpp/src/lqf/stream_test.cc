@@ -11,14 +11,11 @@ using namespace std;
 
 TEST(IntStream, CreateStream) {
     auto stream = IntStream::Make(1, 10);
-    vector<int32_t> buffer;
+    auto buffer = stream->collect();
 
-    while (!stream->isEmpty()) {
-        buffer.push_back(stream->next());
-    }
-    ASSERT_EQ(9, buffer.size());
+    ASSERT_EQ(9, buffer->size());
     for (int i = 1; i < 10; i++) {
-        ASSERT_EQ(i, buffer[i - 1]);
+        ASSERT_EQ(i, (*buffer)[i - 1]);
     }
 }
 

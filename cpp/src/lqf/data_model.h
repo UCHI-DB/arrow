@@ -24,15 +24,15 @@ namespace lqf {
     public:
         inline int32_t asInt() { return static_cast<int32_t>(*value_); }
 
-        inline double asDouble() { return *((double *) value_); }
+        inline double asDouble() { return *(reinterpret_cast<double *> (value_)); }
 
-        inline ByteArray *asByteArray() { return ((ByteArray *) value_); }
+        inline ByteArray *asByteArray() { return reinterpret_cast<ByteArray *> (value_); }
 
         inline void operator=(int32_t value) { *value_ = value; }
 
-        inline void operator=(double value) { *value_ = *((uint64_t *) &value); }
+        inline void operator=(double value) { *value_ = *(reinterpret_cast<uint64_t *>(&value)); }
 
-        inline void operator=(ByteArray *value) { value_ = (uint64_t *) value; }
+        inline void operator=(ByteArray *value) { value_ = reinterpret_cast<uint64_t *> (value); }
 
         inline void operator=(DataField &df) { *value_ = *df.value_; }
 

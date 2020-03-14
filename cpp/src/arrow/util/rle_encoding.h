@@ -336,11 +336,10 @@ int RleDecoder::Skip(int batch_size) {
         } else if (literal_count_ > 0) {
             int literal_batch =
                     std::min(batch_size - values_read, static_cast<int>(literal_count_));
-            int actual_read =
-                    bit_reader_.Skip(bit_width_, literal_batch);
+            int actual_read = bit_reader_.Skip(bit_width_, literal_batch);
             DCHECK_EQ(actual_read, literal_batch);
-            literal_count_ -= literal_batch;
-            values_read += literal_batch;
+            literal_count_ -= actual_read;
+            values_read += actual_read;
         } else {
             if (!NextCounts<T>()) return values_read;
         }

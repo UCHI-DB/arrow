@@ -25,11 +25,10 @@ namespace lqf {
                                                     {LineItem::SHIPDATE, LineItem::QUANTITY, LineItem::EXTENDEDPRICE,
                                                      LineItem::DISCOUNT, LineItem::TAX, LineItem::RETURNFLAG,
                                                      LineItem::LINESTATUS});
-//
+
             // Use SBoost Filter
             ColFilter colFilter({new ByteArrayDictLess(LineItem::SHIPDATE, dateFrom)});
             auto filtered = colFilter.filter(*lineItemTable);
-//
 
             function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
                 return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
@@ -74,11 +73,11 @@ namespace lqf {
             };
 
             TableAgg agg([=]() {
-                return make_shared<TableCore>(6, 8, indexer, headerInit);
+                return make_shared<TableCore>(10, 8, indexer, headerInit);
             });
             auto agged = agg.agg(*filtered);
 
-            SmallSort sort(SORTER2(0,1));
+            SmallSort sort(SORTER2(0, 1));
             auto sorted = sort.sort(*agged);
 
             auto printer = Printer::Make(PBEGIN PINT(0) PINT(1) PINT(2) PDOUBLE(3)
@@ -92,9 +91,9 @@ namespace lqf {
 int main(int argc, char **argv) {
     using namespace std;
     using namespace std::chrono;
-    auto start = high_resolution_clock::now();
+    auto start = system_clock::now();
     lqf::tpch::executeQ1();
-    auto stop = high_resolution_clock::now();
+    auto stop = system_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
 
     cout << duration.count() << endl;

@@ -141,7 +141,7 @@ namespace lqf {
 
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
-        validate_true(size_ == sx1.size_, "size not the same");
+//        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
         uint64_t limit = array_size_ >> 2;
         uint64_t i = 0;
@@ -159,7 +159,7 @@ namespace lqf {
 
     shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
-        validate_true(size_ == sx1.size_, "size not the same");
+//        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
         uint64_t limit = array_size_ >> 2;
         uint64_t i = 0;

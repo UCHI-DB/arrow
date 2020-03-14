@@ -116,8 +116,9 @@ add_test_case(all-test
 add_custom_target(sboost-benchmarks)
 set(SBOOST_BENCHMARK_LINK_OPTION STATIC_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads
         sboost_static)
-add_sboost_benchmark(unpacker_benchmark)
-target_compile_options(sboost-unpacker-benchmark PUBLIC ${SBOOST_SIMD_FLAGS})
+add_sboost_benchmark(unpacker_benchmark
+        EXTRA_FLAGS
+        ${SBOOST_SIMD_FLAGS})
 
 
 arrow_install_cmake_find_module("${ARG_CMAKE_PACKAGE_NAME}")

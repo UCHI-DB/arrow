@@ -857,7 +857,7 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
               continue;
           }
           const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
-          lqf::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE, "wrong page encoding");
+//          lqf::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE, "wrong page encoding");
           if (pagedata->num_values() <= rows_to_skip) {
               rows_to_skip -= pagedata->num_values();
               this->num_read_values_ += pagedata->num_values();
@@ -897,7 +897,7 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
 template <typename DType>
 int64_t TypedColumnReaderImpl<DType>::MoveTo(int64_t move_to_pos) {
     int64_t current_pos = this->num_read_values_;
-    lqf::validate_true(move_to_pos >= current_pos, "MoveTo cannot move backward");
+//    lqf::validate_true(move_to_pos >= current_pos, "MoveTo cannot move backward");
     return Skip(move_to_pos - current_pos);
 }
 

@@ -75,13 +75,13 @@ namespace sboost {
 
     void unpackScalar(const uint8_t *input, uint32_t numEntry, uint8_t bitWidth, uint32_t *output);
 
-    template<typename UPCKR, int bitWidth>
+    template<int bitWidth>
     void unpack(const uint8_t *input, uint32_t numEntry, uint32_t *output) {
-        UPCKR upckr(bitWidth);
+        auto upckr = unpackers[bitWidth];
         uint32_t round = numEntry >> 3;
         uint32_t ioff = 0;
         for (uint i = 0; i < round; ++i) {
-            __m256i result = upckr.unpack(input + ioff);
+            __m256i result = upckr->unpack(input + ioff);
             _mm256_storeu_si256(((__m256i *) output) + i, result);
             ioff += bitWidth;
         }
@@ -89,16 +89,9 @@ namespace sboost {
     }
 
     static std::array<function<void(const uint8_t *, uint32_t, uint32_t *)>, 32> unpacks =
-            {unpack<Small32Unpacker, 0>, unpack<Small32Unpacker, 1>, unpack<Small32Unpacker, 2>,
-             unpack<Small32Unpacker, 3>, unpack<Small32Unpacker, 4>, unpack<Small32Unpacker, 5>,
-             unpack<Small32Unpacker, 6>, unpack<Small32Unpacker, 7>, unpack<Small32Unpacker, 8>,
-             unpack<Small32Unpacker, 9>, unpack<Small32Unpacker, 10>, unpack<Small32Unpacker, 11>,
-             unpack<Small32Unpacker, 12>, unpack<Small32Unpacker, 13>, unpack<Small32Unpacker, 14>,
-             unpack<Small32Unpacker, 15>, unpack<Small32Unpacker, 16>, unpack<Small32Unpacker, 17>,
-             unpack<Small32Unpacker, 18>, unpack<Small32Unpacker, 19>, unpack<Small32Unpacker, 20>,
-             unpack<Small32Unpacker, 21>, unpack<Small32Unpacker, 22>, unpack<Small32Unpacker, 23>,
-             unpack<Small32Unpacker, 24>, unpack<Small32Unpacker, 25>, unpack<Large32Unpacker, 26>,
-             unpack<Large32Unpacker, 27>, unpack<Large32Unpacker, 28>, unpack<Large32Unpacker, 29>,
-             unpack<Large32Unpacker, 30>, unpack<Large32Unpacker, 31>};
+            {unpack<0>, unpack<1>, unpack<2>, unpack<3>, unpack<4>, unpack<5>, unpack<6>, unpack<7>, unpack<8>,
+             unpack<9>, unpack<10>, unpack<11>, unpack<12>, unpack<13>, unpack<14>, unpack<15>, unpack<16>, unpack<17>,
+             unpack<18>, unpack<19>, unpack<20>, unpack<21>, unpack<22>, unpack<23>, unpack<24>, unpack<25>, unpack<26>,
+             unpack<27>, unpack<28>, unpack<29>, unpack<30>, unpack<31>};
 }
 #endif //SBOOST_UNPACKER_H

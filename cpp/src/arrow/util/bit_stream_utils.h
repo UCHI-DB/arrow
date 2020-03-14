@@ -23,6 +23,7 @@
 #include <string.h>
 #include <algorithm>
 #include <cstdint>
+#include <sboost/unpacker.h>
 
 #include "arrow/util/bit_util.h"
 #include "arrow/util/bpacking.h"
@@ -312,6 +313,11 @@ inline int BitReader::GetBatch(int num_bits, T* v, int batch_size) {
   }
 
   if (sizeof(T) == 4) {
+//    int batch_to_unpack = ((batch_size - i) >> 3) << 3;
+//    function<void(const uint8_t*, uint32_t, uint32_t*)> unpacker = sboost::unpacks[num_bits];
+//    unpacker(buffer+byte_offset, batch_to_unpack, reinterpret_cast<uint32_t*>(v+i));
+//    i += batch_to_unpack;
+//    byte_offset += (batch_to_unpack >> 3) * num_bits;
     int num_unpacked =
         internal::unpack32(reinterpret_cast<const uint32_t*>(buffer + byte_offset),
                            reinterpret_cast<uint32_t*>(v + i), batch_size - i, num_bits);

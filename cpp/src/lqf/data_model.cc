@@ -301,12 +301,12 @@ namespace lqf {
         ParquetRowView(vector<unique_ptr<ColumnIterator>> &cols) : columns_(cols), index_(-1) {}
 
         virtual DataField &operator[](uint64_t colindex) override {
-            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
+//            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
             return (*(columns_[colindex]))[index_];
         }
 
         virtual DataField &operator()(uint64_t colindex) override {
-            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
+//            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
             return (*(columns_[colindex]))(index_);
         }
 
@@ -371,48 +371,74 @@ namespace lqf {
         return unique_ptr<DataRowIterator>(new ParquetRowIterator(*this, columns_));
     }
 
+#define COL_BUF_SIZE 8
+
+    const int8_t WIDTH[8] = {1, 4, 8, 0, 4, 8, sizeof(ByteArray), 0};
+
     class ParquetColumnIterator : public ColumnIterator {
     private:
         shared_ptr<ColumnReader> columnReader_;
         DataField dataField_;
         int64_t read_counter_;
         uint64_t pos_;
+        uint64_t bufpos_;
+        uint8_t width_;
+        uint8_t *buffer_;
     public:
         ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader),
-                                                                    dataField_(), read_counter_(0), pos_(-1) {
-            dataField_ = (uint64_t *) malloc(sizeof(ByteArray));
+                                                                    dataField_(), read_counter_(0), pos_(-1),
+                                                                    bufpos_(-8) {
+            buffer_ = (uint8_t *) malloc(sizeof(ByteArray) * COL_BUF_SIZE);
+            width_ = WIDTH[columnReader_->type()];
         }
 
         virtual ~ParquetColumnIterator() {
-            free(dataField_.data());
+            free(buffer_);
         }
 
         virtual DataField &operator[](uint64_t idx) override {
-            if (__builtin_expect(pos_ != idx, 1)) {
-                columnReader_->MoveTo(idx);
-                columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
-                pos_ = idx;
-            }
+            uint64_t *pointer = loadBuffer(idx);
+            pos_ = idx;
+            dataField_ = pointer;
             return dataField_;
         }
 
         virtual DataField &operator()(uint64_t idx) override {
-            if (__builtin_expect(pos_ != idx, 1)) {
-                columnReader_->MoveTo(idx);
-                columnReader_->ReadBatchRaw(1, (uint32_t *) dataField_.data(), &read_counter_);
-                pos_ = idx;
-            }
+            uint64_t *pointer = loadBufferRaw(idx);
+            pos_ = idx;
+            dataField_ = pointer;
             return dataField_;
         }
 
         virtual DataField &next() override {
-            columnReader_->ReadBatch(1, nullptr, nullptr, (void *) dataField_.data(), &read_counter_);
-            ++pos_;
-            return dataField_;
+            return (*this)[pos_ + 1];
         }
 
         uint64_t pos() override {
             return pos_;
+        }
+
+    protected:
+        inline uint64_t *loadBuffer(uint64_t idx) {
+            if (idx < bufpos_ + COL_BUF_SIZE) {
+                return (uint64_t *) (buffer_ + width_ * (idx - bufpos_));
+            } else {
+                columnReader_->MoveTo(idx);
+                columnReader_->ReadBatch(COL_BUF_SIZE, nullptr, nullptr, buffer_, &read_counter_);
+                bufpos_ = idx;
+                return (uint64_t *) buffer_;
+            }
+        }
+
+        inline uint64_t *loadBufferRaw(uint64_t idx) {
+            if (idx < bufpos_ + COL_BUF_SIZE) {
+                return (uint64_t *) (buffer_ + sizeof(int32_t) * (idx - bufpos_));
+            } else {
+                columnReader_->MoveTo(idx);
+                columnReader_->ReadBatchRaw(COL_BUF_SIZE, reinterpret_cast<uint32_t *>(buffer_), &read_counter_);
+                bufpos_ = idx;
+                return (uint64_t *) buffer_;
+            }
         }
     };
 

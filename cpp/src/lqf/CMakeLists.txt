@@ -15,8 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
+set(LQF_SIMD_FLAGS -msse4.1 -mavx -mavx2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mbmi2)
 
 set(LQF_SRCS
+        executor.cc
+        stream.cc
         agg.cc
         bitmap.cc
         data_model.cc
@@ -40,10 +43,12 @@ add_arrow_lib(lqf
         parquet_static
         sboost_static
         )
-target_compile_options(lqf_objlib PUBLIC -mavx -mavx2 -mavx512f -mavx512vl)
+
+target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS} )
 
 set(LQF_TEST_SRC
         bitmap_test.cc
+        executor_test.cc
         stream_test.cc
         heap_test.cc
         data_model_test.cc
@@ -63,6 +68,8 @@ add_test_case(all-test
         lqf_static
         GTest::GTest
         GTest::Main
+        EXTRA_FLAGS
+        ${LQF_SIMD_FLAGS}
         )
 
 arrow_install_all_headers(lqf)
