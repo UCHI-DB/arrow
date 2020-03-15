@@ -68,7 +68,7 @@ namespace lqf {
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
     protected:
-        void build(shared_ptr<Block> &rightBlock);
+        void build(const shared_ptr<Block> &rightBlock);
 
         virtual shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
     };
@@ -85,7 +85,7 @@ namespace lqf {
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
     protected:
-        void build(shared_ptr<Block> &rightBlock);
+        void build(const shared_ptr<Block> &rightBlock);
 
         shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
     };

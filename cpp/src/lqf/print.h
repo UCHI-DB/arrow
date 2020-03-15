@@ -22,7 +22,7 @@ namespace lqf {
     protected:
         function<void(DataRow &)> linePrinter_;
 
-        void printBlock(shared_ptr<Block> &block);
+        void printBlock(const shared_ptr<Block> &block);
 
     public:
         static unique_ptr<Printer> Make(function<void(DataRow &)> linePrinter);

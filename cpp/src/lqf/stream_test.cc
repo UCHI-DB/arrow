@@ -9,7 +9,7 @@
 using namespace lqf;
 using namespace std;
 
-TEST(IntStream, CreateStream) {
+TEST(IntStreamTest, CreateStream) {
     auto stream = IntStream::Make(1, 10);
     auto buffer = stream->collect();
 
@@ -38,7 +38,7 @@ public:
 
 int32_t TestClass::counter = 0;
 
-TEST(Stream, Map) {
+TEST(StreamTest, Map) {
     TestClass::counter = 0;
 
     auto stream = IntStream::Make(1, 10);
@@ -62,5 +62,68 @@ TEST(Stream, Map) {
     buffer->clear();
 
     ASSERT_EQ(9, TestClass::counter);
+}
+
+class TestHolder {
+public:
+    int value_;
+public:
+    TestHolder(int val) : value_(val) {}
+
+    int getValue() {
+        return value_;
+    }
+};
+
+TEST(StreamTest, Collect) {
+    auto source = IntStream::Make(0, 10);
+    function<shared_ptr<TestHolder>(const int &)> mapper = [](const int &value) {
+        return make_shared<TestHolder>(value);
+    };
+    auto mapped = source->map(mapper);
+    auto collected = mapped->collect();
+    EXPECT_EQ(collected->size(), 10);
+    for (int i = 0; i < 10; i++) {
+        EXPECT_EQ((*collected)[i]->getValue(), i);
+    }
+}
+
+TEST(StreamTest, Foreach) {
+    auto source = IntStream::Make(0, 10);
+    function<shared_ptr<TestHolder>(const int &)> mapper = [](const int &value) {
+        return make_shared<TestHolder>(value);
+    };
+    vector<int32_t> buffer;
+
+    function<void(const shared_ptr<TestHolder>)> exec = [&buffer](const shared_ptr<TestHolder> t) {
+        buffer.push_back(t->getValue());
+    };
+
+    source->map(mapper)->foreach(exec);
+    EXPECT_EQ(buffer.size(), 10);
+    for (int i = 0; i < 10; i++) {
+        EXPECT_EQ(buffer[i], i);
+    }
+}
+
+TEST(StreamTest, Reduce) {
+    auto source = IntStream::Make(0, 11);
+    function<shared_ptr<TestHolder>(const int &)> mapper = [](const int &value) {
+        return make_shared<TestHolder>(value);
+    };
+    auto mapped = source->map(mapper);
+
+    function<shared_ptr<TestHolder>(const shared_ptr<TestHolder> &, const shared_ptr<TestHolder>&)> reducer =
+            [](const shared_ptr<TestHolder>& a, const shared_ptr<TestHolder>& b) {
+        a->value_ += b->value_;
+        return a;
+    };
+
+    auto reduced = mapped->reduce(reducer);
+    EXPECT_EQ(reduced->value_,55);
+}
+
+TEST(StreamTest, Parallel) {
+
 }
 

@@ -138,8 +138,8 @@ namespace lqf {
             function<shared_ptr<CORE>(
                     const shared_ptr<Block> &)> mapper = bind(&Agg::processBlock, this, _1);
 
-            function<shared_ptr<CORE>(shared_ptr<CORE> &, shared_ptr<CORE> &)> reducer =
-                    [](shared_ptr<CORE> &a, shared_ptr<CORE> &b) {
+            function<shared_ptr<CORE>(const shared_ptr<CORE> &, const shared_ptr<CORE> &)> reducer =
+                    [](const shared_ptr<CORE> &a, const shared_ptr<CORE> &b) {
                         a->reduce(*b);
                         return a;
                     };

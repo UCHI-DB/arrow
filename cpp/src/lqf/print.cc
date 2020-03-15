@@ -7,7 +7,7 @@
 
 namespace lqf {
 
-    void Printer::printBlock(shared_ptr<Block> &block) {
+    void Printer::printBlock(const shared_ptr<Block> &block) {
         auto rows = block->rows();
         for (uint32_t i = 0; i < block->size(); ++i) {
             linePrinter_(rows->next());
@@ -21,7 +21,7 @@ namespace lqf {
     }
 
     void Printer::print(Table &table) {
-        function<void(shared_ptr<Block> &)> printer = bind(&Printer::printBlock, this, _1);
+        function<void(const shared_ptr<Block> &)> printer = bind(&Printer::printBlock, this, _1);
         table.blocks()->foreach(printer);
     }
 

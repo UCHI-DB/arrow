@@ -283,8 +283,8 @@ TEST(TableViewTest, Create) {
     auto blocks = parquetTable->blocks();
     TableView tableView(parquetTable->numFields(), blocks);
 
-    tableView.blocks()->foreach([](shared_ptr<Block>& block){cout<<block->size()<<endl;});
-    tableView.blocks()->foreach([](shared_ptr<Block>& block){cout<<block->size()<<endl;});
+    tableView.blocks()->foreach([](const shared_ptr<Block>& block){cout<<block->size()<<endl;});
+    tableView.blocks()->foreach([](const shared_ptr<Block>& block){cout<<block->size()<<endl;});
 }
 
 TEST(DataRowTest, Copy) {

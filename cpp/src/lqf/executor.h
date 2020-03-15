@@ -70,21 +70,24 @@ namespace lqf {
             unique_ptr<Semaphore> signal_;
 
             function<void()> runnable_;
+            bool done_;
         public:
             Task(function<void()> runnable)
                     : signal_(unique_ptr<Semaphore>(new Semaphore())),
-                      runnable_(runnable) {}
+                      runnable_(runnable), done_(false) {}
 
             virtual void wait() override {
-                signal_->wait();
+                if (!done_)
+                    signal_->wait();
             }
 
             virtual bool isDone() override {
-                return signal_->try_wait();
+                return done_;
             }
 
             inline void run() {
                 runnable_();
+                done_ = true;
             }
         };
 
@@ -135,14 +138,14 @@ namespace lqf {
             }
 
             template<typename T>
-            unique_ptr<vector<T>> invokeAll(vector<function<T()>>& tasks) {
+            unique_ptr<vector<T>> invokeAll(vector<function<T()>> &tasks) {
                 vector<shared_ptr<CallFuture<T>>> futures;
                 for (auto t: tasks) {
                     auto res = make_shared<CallTask<T>>(t);
                     submit(res);
                     futures.push_back(res);
                 }
-                unique_ptr<vector<T>> result = unique_ptr<vector<T>>();
+                unique_ptr<vector<T>> result = unique_ptr<vector<T>>(new vector<T>());
                 for (auto future: futures) {
                     future->wait();
                     result->push_back(future->get());

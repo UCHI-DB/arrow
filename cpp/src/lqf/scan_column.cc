@@ -31,7 +31,7 @@ void scanTable2() {
     auto dictless = new lqf::sboost::ByteArrayDictLess(lqf::tpch::LineItem::SHIPDATE, dateFrom);
 
     auto table = ParquetTable::Open(fileName, {tpch::LineItem::SHIPDATE});
-    table->blocks()->foreach([=](shared_ptr<Block> &block) {
+    table->blocks()->foreach([=](const shared_ptr<Block> &block) {
 //        auto col = block->col(lqf::tpch::LineItem::SHIPDATE);
 //        for(uint i = 0 ; i < block->size();++i) {
 //            std::cout << (*col)(i).asInt() << std::endl;

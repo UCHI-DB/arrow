@@ -23,7 +23,6 @@
 #include <string.h>
 #include <algorithm>
 #include <cstdint>
-#include <sboost/unpacker.h>
 
 #include "arrow/util/bit_util.h"
 #include "arrow/util/bpacking.h"

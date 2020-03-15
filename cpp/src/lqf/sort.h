@@ -38,7 +38,7 @@ namespace lqf {
         shared_ptr<Table> sort(Table &);
 
     protected:
-        void sortBlock(shared_ptr<Block> &input);
+        void sortBlock(const shared_ptr<Block> &input);
     };
 }
 #endif //ARROW_SORT_H

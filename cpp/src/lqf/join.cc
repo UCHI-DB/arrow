@@ -85,14 +85,14 @@ namespace lqf {
 
 
     shared_ptr<Table> HashJoin::join(Table &left, Table &right) {
-        function<void(shared_ptr<Block> &)> buildHash = bind(&HashJoin::build, this, _1);
+        function<void(const shared_ptr<Block> &)> buildHash = bind(&HashJoin::build, this, _1);
         right.blocks()->foreach(buildHash);
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashJoin::probe, this, _1);
         return make_shared<TableView>(rowBuilder_->outputSize(), left.blocks()->map(prober));
     }
 
-    void HashJoin::build(shared_ptr<Block> &rightBlock) {
+    void HashJoin::build(const shared_ptr<Block> &rightBlock) {
         auto rows = rightBlock->rows();
         for (uint32_t i = 0; i < rightBlock->size(); ++i) {
             auto key = rows->next()[rightKeyIndex_].asInt();
@@ -128,14 +128,14 @@ namespace lqf {
 
 
     shared_ptr<Table> HashFilterJoin::join(Table &left, Table &right) {
-        function<void(shared_ptr<Block> &)> buildHash = bind(&HashFilterJoin::build, this, _1);
+        function<void(const shared_ptr<Block> &)> buildHash = bind(&HashFilterJoin::build, this, _1);
         right.blocks()->foreach(buildHash);
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashFilterJoin::probe, this, _1);
         return make_shared<TableView>(left.numFields(), left.blocks()->map(prober));
     }
 
-    void HashFilterJoin::build(shared_ptr<Block> &rightBlock) {
+    void HashFilterJoin::build(const shared_ptr<Block> &rightBlock) {
         auto rows = rightBlock->rows();
         for (uint32_t i = 0; i < rightBlock->size(); ++i) {
             auto key = rows->next()[rightKeyIndex_].asInt();

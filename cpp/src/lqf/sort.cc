@@ -23,7 +23,7 @@ namespace lqf {
 
         vector<DataRow *> &heapContainer = heap_->content();
 
-        function<void(shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, _1);
+        function<void(const shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, _1);
         table.blocks()->foreach(proc);
 
         heap_->done();
@@ -37,7 +37,7 @@ namespace lqf {
         return resultTable;
     }
 
-    void TopN::sortBlock(shared_ptr<Block> &input) {
+    void TopN::sortBlock(const shared_ptr<Block> &input) {
         auto rows = input->rows();
         for (uint32_t i = 0; i < input->size(); ++i) {
             DataRow &row = rows->next();
@@ -50,7 +50,7 @@ namespace lqf {
     shared_ptr<Table> SmallSort::sort(Table &table) {
         uint32_t num_fields = table.numFields();
         vector<MemDataRow *> sortingRows;
-        table.blocks()->foreach([&sortingRows, num_fields](shared_ptr<Block> &block) {
+        table.blocks()->foreach([&sortingRows, num_fields](const shared_ptr<Block> &block) {
             auto inputRows = block->rows();
             for (uint32_t i = 0; i < block->size(); ++i) {
                 MemDataRow *copy = new MemDataRow(num_fields);

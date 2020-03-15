@@ -24,7 +24,7 @@ namespace lqf {
         class TransformOp : public EvalOp<TO> {
 
         public:
-            TransformOp(unique_ptr<EvalOp<FROM>> from, function<TO(FROM &)> f)
+            TransformOp(unique_ptr<EvalOp<FROM>> from, function<TO(const FROM &)> f)
                     : previous_(move(from)), mapper_(f) {}
 
             inline TO eval() override {
@@ -34,7 +34,7 @@ namespace lqf {
 
         protected:
             unique_ptr<EvalOp<FROM>> previous_;
-            function<TO(FROM &)> mapper_;
+            function<TO(const FROM &)> mapper_;
         };
 
         template<typename TYPE>
@@ -117,14 +117,16 @@ namespace lqf {
         }
 
         /// Use int32_t as workaround as void cannot be allocated return space
-        void foreach(function<void(VIEW &)> f) {
+        void foreach(function<void(const VIEW &)> f) {
             vector<unique_ptr<EvalOp<int32_t>>> holder;
             while (!isEmpty()) {
-                holder.push_back(unique_ptr<EvalOp<int32_t>>(new TransformOp<VIEW, int32_t>(next(),
-                                                                                            [=](VIEW &a) {
-                                                                                                f(a);
-                                                                                                return 0;
-                                                                                            })));
+                holder.push_back(unique_ptr<EvalOp<int32_t>>(
+                        new TransformOp<VIEW, int32_t>(
+                                next(),
+                                [=](const VIEW &a) {
+                                    f(a);
+                                    return 0;
+                                })));
             }
             evaluator_->eval(holder);
         }
@@ -137,7 +139,7 @@ namespace lqf {
             return evaluator_->eval(holder);
         }
 
-        VIEW reduce(function<VIEW(VIEW &, VIEW &)> reducer) {
+        VIEW reduce(function<VIEW(const VIEW &, const VIEW &)> reducer) {
             auto collected = collect();
             // TODO it is possible to execute reduce in parallel
             if (collected->size() == 1) {
@@ -168,7 +170,6 @@ namespace lqf {
 
         virtual bool isEmpty() = 0;
 
-
         virtual unique_ptr<EvalOp<VIEW>> next() = 0;
 
     protected:
@@ -178,7 +179,7 @@ namespace lqf {
     template<typename FROM, typename TO>
     class StreamLink : public Stream<TO> {
     public:
-        StreamLink(shared_ptr<Stream<FROM>> source, function<TO(FROM &)> mapper)
+        StreamLink(shared_ptr<Stream<FROM>> source, function<TO(const FROM &)> mapper)
                 : source_(source), mapper_(mapper) {}
 
         bool isEmpty() override {
@@ -191,8 +192,7 @@ namespace lqf {
 
     protected:
         shared_ptr<Stream<FROM>> source_;
-        function<TO(FROM &)> mapper_;
-
+        function<TO(const FROM &)> mapper_;
     };
 
     template<typename TYPE>

@@ -31,7 +31,7 @@ TEST(ExecutorTest, InvokeAll) {
     vector<function<int32_t()>> tasks;
     for (int i = 0; i < 20; i++) {
         tasks.push_back([]() {
-            usleep(1);
+            usleep(1000000);
             auto i = time(NULL) & 0xFFFFFFFF;
             return i;
         });
@@ -39,5 +39,8 @@ TEST(ExecutorTest, InvokeAll) {
 
     unique_ptr<vector<int32_t>> result = executor->invokeAll(tasks);
 
-    return;
+    executor->shutdown();
+    for(int i = 0 ; i < 10;i++) {
+        EXPECT_EQ((*result)[i], (*result)[i+10]-1);
+    }
 }
