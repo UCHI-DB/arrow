@@ -9,7 +9,9 @@ namespace lqf {
 
         Executor::Executor(uint32_t pool_size) : shutdown_(false), pool_size_(pool_size), threads_() {
             for (uint32_t i = 0; i < pool_size; ++i) {
-                threads_.push_back(unique_ptr<thread>(new std::thread(bind(&Executor::routine, this))));
+                auto t= new std::thread(bind(&Executor::routine, this));
+                t->detach();
+                threads_.push_back(unique_ptr<std::thread>(t));
             }
         }
 
