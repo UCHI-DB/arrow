@@ -28,7 +28,7 @@ void scanTable2() {
     using namespace lqf;
 
     auto dateFrom = ByteArray("1998-09-01");
-    auto dictless = new lqf::sboost::ByteArrayDictLess(lqf::tpch::LineItem::SHIPDATE, dateFrom);
+    auto dictless = new lqf::sboost::ByteArrayDictLess(dateFrom);
 
     auto table = ParquetTable::Open(fileName, {tpch::LineItem::SHIPDATE});
     table->blocks()->foreach([=](const shared_ptr<Block> &block) {

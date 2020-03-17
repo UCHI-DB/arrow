@@ -15,10 +15,10 @@ TEST(ExecutorTest, Submit) {
     auto executor = Executor::Make(10);
 
     int *i = new int(0);
-    auto stub = executor->submit([=]() {
+    executor->submit([=]() {
         *i += 5;
     });
-    stub->wait();
+    usleep(100000);
 
     EXPECT_EQ(5, *i);
     executor->shutdown();
@@ -31,15 +31,15 @@ TEST(ExecutorTest, InvokeAll) {
     vector<function<int32_t()>> tasks;
     for (int i = 0; i < 20; i++) {
         tasks.push_back([]() {
-            usleep(1000000);
+            usleep(1200000);
             auto i = time(NULL) & 0xFFFFFFFF;
             return i;
         });
     }
 
     unique_ptr<vector<int32_t>> result = executor->invokeAll(tasks);
-
     executor->shutdown();
+
     for(int i = 0 ; i < 10;i++) {
         EXPECT_EQ((*result)[i], (*result)[i+10]-1);
     }

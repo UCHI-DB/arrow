@@ -17,6 +17,8 @@ namespace lqf {
         template<typename OUT>
         class EvalOp {
         public:
+            virtual ~EvalOp() {}
+
             virtual OUT eval() = 0;
         };
 
@@ -40,9 +42,9 @@ namespace lqf {
         template<typename TYPE>
         class TrivialOp : public EvalOp<TYPE> {
         private:
-            TYPE &ref_;
+            TYPE ref_;
         public:
-            TrivialOp(TYPE &ref) : ref_(ref) {}
+            TrivialOp(const TYPE ref) : ref_(ref) {}
 
             inline TYPE eval() override {
                 return ref_;
@@ -61,16 +63,16 @@ namespace lqf {
 
     using namespace lqf::executor;
 
-    class StreamEvaluator {
-    protected:
-        shared_ptr<Executor> executor_;
-    public:
-        bool parallel_;
-        static StreamEvaluator *INSTANCE;
 
-        StreamEvaluator() : parallel_(false) {
-            executor_ = Executor::Make(32);
-        }
+    class StreamEvaluator {
+    public:
+        static shared_ptr<Executor> defaultExecutor;
+
+        bool parallel_;
+
+        StreamEvaluator() : parallel_(false) {}
+
+        ~StreamEvaluator() {}
 
         template<typename T>
         shared_ptr<vector<T>> eval(vector<unique_ptr<EvalOp<T>>> &input) {
@@ -90,16 +92,17 @@ namespace lqf {
                     return op->eval();
                 });
             }
-            shared_ptr<vector<T>> res = move(executor_->invokeAll(tasks));
+            shared_ptr<vector<T>> res = move(defaultExecutor->invokeAll(tasks));
             return res;
         }
 
         template<typename T>
         inline shared_ptr<vector<T>> evalSequential(vector<unique_ptr<EvalOp<T>>> &input) {
             auto result = make_shared<vector<T>>();
-            for (auto ite = input.begin(); ite != input.end(); ite++) {
+            for (auto ite = input.begin(); ite != input.end(); ++ite) {
                 result->push_back((*ite)->eval());
             }
+
             return result;
         }
     };
@@ -107,13 +110,11 @@ namespace lqf {
     template<typename VIEW>
     class Stream : public enable_shared_from_this<Stream<VIEW>> {
     public:
-        Stream() {
-            evaluator_ = StreamEvaluator::INSTANCE;
-        }
+        Stream() : evaluator_(nullptr) {}
 
         template<typename NEXT>
         shared_ptr<Stream<NEXT>> map(function<NEXT(const VIEW &)> f) {
-            return make_shared<StreamLink<VIEW, NEXT>>(this->shared_from_this(), f);
+            return make_shared<StreamLink<VIEW, NEXT>>(this->shared_from_this(), f, evaluator_);
         }
 
         /// Use int32_t as workaround as void cannot be allocated return space
@@ -136,7 +137,8 @@ namespace lqf {
             while (!isEmpty()) {
                 holder.push_back(next());
             }
-            return evaluator_->eval(holder);
+            auto result = evaluator_->eval(holder);
+            return result;
         }
 
         VIEW reduce(function<VIEW(const VIEW &, const VIEW &)> reducer) {
@@ -160,7 +162,7 @@ namespace lqf {
 
         inline shared_ptr<Stream<VIEW>> parallel() {
             evaluator_->parallel_ = true;
-            return this;
+            return this->shared_from_this();
         }
 
         inline shared_ptr<Stream<VIEW>> sequential() {
@@ -173,14 +175,16 @@ namespace lqf {
         virtual unique_ptr<EvalOp<VIEW>> next() = 0;
 
     protected:
-        StreamEvaluator *evaluator_;
+        shared_ptr<StreamEvaluator> evaluator_;
     };
 
     template<typename FROM, typename TO>
     class StreamLink : public Stream<TO> {
     public:
-        StreamLink(shared_ptr<Stream<FROM>> source, function<TO(const FROM &)> mapper)
-                : source_(source), mapper_(mapper) {}
+        StreamLink(shared_ptr<Stream<FROM>> source, function<TO(const FROM &)> mapper, shared_ptr<StreamEvaluator> eval)
+                : source_(source), mapper_(mapper) {
+            this->evaluator_ = eval;
+        }
 
         bool isEmpty() override {
             return source_->isEmpty();
@@ -202,7 +206,9 @@ namespace lqf {
         typename vector<TYPE>::const_iterator position_;
     public:
         VectorStream(const vector<TYPE> &data) :
-                data_(data), position_(data.begin()) {}
+                data_(data), position_(data.begin()) {
+            this->evaluator_ = make_shared<StreamEvaluator>();
+        }
 
         virtual ~VectorStream() {}
 
@@ -211,8 +217,7 @@ namespace lqf {
         }
 
         unique_ptr<EvalOp<TYPE>> next() override {
-            auto val = *(position_++);
-            return unique_ptr<EvalOp<TYPE>>(new TrivialOp<TYPE>(val));
+            return unique_ptr<EvalOp<TYPE>>(new TrivialOp<TYPE>(*(position_++)));
         };
     };
 
@@ -223,7 +228,10 @@ namespace lqf {
             return make_shared<IntStream>(from, to, 1);
         }
 
-        IntStream(int32_t from, int32_t to, int32_t step = 1) : to_(to), step_(step), pointer_(from) {}
+        IntStream(int32_t from, int32_t to, int32_t step = 1)
+                : to_(to), step_(step), pointer_(from) {
+            this->evaluator_ = make_shared<StreamEvaluator>();
+        }
 
         bool isEmpty() override {
             return pointer_ >= to_;

@@ -9,13 +9,16 @@ namespace lqf {
 
         Executor::Executor(uint32_t pool_size) : shutdown_(false), pool_size_(pool_size), threads_() {
             for (uint32_t i = 0; i < pool_size; ++i) {
-                auto t= new std::thread(bind(&Executor::routine, this));
+                auto t = new std::thread(bind(&Executor::routine, this));
                 t->detach();
                 threads_.push_back(unique_ptr<std::thread>(t));
             }
         }
 
         Executor::~Executor() {
+            if(!shutdown_) {
+                shutdown();
+            }
             threads_.clear();
         }
 
@@ -31,17 +34,15 @@ namespace lqf {
             return make_shared<Executor>(psize);
         }
 
-        void Executor::submit(shared_ptr<Task> task) {
+        void Executor::submit(unique_ptr<Task> task) {
             fetch_task_.lock();
-            tasks_.push(task);
+            tasks_.push(move(task));
             has_task_.notify();
             fetch_task_.unlock();
         }
 
-        shared_ptr<Future> Executor::submit(function<void()> runnable) {
-            shared_ptr<Task> task = make_shared<Task>(runnable);
-            submit(task);
-            return task;
+        void Executor::submit(function<void()> runnable) {
+            submit(unique_ptr<Task>(new Task(runnable)));
         }
 
         void Executor::routine() {
@@ -52,12 +53,11 @@ namespace lqf {
                 if (tasks_.empty()) {
                     fetch_task_.unlock();
                 } else {
-                    auto task = tasks_.front();
+                    auto task = move(tasks_.front());
                     tasks_.pop();
                     fetch_task_.unlock();
 
                     task->run();
-                    task->signal_->notify();
                 }
             }
         }

@@ -18,28 +18,29 @@ namespace lqf {
     using namespace std;
     using namespace parquet;
 
-    class DataField {
-    private:
-        uint64_t *value_;
+    union DataField {
+        uint64_t *raw_;
+        int32_t *ival_;
+        double *dval_;
+        ByteArray **sval_;
     public:
-        inline int32_t asInt() { return static_cast<int32_t>(*value_); }
+        inline int32_t asInt() { return *ival_; }
 
-        inline double asDouble() { return *(reinterpret_cast<double *> (value_)); }
+        inline double asDouble() { return *dval_; }
 
-        inline ByteArray *asByteArray() { return reinterpret_cast<ByteArray *> (value_); }
+        inline ByteArray *asByteArray() { return *sval_; }
 
-        inline void operator=(int32_t value) { *value_ = value; }
+        inline void operator=(int32_t value) { *ival_ = value; }
 
-        inline void operator=(double value) { *value_ = *(reinterpret_cast<uint64_t *>(&value)); }
+        inline void operator=(double value) { *dval_ = value; }
 
-        inline void operator=(ByteArray *value) { value_ = reinterpret_cast<uint64_t *> (value); }
+        inline void operator=(ByteArray *value) { *sval_ = value; }
 
-        inline void operator=(DataField &df) { *value_ = *df.value_; }
+        inline void operator=(uint64_t* raw) { raw_ = raw; };
 
-        inline void operator=(uint64_t *value) { value_ = value; }
+        inline uint64_t *data() { return raw_; }
 
-        inline uint64_t *data() { return value_; }
-
+        inline void operator=(DataField &df) { *raw_ = *df.raw_; }
     };
 
     /*
@@ -55,9 +56,7 @@ namespace lqf {
             return (*this)[i];
         }
 
-        virtual void operator=(DataRow &row) {
-
-        }
+        virtual void operator=(DataRow &row) { }
 
         virtual uint64_t *raw() {
             return nullptr;

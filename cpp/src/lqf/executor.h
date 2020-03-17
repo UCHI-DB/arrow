@@ -10,6 +10,7 @@
 #include<queue>
 #include<vector>
 #include<mutex>
+#include<future>
 #include<functional>
 #include <condition_variable>
 
@@ -50,64 +51,37 @@ namespace lqf {
 
         class Executor;
 
-        class Future {
-        public:
-            virtual void wait() = 0;
-
-            virtual bool isDone() = 0;
-        };
-
-        template<typename T>
-        class CallFuture : public virtual Future {
-        public:
-            virtual T get() = 0;
-
-        };
-
-        class Task : public virtual Future {
+        class Task {
             friend Executor;
         protected:
-            unique_ptr<Semaphore> signal_;
 
             function<void()> runnable_;
-            bool done_;
         public:
-            Task(function<void()> runnable)
-                    : signal_(unique_ptr<Semaphore>(new Semaphore())),
-                      runnable_(runnable), done_(false) {}
-
-            virtual void wait() override {
-                if (!done_)
-                    signal_->wait();
-            }
-
-            virtual bool isDone() override {
-                return done_;
-            }
+            Task(function<void()> runnable) : runnable_(runnable) {}
 
             inline void run() {
                 runnable_();
-                done_ = true;
             }
         };
 
         template<typename T>
-        class CallTask : public virtual CallFuture<T>, public virtual Task {
+        class CallTask : public Task {
+            friend Executor;
+        private:
+            promise<T> promise_;
         public:
             CallTask(function<T()> callable)
                     : Task(bind(&CallTask::call, this)), callable_(callable) {}
 
         protected:
-            T result;
             function<T()> callable_;
 
             void call() {
-                result = callable_();
+                promise_.set_value(callable_());
             }
 
-            T get() override {
-                this->wait();
-                return move(result);
+            inline future<T> getFuture() {
+                return promise_.get_future();
             }
         };
 
@@ -118,9 +92,9 @@ namespace lqf {
             vector<unique_ptr<thread>> threads_;
             Semaphore has_task_;
             mutex fetch_task_;
-            queue<shared_ptr<Task>> tasks_;
+            queue<unique_ptr<Task>> tasks_;
 
-            void submit(shared_ptr<Task>);
+            void submit(unique_ptr<Task>);
 
         public:
 
@@ -128,27 +102,27 @@ namespace lqf {
 
             void shutdown();
 
-            shared_ptr<Future> submit(function<void()>);
+            void submit(function<void()>);
 
             template<typename T>
-            shared_ptr<CallFuture<T>> submit(function<T()> task) {
-                auto t = make_shared<CallTask<T>>(task);
-                submit(t);
-                return t;
+            future<T> submit(function<T()> task) {
+                auto t = new CallTask<T>(task);
+                submit(unique_ptr<CallTask<T>>(t));
+                return t->getFuture();
             }
 
             template<typename T>
             unique_ptr<vector<T>> invokeAll(vector<function<T()>> &tasks) {
-                vector<shared_ptr<CallFuture<T>>> futures;
+                vector<future<T>> futures;
                 for (auto t: tasks) {
-                    auto res = make_shared<CallTask<T>>(t);
-                    submit(res);
-                    futures.push_back(res);
+                    auto res = new CallTask<T>(t);
+                    submit(unique_ptr<CallTask<T>>(res));
+                    futures.push_back(res->getFuture());
                 }
                 unique_ptr<vector<T>> result = unique_ptr<vector<T>>(new vector<T>());
-                for (auto future: futures) {
-                    future->wait();
-                    result->push_back(future->get());
+                for (auto ite = futures.begin();ite != futures.end();ite++) {
+                    (*ite).wait();
+                    result->push_back((*ite).get());
                 }
                 return result;
             }
@@ -160,8 +134,6 @@ namespace lqf {
         protected:
             void routine();
         };
-
-
     }
 }
 #endif //ARROW_EXECUTOR_H

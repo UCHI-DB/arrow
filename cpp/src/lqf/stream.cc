@@ -6,5 +6,5 @@
 
 namespace lqf {
 
-    StreamEvaluator *StreamEvaluator::INSTANCE = new StreamEvaluator();
+    shared_ptr<Executor> StreamEvaluator::defaultExecutor = Executor::Make(32);
 }

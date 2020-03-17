@@ -510,13 +510,9 @@ namespace lqf {
         return shared_ptr<MemTable>(new MemTable(num_fields));
     }
 
-    MemTable::MemTable(uint8_t num_fields) : num_fields_(num_fields), blocks_(vector<shared_ptr<Block>>()) {
+    MemTable::MemTable(uint8_t num_fields) : num_fields_(num_fields), blocks_(vector<shared_ptr<Block>>()) {}
 
-    }
-
-    MemTable::~MemTable() {
-
-    }
+    MemTable::~MemTable() {}
 
     uint32_t MemTable::numFields() {
         return num_fields_;

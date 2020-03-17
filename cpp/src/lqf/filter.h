@@ -11,6 +11,9 @@
 #include <sboost/encoding/rlehybrid.h>
 #include <sboost/encoding/deltabp.h>
 
+#define ACCESS(type, param)
+#define ACCESS2(type, param1, param2)
+
 using namespace std;
 
 namespace lqf {
@@ -38,9 +41,9 @@ namespace lqf {
 
     class SimpleColPredicate : public ColPredicate {
     private:
-        function<bool(DataField &)> predicate_;
+        function<bool(DataField & )> predicate_;
     public:
-        SimpleColPredicate(uint32_t, function<bool(DataField &)>);
+        SimpleColPredicate(uint32_t, function<bool(DataField & )>);
 
         ~SimpleColPredicate() {}
 
@@ -50,26 +53,36 @@ namespace lqf {
     namespace sboost {
 
         template<typename DTYPE>
-        class SboostPredicate : public ColPredicate, public RawAccessor<DTYPE> {
+        class SboostPredicate : public ColPredicate {
         public:
-            SboostPredicate(uint32_t index) : ColPredicate(index) {}
+            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()> accbuilder):
+            ColPredicate (index), builder_(accbuilder) {}
 
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
+
+        protected:
+            function<unique_ptr<RawAccessor<DTYPE>>()> builder_;
         };
 
+        using SBoostInt32Predicate = SboostPredicate<Int32Type>;
+        using SBoostDoublePredicate = SboostPredicate<DoubleType>;
+        using SBoostByteArrayPredicate = SboostPredicate<ByteArrayType>;
+
         template<typename DTYPE>
-        class DictEq : public SboostPredicate<DTYPE> {
+        class DictEq : public RawAccessor<DTYPE> {
             using T = typename DTYPE::c_type;
         private:
             const T &target_;
             int rawTarget_;
         public:
-            DictEq(uint32_t index, const T &target);
+            DictEq(const T &target);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void processDict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DictEq<DTYPE>> build(const T& target);
         };
 
         using Int32DictEq = DictEq<Int32Type>;
@@ -77,17 +90,19 @@ namespace lqf {
         using ByteArrayDictEq = DictEq<ByteArrayType>;
 
         template<typename DTYPE>
-        class DictLess : public SboostPredicate<DTYPE> {
+        class DictLess : public RawAccessor<DTYPE> {
             using T = typename DTYPE::c_type;
             const T &target_;
             int rawTarget_;
         public:
-            DictLess(uint32_t index, const T &target);
+            DictLess(const T &target);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void processDict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DictLess<DTYPE>> build(const T& target);
         };
 
         using Int32DictLess = DictLess<Int32Type>;
@@ -95,60 +110,68 @@ namespace lqf {
         using ByteArrayDictLess = DictLess<ByteArrayType>;
 
         template<typename DTYPE>
-        class DictBetween : public SboostPredicate<DTYPE> {
+        class DictBetween : public RawAccessor<DTYPE> {
             using T = typename DTYPE::c_type;
             const T &lower_;
             const T &upper_;
             int rawLower_;
             int rawUpper_;
         public:
-            DictBetween(uint32_t index, const T &lower, const T &upper);
+            DictBetween(const T &lower, const T &upper);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void processDict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DictBetween<DTYPE>> build(const T& lower, const T& upper);
         };
 
         using Int32DictBetween = DictBetween<Int32Type>;
         using DoubleDictBetween = DictBetween<DoubleType>;
         using ByteArrayDictBetween = DictBetween<ByteArrayType>;
 
-        class DeltaEq : public SboostPredicate<Int32Type> {
+        class DeltaEq : public RawAccessor<Int32Type> {
         private:
             const int target_;
         public:
-            DeltaEq(uint32_t index, const int target);
+            DeltaEq(const int target);
 
             void processDict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DeltaEq> build(const int target);
         };
 
-        class DeltaLess : public SboostPredicate<Int32Type> {
+        class DeltaLess : public RawAccessor<Int32Type> {
         private:
             const int target_;
         public:
-            DeltaLess(uint32_t index, const int target);
+            DeltaLess(const int target);
 
             void processDict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DeltaLess> build(const int target);
         };
 
-        class DeltaBetween : public SboostPredicate<Int32Type> {
+        class DeltaBetween : public RawAccessor<Int32Type> {
         private:
             const int lower_;
             const int upper_;
         public:
-            DeltaBetween(uint32_t index, const int lower, const int upper);
+            DeltaBetween(const int lower, const int upper);
 
             void processDict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DeltaBetween> build(const int lower, const int upper);
         };
     }
 
@@ -166,12 +189,12 @@ namespace lqf {
 
     class RowFilter : public Filter {
     private:
-        function<bool(DataRow &)> predicate_;
+        function<bool(DataRow & )> predicate_;
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
 
     public:
-        RowFilter(function<bool(DataRow &)> pred);
+        RowFilter(function<bool(DataRow & )> pred);
 
         virtual ~RowFilter() {}
     };

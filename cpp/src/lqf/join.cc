@@ -146,7 +146,6 @@ namespace lqf {
     shared_ptr<Block> HashFilterJoin::probe(const shared_ptr<Block> &leftBlock) {
         auto col = leftBlock->col(leftKeyIndex_);
         auto bitmap = make_shared<SimpleBitmap>(leftBlock->size());
-        uint32_t counter = 0;
         for (uint32_t i = 0; i < leftBlock->size(); ++i) {
             auto key = col->next().asInt();
             if (container_.get(key)) {

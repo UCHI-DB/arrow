@@ -27,7 +27,8 @@ namespace lqf {
                                                      LineItem::LINESTATUS});
 
             // Use SBoost Filter
-            ColFilter colFilter({new ByteArrayDictLess(LineItem::SHIPDATE, dateFrom)});
+            ColFilter colFilter(
+                    {new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))});
             auto filtered = colFilter.filter(*lineItemTable);
 
             function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
@@ -76,7 +77,7 @@ namespace lqf {
                 return make_shared<TableCore>(10, 8, indexer, headerInit);
             });
             auto agged = agg.agg(*filtered);
-
+//
             SmallSort sort(SORTER2(0, 1));
             auto sorted = sort.sort(*agged);
 

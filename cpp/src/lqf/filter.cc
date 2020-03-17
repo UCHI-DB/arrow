@@ -92,11 +92,12 @@ namespace lqf {
 
         template<typename DTYPE>
         shared_ptr<Bitmap> SboostPredicate<DTYPE>::filterBlock(Block &block, Bitmap &) {
-            return static_cast<ParquetBlock &>(block).raw(index_, this);
+            unique_ptr<RawAccessor<DTYPE>> accessor = builder_();
+            return static_cast<ParquetBlock &>(block).raw(index_, accessor.get());
         }
 
         template<typename DTYPE>
-        DictEq<DTYPE>::DictEq(uint32_t index, const T &target) : SboostPredicate<DTYPE>(index), target_(target) {}
+        DictEq<DTYPE>::DictEq(const T &target) : target_(target) {}
 
         template<typename DTYPE>
         void DictEq<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
@@ -112,7 +113,12 @@ namespace lqf {
         }
 
         template<typename DTYPE>
-        DictLess<DTYPE>::DictLess(uint32_t index, const T &target) : SboostPredicate<DTYPE>(index), target_(target) {}
+        unique_ptr<DictEq<DTYPE>> DictEq<DTYPE>::build(const T &target) {
+            return unique_ptr<DictEq<DTYPE>>(new DictEq<DTYPE>(target));
+        }
+
+        template<typename DTYPE>
+        DictLess<DTYPE>::DictLess(const T &target) : target_(target) {}
 
         template<typename DTYPE>
         void DictLess<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
@@ -128,8 +134,13 @@ namespace lqf {
         }
 
         template<typename DTYPE>
-        DictBetween<DTYPE>::DictBetween(uint32_t index, const T &lower, const T &upper)
-                : SboostPredicate<DTYPE>(index), lower_(lower), upper_(upper) {}
+        unique_ptr<DictLess<DTYPE>> DictLess<DTYPE>::build(const T &target) {
+            return unique_ptr<DictLess<DTYPE>>(new DictLess<DTYPE>(target));
+        }
+
+        template<typename DTYPE>
+        DictBetween<DTYPE>::DictBetween(const T &lower, const T &upper)
+                : lower_(lower), upper_(upper) {}
 
         template<typename DTYPE>
         void DictBetween<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
@@ -145,7 +156,12 @@ namespace lqf {
                                                    numEntry, rawLower_, rawUpper_);
         }
 
-        DeltaEq::DeltaEq(uint32_t index, const int target) : SboostPredicate<Int32Type>(index), target_(target) {}
+        template<typename DTYPE>
+        unique_ptr<DictBetween<DTYPE>> DictBetween<DTYPE>::build(const T &lower, const T &upper) {
+            return unique_ptr<DictBetween<DTYPE>>(new DictBetween<DTYPE>(lower, upper));
+        }
+
+        DeltaEq::DeltaEq(const int target) : target_(target) {}
 
         void DeltaEq::processDict(Int32Dictionary &) {}
 
@@ -154,7 +170,11 @@ namespace lqf {
             ::sboost::encoding::deltabp::equal(data, bitmap, bitmap_offset, numEntry, target_);
         }
 
-        DeltaLess::DeltaLess(uint32_t index, const int target) : SboostPredicate(index), target_(target) {}
+        unique_ptr<DeltaEq> DeltaEq::build(const int target) {
+            return unique_ptr<DeltaEq>(new DeltaEq(target));
+        }
+
+        DeltaLess::DeltaLess(const int target) : target_(target) {}
 
         void DeltaLess::processDict(Int32Dictionary &) {}
 
@@ -163,8 +183,12 @@ namespace lqf {
             ::sboost::encoding::deltabp::less(data, bitmap, bitmap_offset, numEntry, target_);
         }
 
-        DeltaBetween::DeltaBetween(uint32_t index, const int lower, const int upper)
-                : SboostPredicate(index), lower_(lower), upper_(upper) {}
+        unique_ptr<DeltaLess> DeltaLess::build(const int target) {
+            return unique_ptr<DeltaLess>(new DeltaLess(target));
+        }
+
+        DeltaBetween::DeltaBetween(const int lower, const int upper)
+                : lower_(lower), upper_(upper) {}
 
         void DeltaBetween::processDict(Int32Dictionary &) {}
 
@@ -173,15 +197,45 @@ namespace lqf {
             ::sboost::encoding::deltabp::between(data, bitmap, bitmap_offset, numEntry, lower_, upper_);
         }
 
-        template class DictEq<Int32Type>;
-        template class DictEq<DoubleType>;
-        template class DictEq<ByteArrayType>;
-        template class DictLess<Int32Type>;
-        template class DictLess<DoubleType>;
-        template class DictLess<ByteArrayType>;
-        template class DictBetween<Int32Type>;
-        template class DictBetween<DoubleType>;
-        template class DictBetween<ByteArrayType>;
+        unique_ptr<DeltaBetween> DeltaBetween::build(const int lower, const int upper) {
+            return unique_ptr<DeltaBetween>(new DeltaBetween(lower, upper));
+        }
+
+        template
+        class DictEq<Int32Type>;
+
+        template
+        class DictEq<DoubleType>;
+
+        template
+        class DictEq<ByteArrayType>;
+
+        template
+        class DictLess<Int32Type>;
+
+        template
+        class DictLess<DoubleType>;
+
+        template
+        class DictLess<ByteArrayType>;
+
+        template
+        class DictBetween<Int32Type>;
+
+        template
+        class DictBetween<DoubleType>;
+
+        template
+        class DictBetween<ByteArrayType>;
+
+        template
+        class SboostPredicate<Int32Type>;
+
+        template
+        class SboostPredicate<DoubleType>;
+
+        template
+        class SboostPredicate<ByteArrayType>;
     }
 }
 
