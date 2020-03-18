@@ -38,7 +38,7 @@ TEST(FilterMatTest, Mat) {
 
     auto ptable = ParquetTable::Open("lineitem", 0x7);
 
-    function<bool(DataField &)> pred = [](DataField &field) {
+    function<bool(const DataField &)> pred = [](const DataField &field) {
         return field.asInt() % 10 == 0;
     };
     ColFilter filter({new SimpleColPredicate(0, pred)});

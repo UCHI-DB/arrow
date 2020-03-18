@@ -24,11 +24,11 @@ namespace lqf {
         double *dval_;
         ByteArray **sval_;
     public:
-        inline int32_t asInt() { return *ival_; }
+        inline int32_t asInt() const { return *ival_; }
 
-        inline double asDouble() { return *dval_; }
+        inline double asDouble() const { return *dval_; }
 
-        inline ByteArray *asByteArray() { return *sval_; }
+        inline ByteArray *asByteArray() const { return *sval_; }
 
         inline void operator=(int32_t value) { *ival_ = value; }
 
@@ -38,7 +38,7 @@ namespace lqf {
 
         inline void operator=(uint64_t *raw) { raw_ = raw; };
 
-        inline uint64_t *data() { return raw_; }
+        inline uint64_t *data() const { return raw_; }
 
         inline void operator=(DataField &df) { *raw_ = *df.raw_; }
     };
@@ -162,7 +162,7 @@ namespace lqf {
 
         int32_t lookup(const T &key);
 
-        unique_ptr<vector<uint32_t>> list(function<bool(T &)>);
+        unique_ptr<vector<uint32_t>> list(function<bool(const T &)>);
 
         inline uint32_t size() {
             return size_;
@@ -310,7 +310,7 @@ namespace lqf {
         vector<shared_ptr<Bitmap>> masks_;
     public:
 
-        MaskedTable(ParquetTable *, unordered_map<uint32_t, shared_ptr<Bitmap>>&);
+        MaskedTable(ParquetTable *, unordered_map<uint32_t, shared_ptr<Bitmap>> &);
 
         virtual ~MaskedTable();
 

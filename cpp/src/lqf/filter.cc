@@ -11,7 +11,6 @@
 using namespace std;
 using namespace std::placeholders;
 using namespace sboost::encoding;
-using namespace lqf;
 
 namespace lqf {
 
@@ -30,7 +29,7 @@ namespace lqf {
 
     ColPredicate::~ColPredicate() {}
 
-    SimpleColPredicate::SimpleColPredicate(uint32_t index, function<bool(DataField &)> pred)
+    SimpleColPredicate::SimpleColPredicate(uint32_t index, function<bool(const DataField &)> pred)
             : ColPredicate(index), predicate_(pred) {}
 
     shared_ptr<Bitmap> SimpleColPredicate::filterBlock(Block &block, Bitmap &skip) {
@@ -164,7 +163,7 @@ namespace lqf {
         }
 
         template<typename DTYPE>
-        DictMultiEq<DTYPE>::DictMultiEq(function<bool(T & )> pred) : predicate_(pred) {}
+        DictMultiEq<DTYPE>::DictMultiEq(function<bool(const T &)> pred) : predicate_(pred) {}
 
         template<typename DTYPE>
         void DictMultiEq<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
@@ -197,10 +196,9 @@ namespace lqf {
         }
 
         template<typename DTYPE>
-        unique_ptr<DictMultiEq<DTYPE>> DictMultiEq<DTYPE>::build(function<bool(T & )> pred) {
+        unique_ptr<DictMultiEq<DTYPE>> DictMultiEq<DTYPE>::build(function<bool(const T &)> pred) {
             return unique_ptr<DictMultiEq<DTYPE>>(new DictMultiEq<DTYPE>(pred));
         }
-
 
         DeltaEq::DeltaEq(const int target) : target_(target) {}
 

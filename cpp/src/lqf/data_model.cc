@@ -280,7 +280,7 @@ namespace lqf {
     }
 
     template<typename DTYPE>
-    unique_ptr<vector<uint32_t>> Dictionary<DTYPE>::list(function<bool(T & )> pred) {
+    unique_ptr<vector<uint32_t>> Dictionary<DTYPE>::list(function<bool(const T & )> pred) {
         unique_ptr<vector<uint32_t>> result = unique_ptr<vector<uint32_t>>(new vector<uint32_t>());
         for (uint32_t i = 0; i < size_; ++i) {
             if (pred(buffer_[i])) {

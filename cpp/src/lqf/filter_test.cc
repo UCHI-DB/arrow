@@ -55,7 +55,7 @@ using namespace lqf;
 TEST_F(ColFilterTest, FilterOnSimpleCol) {
     auto ptable = ParquetTable::Open("lineitem", 7);
     initializer_list<ColPredicate *> list = {
-            new SimpleColPredicate(0, [](DataField &field) { return field.asInt() % 10 == 0; })};
+            new SimpleColPredicate(0, [](const DataField &field) { return field.asInt() % 10 == 0; })};
     auto filter = make_shared<ColFilter>(list);
 
     auto filtered = filter->filter(*ptable);
@@ -94,12 +94,21 @@ using namespace lqf::sboost;
 TEST_F(ColFilterTest, FilterSboost) {
     auto ptable = ParquetTable::Open("lineitem", (1 << 14) - 1);
 
-    function<bool(ByteArray &)> pred = [](ByteArray &input) {
-        return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), "BRASS", 5);
+    function<bool(const ByteArray &)> pred = [](const ByteArray &input) {
+        return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
+    };
+    function<bool(const DataField &)> pred2 = [](const DataField& field) {
+        ByteArray* input = field.asByteArray();
+        return !strncmp(reinterpret_cast<const char *>(input->ptr + input->len - 3), "AIL", 3);
     };
     ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, pred))});
 
-    auto filtered = filter.filter(*ptable);
+    auto filtered = filter.filter(*ptable)->blocks()->collect();
+    auto result = (*filtered)[0];
 
-    filtered->blocks()->collect();
+    ColFilter regFilter({new SimpleColPredicate(14, pred2)});
+    auto filtered2 = regFilter.filter(*ptable)->blocks()->collect();
+    auto result2 = (*filtered2)[0];
+
+    EXPECT_EQ(result2->size(), result->size());
 }

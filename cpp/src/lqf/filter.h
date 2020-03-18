@@ -41,9 +41,9 @@ namespace lqf {
 
     class SimpleColPredicate : public ColPredicate {
     private:
-        function<bool(DataField &)> predicate_;
+        function<bool(const DataField &)> predicate_;
     public:
-        SimpleColPredicate(uint32_t, function<bool(DataField &)>);
+        SimpleColPredicate(uint32_t, function<bool(const DataField &)>);
 
         ~SimpleColPredicate() {}
 
@@ -134,17 +134,17 @@ namespace lqf {
         template<typename DTYPE>
         class DictMultiEq : public RawAccessor<DTYPE> {
             using T = typename DTYPE::c_type;
-            function<bool(T &)> predicate_;
+            function<bool(const T &)> predicate_;
             unique_ptr<vector<uint32_t>> keys_;
         public:
-            DictMultiEq(function<bool(T &)> pred);
+            DictMultiEq(function<bool(const T &)> pred);
 
             void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
 
-            static unique_ptr<DictMultiEq<DTYPE>> build(function<bool(T &)>);
+            static unique_ptr<DictMultiEq<DTYPE>> build(function<bool(const T &)>);
         };
 
         using Int32DictMultiEq= DictMultiEq<Int32Type>;
