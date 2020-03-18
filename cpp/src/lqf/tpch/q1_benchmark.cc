@@ -26,6 +26,7 @@ namespace lqf {
                                                      LineItem::DISCOUNT, LineItem::TAX, LineItem::RETURNFLAG,
                                                      LineItem::LINESTATUS});
 
+
             // Use SBoost Filter
             ColFilter colFilter(
                     {new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))});

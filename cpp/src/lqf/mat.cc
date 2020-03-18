@@ -30,4 +30,17 @@ namespace lqf {
             loader_((*irows)[i], (*orows)[i]);
         }
     }
+
+    shared_ptr<Table> FilterMat::mat(Table &input) {
+        unordered_map<uint32_t, shared_ptr<Bitmap>> map;
+        ParquetTable *owner;
+        function<void(const shared_ptr<Block> &)> processor = [&map, &owner](const shared_ptr<Block> &block) {
+            auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
+            owner = mblock->inner()->owner();
+            map[mblock->inner()->index()] = mblock->mask();
+        };
+        input.blocks()->foreach(processor);
+
+        return make_shared<MaskedTable>(owner, map);
+    }
 }

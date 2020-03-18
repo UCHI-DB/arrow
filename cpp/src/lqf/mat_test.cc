@@ -32,3 +32,7 @@ TEST(MemMatTest, Mat) {
     EXPECT_EQ(0, (*rows)[10][1].asInt());
     EXPECT_DOUBLE_EQ(0, (*rows)[10][2].asDouble());
 }
+
+TEST(FilterMatTest, Mat) {
+    throw "not implemented";
+}

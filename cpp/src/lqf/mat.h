@@ -10,7 +10,7 @@
 #define MLB [](DataRow& in, DataRow& out) {
 #define MI(i, j) out[j] = in[i].asInt();
 #define MD(i, j) out[j] = in[i].asDouble();
-#define MB(i, j) out[j] = in[i].asString();
+#define MB(i, j) out[j] = in[i].asByteArray();
 #define MLE }
 
 namespace lqf {
@@ -26,6 +26,13 @@ namespace lqf {
         function<void(DataRow &, DataRow &)> loader_;
 
         void matBlock(MemTable *table, const shared_ptr<Block> &);
+    };
+
+    /// Enable multi-load of filtered tables
+
+    class FilterMat {
+    public:
+        shared_ptr<Table> mat(Table &input);
     };
 
 }

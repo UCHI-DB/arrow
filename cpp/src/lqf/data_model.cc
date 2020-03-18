@@ -279,12 +279,23 @@ namespace lqf {
         return -(low + 1);  // key not found.
     }
 
-    ParquetBlock::ParquetBlock(shared_ptr<RowGroupReader> rowGroup, uint32_t index, uint64_t columns)
-            : rowGroup_(rowGroup), index_(index), columns_(columns) {}
-
-    ParquetBlock::~ParquetBlock() {
-
+    template<typename DTYPE>
+    unique_ptr<vector<uint32_t>> Dictionary<DTYPE>::list(function<bool(T & )> pred) {
+        unique_ptr<vector<uint32_t>> result = unique_ptr<vector<uint32_t>>(new vector<uint32_t>());
+        for (uint32_t i = 0; i < size_; ++i) {
+            if (pred(buffer_[i])) {
+                result->push_back(i);
+            }
+        }
+        return result;
     }
+
+
+    ParquetBlock::ParquetBlock(ParquetTable *owner, shared_ptr<RowGroupReader> rowGroup, uint32_t index,
+                               uint64_t columns) : owner_(owner), rowGroup_(rowGroup), index_(index),
+                                                   columns_(columns) {}
+
+    ParquetBlock::~ParquetBlock() {}
 
     uint64_t ParquetBlock::size() {
         return rowGroup_->metadata()->num_rows();
@@ -473,9 +484,7 @@ namespace lqf {
         return Open(filename, ccs);
     }
 
-    ParquetTable::~ParquetTable() {
-
-    }
+    ParquetTable::~ParquetTable() {}
 
     shared_ptr<Stream<shared_ptr<Block>>> ParquetTable::blocks() {
         function<shared_ptr<Block>(const int &)> mapper = [=](const int &idx) {
@@ -492,7 +501,34 @@ namespace lqf {
 
     shared_ptr<ParquetBlock> ParquetTable::createParquetBlock(const int &block_idx) {
         auto rowGroup = fileReader_->RowGroup(block_idx);
-        return make_shared<ParquetBlock>(rowGroup, block_idx, columns_);
+        return make_shared<ParquetBlock>(this, rowGroup, block_idx, columns_);
+    }
+
+    MaskedTable::MaskedTable(ParquetTable *inner, unordered_map<uint32_t, shared_ptr<Bitmap>> &masks)
+            : inner_(inner) {
+        masks_ = vector<shared_ptr<Bitmap>>(masks.size());
+        for (auto ite = masks.begin(); ite != masks.end(); ++ite) {
+            masks_[ite->first] = move(ite->second);
+        }
+    }
+
+    MaskedTable::~MaskedTable() {}
+
+    using namespace std::placeholders;
+
+    shared_ptr<Stream<shared_ptr<Block>>> MaskedTable::blocks() {
+        function<shared_ptr<Block>(const shared_ptr<Block> &)> mapper =
+                bind(&MaskedTable::buildMaskedBlock, this, _1);
+        return inner_->blocks()->map(mapper);
+    }
+
+    uint32_t MaskedTable::numFields() {
+        return inner_->numFields();
+    }
+
+    shared_ptr<Block> MaskedTable::buildMaskedBlock(const shared_ptr<Block> &input) {
+        auto pblock = dynamic_pointer_cast<ParquetBlock>(input);
+        return make_shared<MaskedBlock>(pblock, masks_[pblock->index()]);
     }
 
     TableView::TableView(uint32_t num_fields, shared_ptr<Stream<shared_ptr<Block>>> stream)

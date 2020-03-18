@@ -162,6 +162,8 @@ namespace lqf {
 
         int32_t lookup(const T &key);
 
+        unique_ptr<vector<uint32_t>> list(function<bool(T &)>);
+
         inline uint32_t size() {
             return size_;
         }
@@ -214,17 +216,24 @@ namespace lqf {
     using DoubleAccessor = RawAccessor<DoubleType>;
     using ByteArrayAccessor = RawAccessor<ByteArrayType>;
 
+    class ParquetTable;
+
     class ParquetBlock : public Block {
     private:
+        ParquetTable *owner_;
         shared_ptr<RowGroupReader> rowGroup_;
         uint32_t index_;
         uint64_t columns_;
     public:
-        ParquetBlock(shared_ptr<RowGroupReader>, uint32_t, uint64_t);
+        ParquetBlock(ParquetTable *, shared_ptr<RowGroupReader>, uint32_t, uint64_t);
 
         virtual ~ParquetBlock();
 
         uint64_t size() override;
+
+        inline uint32_t index() { return index_; }
+
+        inline ParquetTable *owner() { return owner_; }
 
         template<typename DTYPE>
         shared_ptr<Bitmap> raw(uint32_t col_index, RawAccessor<DTYPE> *accessor);
@@ -247,6 +256,10 @@ namespace lqf {
         virtual ~MaskedBlock();
 
         uint64_t size() override;
+
+        inline shared_ptr<ParquetBlock> inner() { return inner_; }
+
+        inline shared_ptr<Bitmap> mask() { return mask_; }
 
         unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
@@ -276,9 +289,7 @@ namespace lqf {
 
         virtual ~ParquetTable();
 
-        virtual shared_ptr<Stream<shared_ptr<Block>>>
-
-        blocks() override;
+        virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         uint32_t numFields() override;
 
@@ -291,6 +302,24 @@ namespace lqf {
     protected:
         shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
 
+    };
+
+    class MaskedTable : public Table {
+    private:
+        ParquetTable *inner_;
+        vector<shared_ptr<Bitmap>> masks_;
+    public:
+
+        MaskedTable(ParquetTable *, unordered_map<uint32_t, shared_ptr<Bitmap>>&);
+
+        virtual ~MaskedTable();
+
+        virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
+
+        uint32_t numFields() override;
+
+    protected:
+        shared_ptr<Block> buildMaskedBlock(const shared_ptr<Block> &);
     };
 
     class TableView : public Table {

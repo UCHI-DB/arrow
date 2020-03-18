@@ -60,7 +60,7 @@ public:
 };
 
 TEST_F(ParquetBlockTest, Column) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 3);
     auto col = block->col(1);
 //    std::vector<int32_t> buffer;
 //    for(int i = 0 ;i<100;++i) {
@@ -123,7 +123,7 @@ public:
 
 
 TEST_F(ParquetBlockTest, Raw) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 3);
     auto scanner = new IntDictScanner();
     block->raw(1, scanner);
     auto dict = scanner->accessDict();
@@ -146,7 +146,7 @@ TEST_F(ParquetBlockTest, Raw) {
 }
 
 TEST_F(ParquetBlockTest, Row) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 0x17);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 0x17);
     auto rows = block->rows();
 
     // Test reading and repeatable read
@@ -177,7 +177,7 @@ TEST_F(ParquetBlockTest, Row) {
 }
 
 TEST_F(ParquetBlockTest, Mask) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 3);
 
     shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(100);
     bitmap->put(4);
@@ -204,7 +204,7 @@ TEST_F(ParquetBlockTest, Mask) {
 }
 
 TEST_F(ParquetBlockTest, MaskOnMask) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 3);
 
     shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(100);
     bitmap->put(4);
@@ -252,7 +252,7 @@ public:
 using namespace parquet;
 
 TEST_F(ParquetBlockTest, RawAndDict) {
-    auto block = make_shared<ParquetBlock>(rowGroup_, 0, 3);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 3);
     shared_ptr<RawDataAccessorForTest> accessor = make_shared<RawDataAccessorForTest>();
     auto bitmap = block->raw(0, accessor.get());
 
@@ -260,6 +260,9 @@ TEST_F(ParquetBlockTest, RawAndDict) {
     EXPECT_EQ(29, accessor->dict_value_);
 }
 
+TEST(MaskedTableTest, Create) {
+    throw "not implemented";
+}
 
 TEST(MemTableTest, Create) {
     auto mt = MemTable::Make(5);
@@ -283,8 +286,8 @@ TEST(TableViewTest, Create) {
     auto blocks = parquetTable->blocks();
     TableView tableView(parquetTable->numFields(), blocks);
 
-    tableView.blocks()->foreach([](const shared_ptr<Block>& block){cout<<block->size()<<endl;});
-    tableView.blocks()->foreach([](const shared_ptr<Block>& block){cout<<block->size()<<endl;});
+    tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
+    tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
 }
 
 TEST(DataRowTest, Copy) {

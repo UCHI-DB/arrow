@@ -41,9 +41,9 @@ namespace lqf {
 
     class SimpleColPredicate : public ColPredicate {
     private:
-        function<bool(DataField & )> predicate_;
+        function<bool(DataField &)> predicate_;
     public:
-        SimpleColPredicate(uint32_t, function<bool(DataField & )>);
+        SimpleColPredicate(uint32_t, function<bool(DataField &)>);
 
         ~SimpleColPredicate() {}
 
@@ -55,8 +55,8 @@ namespace lqf {
         template<typename DTYPE>
         class SboostPredicate : public ColPredicate {
         public:
-            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()> accbuilder):
-            ColPredicate (index), builder_(accbuilder) {}
+            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()> accbuilder) :
+                    ColPredicate(index), builder_(accbuilder) {}
 
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
 
@@ -77,12 +77,12 @@ namespace lqf {
         public:
             DictEq(const T &target);
 
-            void processDict(Dictionary <DTYPE> &dict) override;
+            void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
 
-            static unique_ptr<DictEq<DTYPE>> build(const T& target);
+            static unique_ptr<DictEq<DTYPE>> build(const T &target);
         };
 
         using Int32DictEq = DictEq<Int32Type>;
@@ -97,12 +97,12 @@ namespace lqf {
         public:
             DictLess(const T &target);
 
-            void processDict(Dictionary <DTYPE> &dict) override;
+            void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
 
-            static unique_ptr<DictLess<DTYPE>> build(const T& target);
+            static unique_ptr<DictLess<DTYPE>> build(const T &target);
         };
 
         using Int32DictLess = DictLess<Int32Type>;
@@ -119,17 +119,37 @@ namespace lqf {
         public:
             DictBetween(const T &lower, const T &upper);
 
-            void processDict(Dictionary <DTYPE> &dict) override;
+            void processDict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
 
-            static unique_ptr<DictBetween<DTYPE>> build(const T& lower, const T& upper);
+            static unique_ptr<DictBetween<DTYPE>> build(const T &lower, const T &upper);
         };
 
         using Int32DictBetween = DictBetween<Int32Type>;
         using DoubleDictBetween = DictBetween<DoubleType>;
         using ByteArrayDictBetween = DictBetween<ByteArrayType>;
+
+        template<typename DTYPE>
+        class DictMultiEq : public RawAccessor<DTYPE> {
+            using T = typename DTYPE::c_type;
+            function<bool(T &)> predicate_;
+            unique_ptr<vector<uint32_t>> keys_;
+        public:
+            DictMultiEq(function<bool(T &)> pred);
+
+            void processDict(Dictionary<DTYPE> &dict) override;
+
+            void scanPage(uint64_t numEntry, const uint8_t *data,
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DictMultiEq<DTYPE>> build(function<bool(T &)>);
+        };
+
+        using Int32DictMultiEq= DictMultiEq<Int32Type>;
+        using DoubleDictMultiEq= DictMultiEq<DoubleType>;
+        using ByteArrayDictMultiEq= DictMultiEq<ByteArrayType>;
 
         class DeltaEq : public RawAccessor<Int32Type> {
         private:
@@ -189,12 +209,12 @@ namespace lqf {
 
     class RowFilter : public Filter {
     private:
-        function<bool(DataRow & )> predicate_;
+        function<bool(DataRow &)> predicate_;
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
 
     public:
-        RowFilter(function<bool(DataRow & )> pred);
+        RowFilter(function<bool(DataRow &)> pred);
 
         virtual ~RowFilter() {}
     };

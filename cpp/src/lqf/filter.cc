@@ -5,6 +5,8 @@
 #include "filter.h"
 #include <sboost/encoding/rlehybrid.h>
 #include <functional>
+#include <sboost/simd.h>
+#include <sboost/bitmap_writer.h>
 
 using namespace std;
 using namespace std::placeholders;
@@ -161,6 +163,45 @@ namespace lqf {
             return unique_ptr<DictBetween<DTYPE>>(new DictBetween<DTYPE>(lower, upper));
         }
 
+        template<typename DTYPE>
+        DictMultiEq<DTYPE>::DictMultiEq(function<bool(T & )> pred) : predicate_(pred) {}
+
+        template<typename DTYPE>
+        void DictMultiEq<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
+            keys_ = move(dict.list(predicate_));
+        };
+
+        template<typename DTYPE>
+        void DictMultiEq<DTYPE>::scanPage(uint64_t numEntry, const uint8_t *data,
+                                          uint64_t *bitmap, uint64_t bitmap_offset) {
+            uint8_t bitWidth = data[0];
+
+            uint32_t buffer_size = (numEntry + 63) >> 6;
+            uint64_t *page_oneresult = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * buffer_size);
+            uint64_t *page_result = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * buffer_size);
+            memset((void *) page_oneresult, 0, sizeof(uint64_t) * buffer_size);
+            memset((void *) page_result, 0, sizeof(uint64_t) * buffer_size);
+
+            auto ite = keys_.get()->begin();
+            ::sboost::encoding::rlehybrid::equal(data + 1, page_result, 0, bitWidth,
+                                                 numEntry, *ite);
+            ite++;
+            while (ite != keys_.get()->end()) {
+                ::sboost::encoding::rlehybrid::equal(data + 1, page_oneresult, 0, bitWidth,
+                                                     numEntry, *ite);
+                ::sboost::simd::simd_or(page_result, page_oneresult, buffer_size);
+                ite++;
+            }
+            ::sboost::BitmapWriter writer(bitmap, bitmap_offset);
+            writer.appendWord(page_result, numEntry);
+        }
+
+        template<typename DTYPE>
+        unique_ptr<DictMultiEq<DTYPE>> DictMultiEq<DTYPE>::build(function<bool(T & )> pred) {
+            return unique_ptr<DictMultiEq<DTYPE>>(new DictMultiEq<DTYPE>(pred));
+        }
+
+
         DeltaEq::DeltaEq(const int target) : target_(target) {}
 
         void DeltaEq::processDict(Int32Dictionary &) {}
@@ -227,6 +268,15 @@ namespace lqf {
 
         template
         class DictBetween<ByteArrayType>;
+
+        template
+        class DictMultiEq<Int32Type>;
+
+        template
+        class DictMultiEq<DoubleType>;
+
+        template
+        class DictMultiEq<ByteArrayType>;
 
         template
         class SboostPredicate<Int32Type>;

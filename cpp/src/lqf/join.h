@@ -5,6 +5,7 @@
 #ifndef CHIDATA_LQF_JOIN_H
 #define CHIDATA_LQF_JOIN_H
 
+#include <climits>
 #include "data_model.h"
 
 namespace lqf {

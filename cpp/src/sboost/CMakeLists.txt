@@ -32,7 +32,7 @@ set(SBOOST_SRC
         encoding/deltabp.cc
         encoding/encoding_utils.cc
         encoding/rlehybrid.cc
-        )
+        simd.cc)
 
 add_library(sboost_objlib OBJECT ${SBOOST_SRC})
 set_property(TARGET sboost_objlib PROPERTY POSITION_INDEPENDENT_CODE 1)

@@ -34,7 +34,7 @@ TEST(RowFilterTest, Filter) {
         (*row2)[i][0] = (i + 3) * i + 1;
     }
 
-    function<bool(DataRow & )> pred = [](DataRow &row) {
+    function<bool(DataRow &)> pred = [](DataRow &row) {
         return row[0].asInt() % 5 == 0;
     };
 
@@ -89,6 +89,17 @@ TEST_F(ColFilterTest, FilterOnSimpleCol) {
     }
 }
 
-TEST_F(ColFilterTest, FilterSboost) {
+using namespace lqf::sboost;
 
+TEST_F(ColFilterTest, FilterSboost) {
+    auto ptable = ParquetTable::Open("lineitem", (1 << 14) - 1);
+
+    function<bool(ByteArray &)> pred = [](ByteArray &input) {
+        return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), "BRASS", 5);
+    };
+    ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, pred))});
+
+    filter.filter(*ptable);
+
+    throw "not implemented";
 }

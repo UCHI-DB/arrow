@@ -6,15 +6,18 @@
 #include <lqf/data_model.h>
 #include <lqf/filter.h>
 #include <lqf/join.h>
+#include <lqf/mat.h>
 #include "tpch_query.h"
 
 namespace lqf {
     namespace tpch {
 
+        using namespace sboost;
+
         void executeQ2() {
             ByteArray region("EUROPE");
             int size = 15;
-            ByteArray type("BRASS");
+            const char *const type = "BRASS";
 
             auto partSuppTable = ParquetTable::Open(PartSupp::path, {PartSupp::PARTKEY, PartSupp::SUPPKEY});
 
@@ -60,123 +63,128 @@ namespace lqf {
 
 //            Reload reloadNation = new Reload();
 //            reloadNation.getLoadingProperties().setLoadColumns(new int[]{Nation.NATIONKEY, Nation.NAME});
-//            Table memNationTable = new MemTable(reloadNation.reload(filteredNation));
+            MemMat nationMat(3, MLB MI(0, 0)
+                MB(1, 1)
+                MI(2, 2) MLE);
+            auto memNationTable = nationMat.mat(*filteredNation);
 
             HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
-           auto filteredSupplier = new FilterMat().mat(*snJoin.join(*supplierTable, *memNationTable));
+            auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
 
-            Filter partFilter = new ColPredFilter(
-                    new DictEqPredicate(Part.SIZE, dict->dict.encodeInt(size)),
-                    new DictMultiEqPredicate(Part.TYPE,
-                                             dict->dict.filterBinary(b->b.toStringUsingUTF8().endsWith(type)))
-//                new PredColPredicate(Part.TYPE, ci -> ci.getBinary().toStringUsingUTF8().endsWith(type))
-            );
-            Table
-            filteredPart = new FilterMat().mat(partFilter.filter(partTable));
+            function<bool(ByteArray &)> typePred = [=](ByteArray &input) {
+                return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), type, 5);
+            };
 
-            // Sequence of these two joins
-            Join pspJoin = new HashFilterJoin(PartSupp.PARTKEY, Part.PARTKEY);
-            Table filteredPs = pspJoin.join(partSuppTable, filteredPart);
+            ColFilter partFilter({new SboostPredicate<Int32Type>(Part::SIZE,
+                                                                 bind(sboost::Int32DictEq::build, size)),
+                                  new SboostPredicate<ByteArrayType>(Part::TYPE,
+                                                                     bind(sboost::ByteArrayDictMultiEq::build,
+                                                                          typePred))});
+            auto filteredPart = partFilter.filter(*partTable);
 
-            Join pssJoin = new HashFilterJoin(PartSupp.SUPPKEY, Supplier.SUPPKEY);
-            filteredPs = pssJoin.join(filteredPs, filteredSupplier);
-
-            FilterMat psMat = new FilterMat();
-            filteredPs = psMat.mat(filteredPs);
-
-            Reload psReload = new Reload();
-            psReload.getLoadingProperties().setLoadColumns(new int[]{PartSupp.PARTKEY, PartSupp.SUPPLYCOST});
-            Table reloadedPs = psReload.reload(filteredPs);
-
-            Agg psAgg = new KeyAgg(new KeyReducerSource() {
-                @Override
-                public RowReducer apply(DataRow key) {
-                    PrimitiveDataRow header = new PrimitiveDataRow(2);
-                    header.setInt(0, key.getInt(PartSupp.PARTKEY));
-                    FieldsReducer fr = new FieldsReducer(header, new DoubleMin(PartSupp.SUPPLYCOST, 1));
-                    return fr;
-                }
-
-                @Override
-                public long applyAsLong(DataRow dataRow) {
-                    return dataRow.getInt(PartSupp.PARTKEY);
-                }
-            });
-            Table psMinCostTable = psAgg.agg(reloadedPs);
-
-            System.out.println(psMinCostTable.size());
-
-            partSuppTable.getLoadingProperties().setLoadColumns(
-                    new int[]{PartSupp.PARTKEY, PartSupp.SUPPKEY, PartSupp.SUPPLYCOST});
-            Join psmcJoin = new HashJoin(new RowBuilder() {
-                @Override
-                public DataRow build(int key, DataRow left, DataRow right) {
-                    PrimitiveDataRow result = new PrimitiveDataRow(3);
-                    result.setInt(0, key);
-                    result.setInt(1, left.getInt(PartSupp.SUPPKEY));
-                    return result;
-                }
-            }, PartSupp.PARTKEY, 0,
-                    (left, right)->left.getDouble(PartSupp.SUPPLYCOST) == right.getDouble(1));
-            Table pswithMinCost = psmcJoin.join(filteredPs, psMinCostTable);
-
-            partTable.getLoadingProperties().setLoadColumns(new int[]{Part.PARTKEY, Part.MFGR});
-            Join ps2part = new HashJoin(new RowBuilder() {
-                @Override
-                public DataRow build(int key, DataRow left, DataRow right) {
-                    FullDataRow res = new FullDataRow(new int[]{3, 1, 6});
-                    PartRow pr = (PartRow) right;
-                    res.setBinary(4, pr.p_mfgr);
-                    res.setInt(0, key);
-                    res.setInt(2, left.getInt(1));// SUPPKEY
-                    return res;
-                }
-            }, 0, Part.PARTKEY);
-            Table ps2partTable = ps2part.join(pswithMinCost, filteredPart);
-
-
-            // TODO When supplier is large, this can be replaced with BlockHashJoin
-            supplierTable.getLoadingProperties().setLoadColumns(new int[]{
-                    Supplier.SUPPKEY, Supplier.ACCTBAL,
-                    Supplier.NATIONKEY, Supplier.COMMENT,
-                    Supplier.PHONE, Supplier.NAME,
-                    Supplier.ADDRESS, Supplier.NATIONKEY
-            });
-            Join ps2supp = new HashJoin(new RowBuilder() {
-                @Override
-                public DataRow build(int key, DataRow left, DataRow right) {
-                    SupplierRow sr = (SupplierRow) right;
-                    left.setDouble(3, sr.s_acctbal);
-                    left.setBinary(7, sr.s_address);
-                    left.setBinary(9, sr.s_comment);
-                    left.setBinary(5, sr.s_name);
-                    left.setBinary(8, sr.s_phone);
-                    left.setInt(1, sr.s_nationkey);
-                    return left;
-                }
-            }, 2, Supplier.SUPPKEY);
-            Table result = ps2supp.join(ps2partTable, filteredSupplier);
-
-            Join supp2nationJoin = new HashJoin(new RowBuilder() {
-                @Override
-                public DataRow build(int key, DataRow left, DataRow right) {
-                    left.setBinary(6, right.getBinary(1));
-                    return left;
-                }
-            }, 1, Nation.NATIONKEY);
-            result = supp2nationJoin.join(result, memNationTable);
-
-
-            TopN sort = new TopN(100,
-                                 Comparator.nullsLast(Comparator.< DataRow > comparingDouble(row->- row.getDouble(3))
-                                         .thenComparing(row->row.getBinary(6).toStringUsingUTF8())
-                                         .thenComparing(row->row.getBinary(5).toStringUsingUTF8())
-                                         .thenComparingInt(row->row.getInt(0))));
-            result = sort.sort(result);
-
-            Printer.DefaultPrinter
-            printer = new Printer.DefaultPrinter();
-            printer.print(result);
+//            // Sequence of these two joins
+//            Join pspJoin = new HashFilterJoin(PartSupp.PARTKEY, Part.PARTKEY);
+//            Table filteredPs = pspJoin.join(partSuppTable, filteredPart);
+//
+//            Join pssJoin = new HashFilterJoin(PartSupp.SUPPKEY, Supplier.SUPPKEY);
+//            filteredPs = pssJoin.join(filteredPs, filteredSupplier);
+//
+//            FilterMat psMat = new FilterMat();
+//            filteredPs = psMat.mat(filteredPs);
+//
+//            Reload psReload = new Reload();
+//            psReload.getLoadingProperties().setLoadColumns(new int[]{PartSupp.PARTKEY, PartSupp.SUPPLYCOST});
+//            Table reloadedPs = psReload.reload(filteredPs);
+//
+//            Agg psAgg = new KeyAgg(new KeyReducerSource() {
+//                @Override
+//                public RowReducer apply(DataRow key) {
+//                    PrimitiveDataRow header = new PrimitiveDataRow(2);
+//                    header.setInt(0, key.getInt(PartSupp.PARTKEY));
+//                    FieldsReducer fr = new FieldsReducer(header, new DoubleMin(PartSupp.SUPPLYCOST, 1));
+//                    return fr;
+//                }
+//
+//                @Override
+//                public long applyAsLong(DataRow dataRow) {
+//                    return dataRow.getInt(PartSupp.PARTKEY);
+//                }
+//            });
+//            Table psMinCostTable = psAgg.agg(reloadedPs);
+//
+//            System.out.println(psMinCostTable.size());
+//
+//            partSuppTable.getLoadingProperties().setLoadColumns(
+//                    new int[]{PartSupp.PARTKEY, PartSupp.SUPPKEY, PartSupp.SUPPLYCOST});
+//            Join psmcJoin = new HashJoin(new RowBuilder() {
+//                @Override
+//                public DataRow build(int key, DataRow left, DataRow right) {
+//                    PrimitiveDataRow result = new PrimitiveDataRow(3);
+//                    result.setInt(0, key);
+//                    result.setInt(1, left.getInt(PartSupp.SUPPKEY));
+//                    return result;
+//                }
+//            }, PartSupp.PARTKEY, 0,
+//                    (left, right)->left.getDouble(PartSupp.SUPPLYCOST) == right.getDouble(1));
+//            Table pswithMinCost = psmcJoin.join(filteredPs, psMinCostTable);
+//
+//            partTable.getLoadingProperties().setLoadColumns(new int[]{Part.PARTKEY, Part.MFGR});
+//            Join ps2part = new HashJoin(new RowBuilder() {
+//                @Override
+//                public DataRow build(int key, DataRow left, DataRow right) {
+//                    FullDataRow res = new FullDataRow(new int[]{3, 1, 6});
+//                    PartRow pr = (PartRow) right;
+//                    res.setBinary(4, pr.p_mfgr);
+//                    res.setInt(0, key);
+//                    res.setInt(2, left.getInt(1));// SUPPKEY
+//                    return res;
+//                }
+//            }, 0, Part.PARTKEY);
+//            Table ps2partTable = ps2part.join(pswithMinCost, filteredPart);
+//
+//
+//            // TODO When supplier is large, this can be replaced with BlockHashJoin
+//            supplierTable.getLoadingProperties().setLoadColumns(new int[]{
+//                    Supplier.SUPPKEY, Supplier.ACCTBAL,
+//                    Supplier.NATIONKEY, Supplier.COMMENT,
+//                    Supplier.PHONE, Supplier.NAME,
+//                    Supplier.ADDRESS, Supplier.NATIONKEY
+//            });
+//            Join ps2supp = new HashJoin(new RowBuilder() {
+//                @Override
+//                public DataRow build(int key, DataRow left, DataRow right) {
+//                    SupplierRow sr = (SupplierRow) right;
+//                    left.setDouble(3, sr.s_acctbal);
+//                    left.setBinary(7, sr.s_address);
+//                    left.setBinary(9, sr.s_comment);
+//                    left.setBinary(5, sr.s_name);
+//                    left.setBinary(8, sr.s_phone);
+//                    left.setInt(1, sr.s_nationkey);
+//                    return left;
+//                }
+//            }, 2, Supplier.SUPPKEY);
+//            Table result = ps2supp.join(ps2partTable, filteredSupplier);
+//
+//            Join supp2nationJoin = new HashJoin(new RowBuilder() {
+//                @Override
+//                public DataRow build(int key, DataRow left, DataRow right) {
+//                    left.setBinary(6, right.getBinary(1));
+//                    return left;
+//                }
+//            }, 1, Nation.NATIONKEY);
+//            result = supp2nationJoin.join(result, memNationTable);
+//
+//
+//            TopN sort = new TopN(100,
+//                                 Comparator.nullsLast(Comparator.< DataRow > comparingDouble(row->- row.getDouble(3))
+//                                         .thenComparing(row->row.getBinary(6).toStringUsingUTF8())
+//                                         .thenComparing(row->row.getBinary(5).toStringUsingUTF8())
+//                                         .thenComparingInt(row->row.getInt(0))));
+//            result = sort.sort(result);
+//
+//            Printer.DefaultPrinter
+//            printer = new Printer.DefaultPrinter();
+//            printer.print(result);
 
         }
     }
