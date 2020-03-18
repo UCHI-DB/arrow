@@ -115,12 +115,23 @@ namespace lqf {
             output[index] = count_;
         }
 
-        template class Sum<int32_t, AsInt>;
-        template class Sum<double, AsDouble>;
-        template class Max<int32_t, AsInt>;
-        template class Max<double, AsDouble>;
-        template class Avg<int32_t, AsInt>;
-        template class Avg<double, AsDouble>;
+        template
+        class Sum<int32_t, AsInt>;
+
+        template
+        class Sum<double, AsDouble>;
+
+        template
+        class Max<int32_t, AsInt>;
+
+        template
+        class Max<double, AsDouble>;
+
+        template
+        class Avg<int32_t, AsInt>;
+
+        template
+        class Avg<double, AsDouble>;
     }
 
     HashCore::HashCore(uint32_t numFields, function<uint64_t(DataRow &)> hasher,
@@ -199,7 +210,7 @@ namespace lqf {
 
     void TableCore::reduce(TableCore &another) {
         for (uint32_t i = 0; i < container_.size(); ++i) {
-            if(container_[i]) {
+            if (container_[i]) {
                 container_[i]->merge(*(another.container_[i]));
             } else {
                 container_[i] = move(another.container_[i]);
@@ -211,10 +222,11 @@ namespace lqf {
         auto rows = block.rows();
         uint32_t counter = 0;
         for (uint32_t i = 0; i < container_.size(); ++i) {
-            if(container_[i]) {
+            if (container_[i].get()) {
                 container_[i]->dump((*rows)[counter++]);
             }
         }
+        block.compact(counter);
     }
 
     SimpleCore::SimpleCore(uint32_t numFields, function<unique_ptr<AggReducer>(DataRow &)> headerInit)

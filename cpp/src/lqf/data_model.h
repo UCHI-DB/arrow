@@ -36,7 +36,7 @@ namespace lqf {
 
         inline void operator=(ByteArray *value) { *sval_ = value; }
 
-        inline void operator=(uint64_t* raw) { raw_ = raw; };
+        inline void operator=(uint64_t *raw) { raw_ = raw; };
 
         inline uint64_t *data() { return raw_; }
 
@@ -56,7 +56,7 @@ namespace lqf {
             return (*this)[i];
         }
 
-        virtual void operator=(DataRow &row) { }
+        virtual void operator=(DataRow &row) {}
 
         virtual uint64_t *raw() {
             return nullptr;
@@ -316,11 +316,18 @@ namespace lqf {
 
         virtual ~MemTable();
 
-        shared_ptr<MemBlock> allocate(uint32_t num_rows);
+        virtual shared_ptr<MemBlock> allocate(uint32_t num_rows);
 
         shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         uint32_t numFields() override;
+    };
+
+    class ParallelMemTable : MemTable {
+    protected:
+        mutex lock_;
+    public:
+        shared_ptr<MemBlock> allocate(uint32_t) override;
     };
 
 }

@@ -27,6 +27,7 @@ set(LQF_SRCS
         join.cc
         print.cc
         sort.cc
+        mat.cc
         )
 
 add_arrow_lib(lqf
@@ -57,6 +58,7 @@ set(LQF_TEST_SRC
         join_test.cc
         print_test.cc
         sort_test.cc
+        mat_test.cc
         )
 
 add_test_case(all-test

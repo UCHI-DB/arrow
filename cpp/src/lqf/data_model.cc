@@ -528,6 +528,13 @@ namespace lqf {
         return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_));
     }
 
+    shared_ptr<MemBlock> ParallelMemTable::allocate(uint32_t num_rows) {
+        unique_lock<mutex> lock(lock_);
+        auto result = MemTable::allocate(num_rows);
+        lock.unlock();
+        return result;
+    }
+
 /**
  * Initialize the templates
  */
