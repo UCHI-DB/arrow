@@ -23,7 +23,7 @@ namespace lqf {
         private:
             std::mutex mutex_;
             std::condition_variable condition_;
-            unsigned long count_ = 0; // Initialized as locked.
+            uint32_t count_ = 0; // Initialized as locked.
 
         public:
             void notify() {
@@ -32,11 +32,32 @@ namespace lqf {
                 condition_.notify_one();
             }
 
+            void notify(uint32_t num) {
+                std::lock_guard<decltype(mutex_)> lock(mutex_);
+                count_ += num;
+                for (uint32_t i = 0; i < num; ++i) {
+                    condition_.notify_one();
+                }
+            }
+
             void wait() {
                 std::unique_lock<decltype(mutex_)> lock(mutex_);
                 while (!count_) // Handle spurious wake-ups.
                     condition_.wait(lock);
                 --count_;
+            }
+
+            void wait(uint32_t num) {
+                std::unique_lock<decltype(mutex_)> lock(mutex_);
+                uint32_t remain = num;
+                while (remain) {
+                    while (!count_) {
+                        condition_.wait(lock);
+                    }
+                    auto delta = std::min(remain, count_);
+                    remain -= delta;
+                    count_ -= delta;
+                }
             }
 
             bool try_wait() {
@@ -54,7 +75,6 @@ namespace lqf {
         class Task {
             friend Executor;
         protected:
-
             function<void()> runnable_;
         public:
             Task(function<void()> runnable) : runnable_(runnable) {}
@@ -88,6 +108,7 @@ namespace lqf {
         class Executor {
         protected:
             bool shutdown_;
+            Semaphore shutdown_guard_;
             uint32_t pool_size_;
             vector<unique_ptr<thread>> threads_;
             Semaphore has_task_;
@@ -120,7 +141,7 @@ namespace lqf {
                     futures.push_back(res->getFuture());
                 }
                 unique_ptr<vector<T>> result = unique_ptr<vector<T>>(new vector<T>());
-                for (auto ite = futures.begin();ite != futures.end();ite++) {
+                for (auto ite = futures.begin(); ite != futures.end(); ite++) {
                     (*ite).wait();
                     result->push_back((*ite).get());
                 }

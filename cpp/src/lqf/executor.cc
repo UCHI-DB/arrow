@@ -2,6 +2,7 @@
 // Created by harper on 3/14/20.
 //
 
+#include <iostream>
 #include "executor.h"
 
 namespace lqf {
@@ -28,6 +29,7 @@ namespace lqf {
             for (uint32_t i = 0; i < pool_size_; ++i) {
                 has_task_.notify();
             }
+            shutdown_guard_.wait(pool_size_);
         }
 
         shared_ptr<Executor> Executor::Make(uint32_t psize) {
@@ -60,6 +62,7 @@ namespace lqf {
                     task->run();
                 }
             }
+            shutdown_guard_.notify();
         }
     }
 }
