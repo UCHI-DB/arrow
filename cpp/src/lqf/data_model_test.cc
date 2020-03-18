@@ -261,7 +261,17 @@ TEST_F(ParquetBlockTest, RawAndDict) {
 }
 
 TEST(MaskedTableTest, Create) {
-    throw "not implemented";
+    auto ptable = ParquetTable::Open("lineitem", 0x7);
+
+    unordered_map<uint32_t, shared_ptr<Bitmap>> masks;
+    masks[0] = make_shared<SimpleBitmap>(1000);
+    auto maskTable = make_shared<MaskedTable>(ptable.get(), masks);
+
+    auto round1 = maskTable->blocks()->collect();
+    auto round2 = maskTable->blocks()->collect();
+
+    EXPECT_EQ(dynamic_pointer_cast<MaskedBlock>((*round1)[0])->mask()->size(),1000);
+    EXPECT_EQ(dynamic_pointer_cast<MaskedBlock>((*round2)[0])->mask()->size(),1000);
 }
 
 TEST(MemTableTest, Create) {

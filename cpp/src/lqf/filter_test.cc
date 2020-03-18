@@ -99,7 +99,7 @@ TEST_F(ColFilterTest, FilterSboost) {
     };
     ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, pred))});
 
-    filter.filter(*ptable);
+    auto filtered = filter.filter(*ptable);
 
-    throw "not implemented";
+    filtered->blocks()->collect();
 }
