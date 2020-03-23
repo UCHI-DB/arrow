@@ -3,6 +3,7 @@
 //
 
 #include "filter.h"
+#include "filter_executor.h"
 #include <sboost/encoding/rlehybrid.h>
 #include <functional>
 #include <sboost/simd.h>
@@ -65,6 +66,13 @@ namespace lqf {
 
     ColFilter::~ColFilter() { predicates_.clear(); }
 
+    shared_ptr<Table> ColFilter::filter(Table &input) {
+        for (auto ite = predicates_.begin(); ite != predicates_.end(); ++ite) {
+            FilterExecutor::inst->reg(input, (*ite).get());
+        }
+        return Filter::filter(input);
+    }
+
     shared_ptr<Bitmap> ColFilter::filterBlock(Block &input) {
         shared_ptr<Bitmap> result = make_shared<FullBitmap>(input.size());
         auto it = predicates_.begin();
@@ -93,8 +101,14 @@ namespace lqf {
 
         template<typename DTYPE>
         shared_ptr<Bitmap> SboostPredicate<DTYPE>::filterBlock(Block &block, Bitmap &) {
-            unique_ptr<RawAccessor<DTYPE>> accessor = builder_();
-            return static_cast<ParquetBlock &>(block).raw(index_, accessor.get());
+//            unique_ptr<RawAccessor<DTYPE>> accessor = builder_();
+//            return dynamic_cast<ParquetBlock &>(block).raw(index_, accessor.get());
+            return FilterExecutor::inst->executeSboost(block, this);
+        }
+
+        template<typename DTYPE>
+        unique_ptr<RawAccessor<DTYPE>> SboostPredicate<DTYPE>::build() {
+            return builder_();
         }
 
         template<typename DTYPE>
@@ -178,7 +192,7 @@ namespace lqf {
             uint32_t buffer_size = (numEntry + 63) >> 6;
             uint64_t *page_oneresult = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * buffer_size);
             uint64_t *page_result = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * buffer_size);
-            memset((void *) page_oneresult, 0, sizeof(uint64_t) * buffer_size);
+
             memset((void *) page_result, 0, sizeof(uint64_t) * buffer_size);
 
             auto ite = keys_.get()->begin();
@@ -186,6 +200,7 @@ namespace lqf {
                                                  numEntry, *ite);
             ite++;
             while (ite != keys_.get()->end()) {
+                memset((void *) page_oneresult, 0, sizeof(uint64_t) * buffer_size);
                 ::sboost::encoding::rlehybrid::equal(data + 1, page_oneresult, 0, bitWidth,
                                                      numEntry, *ite);
                 ::sboost::simd::simd_or(page_result, page_oneresult, buffer_size);

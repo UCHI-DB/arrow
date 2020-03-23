@@ -146,7 +146,7 @@ TEST_F(ParquetBlockTest, Raw) {
 }
 
 TEST_F(ParquetBlockTest, Row) {
-    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 0x17);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, (1<<14)-1);
     auto rows = block->rows();
 
     // Test reading and repeatable read
@@ -154,6 +154,8 @@ TEST_F(ParquetBlockTest, Row) {
     EXPECT_EQ(1, (*rows)[2][0].asInt());
     EXPECT_EQ(25, (*rows)[4][1].asInt());
     EXPECT_EQ(25, (*rows)[4][1].asInt());
+    EXPECT_EQ(ByteArray("NONE"), *(*rows)[4][13].asByteArray());
+    EXPECT_EQ(ByteArray("DELIVER IN PERSON"), *(*rows)[5][13].asByteArray());
 
     auto rows2 = block->rows();
     DataRow &row = rows2->next();

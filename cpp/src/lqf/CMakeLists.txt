@@ -24,6 +24,7 @@ set(LQF_SRCS
         bitmap.cc
         data_model.cc
         filter.cc
+        filter_executor.cc
         join.cc
         print.cc
         sort.cc

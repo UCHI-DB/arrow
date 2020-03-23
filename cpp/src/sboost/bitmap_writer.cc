@@ -35,18 +35,31 @@ namespace sboost {
 
     void BitmapWriter::appendWord(uint64_t *word, uint32_t count) {
         uint32_t remain = count;
-        data[index] |= word[0] << bitOffset;
-        remain -= bitOffset;
-        if (remain > 0) {
+        if (bitOffset == 0) {
             int destIndex = 0;
-            index++;
             while (remain >= 64) {
-                data[index++] = (word[destIndex] >> (64 - bitOffset)) | (word[destIndex + 1] << bitOffset);
-                destIndex++;
+                data[index++] = word[destIndex++];
                 remain -= 64;
             }
             if (remain > 0) {
-                data[index] = word[destIndex] << bitOffset;
+                data[index] = word[destIndex] & ((1L << remain) - 1);
+            }
+        } else {
+            int destIndex = 0;
+            while (remain >= 64) {
+                data[index] |= word[destIndex] << bitOffset;
+                data[++index] = word[destIndex++] >> (64 - bitOffset);
+                remain -= 64;
+            }
+            if (remain > 0) {
+                auto mask = (1L << remain) - 1;
+                auto masked = word[destIndex] & mask;
+                if (remain <= 64 - bitOffset) {
+                    data[index] |= masked << bitOffset;
+                } else {
+                    data[index++] |= masked << bitOffset;
+                    data[index] = masked >> (64 - bitOffset);
+                }
             }
         }
         bitOffset = (bitOffset + count) & 0x3F;

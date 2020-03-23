@@ -53,7 +53,7 @@ namespace lqf {
 //                return pr;
 //            });
 
-            ColFilter regionFilter({new SimpleColPredicate(Region::NAME, [&region](DataField &field) {
+            ColFilter regionFilter({new SimpleColPredicate(Region::NAME, [&region](const DataField &field) {
                 return (*field.asByteArray()) == region;
             })});
             auto filteredRegion = regionFilter.filter(*regionTable);
@@ -71,7 +71,7 @@ namespace lqf {
             HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
 
-            function<bool(ByteArray &)> typePred = [=](ByteArray &input) {
+            function<bool(const ByteArray &)> typePred = [=](const ByteArray &input) {
                 return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), type, 5);
             };
 

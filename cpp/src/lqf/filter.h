@@ -25,7 +25,7 @@ namespace lqf {
         virtual shared_ptr<Bitmap> filterBlock(Block &) = 0;
 
     public:
-        shared_ptr<Table> filter(Table &input);
+        virtual shared_ptr<Table> filter(Table &input);
     };
 
     class ColPredicate {
@@ -35,6 +35,10 @@ namespace lqf {
         ColPredicate(uint32_t);
 
         virtual ~ColPredicate();
+
+        inline uint32_t index() { return index_; }
+
+        virtual bool supportBatch() { return false; }
 
         virtual shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) = 0;
     };
@@ -59,6 +63,12 @@ namespace lqf {
                     ColPredicate(index), builder_(accbuilder) {}
 
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
+
+            unique_ptr<RawAccessor<DTYPE>> build();
+
+            bool supportBatch() override {
+                return true;
+            }
 
         protected:
             function<unique_ptr<RawAccessor<DTYPE>>()> builder_;
@@ -205,6 +215,8 @@ namespace lqf {
         ColFilter(initializer_list<ColPredicate *>);
 
         virtual ~ColFilter();
+
+        shared_ptr<Table> filter(Table &input) override;
     };
 
     class RowFilter : public Filter {

@@ -97,8 +97,8 @@ TEST_F(ColFilterTest, FilterSboost) {
     function<bool(const ByteArray &)> pred = [](const ByteArray &input) {
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
-    function<bool(const DataField &)> pred2 = [](const DataField& field) {
-        ByteArray* input = field.asByteArray();
+    function<bool(const DataField &)> pred2 = [](const DataField &field) {
+        ByteArray *input = field.asByteArray();
         return !strncmp(reinterpret_cast<const char *>(input->ptr + input->len - 3), "AIL", 3);
     };
     ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, pred))});
@@ -110,5 +110,12 @@ TEST_F(ColFilterTest, FilterSboost) {
     auto filtered2 = regFilter.filter(*ptable)->blocks()->collect();
     auto result2 = (*filtered2)[0];
 
+    auto raw1 = dynamic_pointer_cast<SimpleBitmap>(dynamic_pointer_cast<MaskedBlock>(result)->mask())->raw();
+    auto raw2 = dynamic_pointer_cast<SimpleBitmap>(dynamic_pointer_cast<MaskedBlock>(result2)->mask())->raw();
+
     EXPECT_EQ(result2->size(), result->size());
+    for (uint32_t i = 0; i < 94; i++) {
+        EXPECT_EQ(raw1[i], raw2[i]) << i;
+    }
+
 }

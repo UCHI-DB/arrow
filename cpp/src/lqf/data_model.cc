@@ -280,7 +280,7 @@ namespace lqf {
     }
 
     template<typename DTYPE>
-    unique_ptr<vector<uint32_t>> Dictionary<DTYPE>::list(function<bool(const T & )> pred) {
+    unique_ptr<vector<uint32_t>> Dictionary<DTYPE>::list(function<bool(const T &)> pred) {
         unique_ptr<vector<uint32_t>> result = unique_ptr<vector<uint32_t>>(new vector<uint32_t>());
         for (uint32_t i = 0; i < size_; ++i) {
             if (pred(buffer_[i])) {
@@ -296,6 +296,10 @@ namespace lqf {
                                                    columns_(columns) {}
 
     ParquetBlock::~ParquetBlock() {}
+
+    Table *ParquetBlock::owner() {
+        return this->owner_;
+    }
 
     uint64_t ParquetBlock::size() {
         return rowGroup_->metadata()->num_rows();
@@ -333,7 +337,8 @@ namespace lqf {
         shared_ptr<Page> page = pageReader->NextPage();
 
         if (page->type() == PageType::DICTIONARY_PAGE) {
-            accessor->dict(static_pointer_cast<DictionaryPage>(page));
+            auto dict = make_shared<Dictionary<DTYPE>>(static_pointer_cast<DictionaryPage>(page));
+            accessor->dict(dict);
         } else {
             accessor->data((DataPage *) page.get());
         }
@@ -391,8 +396,8 @@ namespace lqf {
         shared_ptr<ColumnReader> columnReader_;
         DataField dataField_;
         int64_t read_counter_;
-        uint64_t pos_;
-        uint64_t bufpos_;
+        int64_t pos_;
+        int64_t bufpos_;
         uint8_t width_;
         uint8_t *buffer_;
     public:
@@ -431,7 +436,7 @@ namespace lqf {
 
     protected:
         inline uint64_t *loadBuffer(uint64_t idx) {
-            if (idx < bufpos_ + COL_BUF_SIZE) {
+            if ((int64_t) idx < bufpos_ + COL_BUF_SIZE) {
                 return (uint64_t *) (buffer_ + width_ * (idx - bufpos_));
             } else {
                 columnReader_->MoveTo(idx);
@@ -442,7 +447,7 @@ namespace lqf {
         }
 
         inline uint64_t *loadBufferRaw(uint64_t idx) {
-            if (idx < bufpos_ + COL_BUF_SIZE) {
+            if ((int64_t) idx < bufpos_ + COL_BUF_SIZE) {
                 return (uint64_t *) (buffer_ + sizeof(int32_t) * (idx - bufpos_));
             } else {
                 columnReader_->MoveTo(idx);

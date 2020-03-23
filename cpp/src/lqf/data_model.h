@@ -22,19 +22,19 @@ namespace lqf {
         uint64_t *raw_;
         int32_t *ival_;
         double *dval_;
-        ByteArray **sval_;
+        ByteArray *sval_;
     public:
         inline int32_t asInt() const { return *ival_; }
 
         inline double asDouble() const { return *dval_; }
 
-        inline ByteArray *asByteArray() const { return *sval_; }
+        inline ByteArray *asByteArray() const { return sval_; }
 
         inline void operator=(int32_t value) { *ival_ = value; }
 
         inline void operator=(double value) { *dval_ = value; }
 
-        inline void operator=(ByteArray *value) { *sval_ = value; }
+        inline void operator=(ByteArray *value) { sval_ = value; }
 
         inline void operator=(uint64_t *raw) { raw_ = raw; };
 
@@ -105,8 +105,11 @@ namespace lqf {
         virtual uint64_t pos() = 0;
     };
 
+    class Table;
+
     class Block : public enable_shared_from_this<Block> {
     public:
+        virtual Table *owner() { return nullptr; }
 
         virtual uint64_t size() = 0;
 
@@ -176,7 +179,7 @@ namespace lqf {
     template<typename DTYPE>
     class RawAccessor {
     protected:
-        unique_ptr<Dictionary<DTYPE>> dict_;
+//        shared_ptr<Dictionary<DTYPE>> dict_;
 
         shared_ptr<SimpleBitmap> bitmap_;
 
@@ -191,17 +194,17 @@ namespace lqf {
 
         virtual ~RawAccessor() {}
 
-        inline void init(uint64_t size) {
+        virtual void init(uint64_t size) {
             bitmap_ = make_shared<SimpleBitmap>(size);
             offset_ = 0;
         }
 
-        inline void dict(shared_ptr<DictionaryPage> dictPage) {
-            dict_ = unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictPage));
-            processDict(*dict_);
+        virtual void dict(shared_ptr<Dictionary<DTYPE>> dict) {
+//            dict_ = dict;
+            processDict(*dict);
         }
 
-        inline void data(DataPage *dpage) {
+        virtual void data(DataPage *dpage) {
             // Assume all fields are mandatory, which is true for TPCH
             scanPage(dpage->num_values(), dpage->data(), bitmap_->raw(), offset_);
             offset_ += dpage->num_values();
@@ -233,7 +236,7 @@ namespace lqf {
 
         inline uint32_t index() { return index_; }
 
-        inline ParquetTable *owner() { return owner_; }
+        Table *owner() override;
 
         template<typename DTYPE>
         shared_ptr<Bitmap> raw(uint32_t col_index, RawAccessor<DTYPE> *accessor);

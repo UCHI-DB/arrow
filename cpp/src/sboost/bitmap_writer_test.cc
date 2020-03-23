@@ -22,7 +22,30 @@ TEST(Bitmap, appendWord) {
 
         EXPECT_EQ((content[idxa] >> offa) & 1, (another[idxb] >> offb) & 1) << i;
     }
+    for (int i = 100; i < 128; i++) {
+        int idxa = (i + 137) >> 6;
+        int offa = (i + 137) & 0x3f;
+
+        EXPECT_EQ((content[idxa] >> offa) & 1, 0) << i;
+    }
 }
+
+TEST(Bitmap, appendWordZeroOffset) {
+    uint64_t content[100] = {0};
+    BitmapWriter bitmap(content, 0);
+
+    uint64_t another[5] = {0x3f323daeeb004231, 0x3424ff1220183214, 0x4200325411013234, 0x423133134234dd23,
+                           0x3134143138420009};
+
+    bitmap.appendWord(another, 179);
+
+    for (int i = 0; i < 179; i++) {
+        int idxa = (i) >> 6;
+        int offa = (i) & 0x3f;
+        EXPECT_EQ((content[idxa] >> offa) & 1, (another[idxa] >> offa) & 1) << i;
+    }
+}
+
 
 TEST(Bitmap, appendBits) {
     uint64_t content[100] = {0};
