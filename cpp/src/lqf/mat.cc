@@ -36,7 +36,7 @@ namespace lqf {
         ParquetTable *owner;
         function<void(const shared_ptr<Block> &)> processor = [&map, &owner](const shared_ptr<Block> &block) {
             auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
-            owner = mblock->inner()->owner();
+            owner = static_cast<ParquetTable*>(mblock->inner()->owner());
             map[mblock->inner()->index()] = mblock->mask();
         };
         input.blocks()->foreach(processor);

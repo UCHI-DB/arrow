@@ -159,6 +159,8 @@ namespace lqf {
         T *buffer_;
         uint32_t size_;
     public:
+        Dictionary();
+
         Dictionary(shared_ptr<DictionaryPage> data);
 
         virtual ~Dictionary();
@@ -166,6 +168,13 @@ namespace lqf {
         int32_t lookup(const T &key);
 
         unique_ptr<vector<uint32_t>> list(function<bool(const T &)>);
+
+        Dictionary<DTYPE> &operator=(Dictionary<DTYPE> &&other) {
+            this->buffer_ = other.buffer_;
+            other.buffer_ = nullptr;
+            this->size_ = other.size_;
+            return *this;
+        }
 
         inline uint32_t size() {
             return size_;
@@ -179,13 +188,10 @@ namespace lqf {
     template<typename DTYPE>
     class RawAccessor {
     protected:
-//        shared_ptr<Dictionary<DTYPE>> dict_;
 
         shared_ptr<SimpleBitmap> bitmap_;
 
         uint64_t offset_;
-
-        virtual void processDict(Dictionary<DTYPE> &) {};
 
         virtual void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) {};
 
@@ -199,10 +205,7 @@ namespace lqf {
             offset_ = 0;
         }
 
-        virtual void dict(shared_ptr<Dictionary<DTYPE>> dict) {
-//            dict_ = dict;
-            processDict(*dict);
-        }
+        virtual void dict(Dictionary<DTYPE> &dict) {}
 
         virtual void data(DataPage *dpage) {
             // Assume all fields are mandatory, which is true for TPCH

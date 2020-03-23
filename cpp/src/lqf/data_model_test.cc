@@ -92,9 +92,12 @@ TEST_F(ParquetBlockTest, Column) {
 }
 
 class IntDictScanner : public Int32Accessor {
+protected:
+    Dictionary<Int32Type> dict_;
 public:
-    void processDict(Dictionary<PhysicalType<parquet::Type::INT32> > &) override {
+    void dict(Dictionary<PhysicalType<parquet::Type::INT32> > &dict) override {
         // Do nothing just maintain a dict
+        this->dict_ = move(dict);
     }
 
     void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {
@@ -102,14 +105,17 @@ public:
     }
 
     Int32Dictionary *accessDict() {
-        return this->dict_.get();
+        return &this->dict_;
     }
 };
 
 class StringDictScanner : public ByteArrayAccessor {
+protected:
+    Dictionary<ByteArrayType> dict_;
 public:
-    void processDict(Dictionary<ByteArrayType> &) override {
+    void dict(Dictionary<ByteArrayType> &dict) override {
         // Do nothing just maintain a dict
+        this->dict_ = move(dict);
     }
 
     void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {
@@ -117,7 +123,7 @@ public:
     }
 
     ByteArrayDictionary *accessDict() {
-        return this->dict_.get();
+        return &this->dict_;
     }
 };
 
@@ -146,7 +152,7 @@ TEST_F(ParquetBlockTest, Raw) {
 }
 
 TEST_F(ParquetBlockTest, Row) {
-    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, (1<<14)-1);
+    auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, (1 << 14) - 1);
     auto rows = block->rows();
 
     // Test reading and repeatable read
@@ -239,9 +245,9 @@ public:
     int dict_value_;
     uint64_t pos_ = 0;
 
-    void processDict(Int32Dictionary &dict) override {
+    void dict(Int32Dictionary &dict) override {
         int a = 102;
-        dict_value_ = dict_->lookup(a);
+        dict_value_ = dict.lookup(a);
     }
 
     void scanPage(uint64_t numEntry, const uint8_t *data, uint64_t *bitmap, uint64_t bitmap_offset) override {
@@ -272,8 +278,8 @@ TEST(MaskedTableTest, Create) {
     auto round1 = maskTable->blocks()->collect();
     auto round2 = maskTable->blocks()->collect();
 
-    EXPECT_EQ(dynamic_pointer_cast<MaskedBlock>((*round1)[0])->mask()->size(),1000);
-    EXPECT_EQ(dynamic_pointer_cast<MaskedBlock>((*round2)[0])->mask()->size(),1000);
+    EXPECT_EQ(dynamic_pointer_cast<MaskedBlock>((*round1)[0])->mask()->size(), 1000);
+    EXPECT_EQ(dynamic_pointer_cast<MaskedBlock>((*round2)[0])->mask()->size(), 1000);
 }
 
 TEST(MemTableTest, Create) {

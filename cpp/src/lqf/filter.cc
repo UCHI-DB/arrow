@@ -67,18 +67,16 @@ namespace lqf {
     ColFilter::~ColFilter() { predicates_.clear(); }
 
     shared_ptr<Table> ColFilter::filter(Table &input) {
-        for (auto ite = predicates_.begin(); ite != predicates_.end(); ++ite) {
-            FilterExecutor::inst->reg(input, (*ite).get());
+        for (auto &pred: predicates_) {
+            FilterExecutor::inst->reg(input, *pred);
         }
         return Filter::filter(input);
     }
 
     shared_ptr<Bitmap> ColFilter::filterBlock(Block &input) {
         shared_ptr<Bitmap> result = make_shared<FullBitmap>(input.size());
-        auto it = predicates_.begin();
-        while (it != predicates_.end()) {
-            result = (*it)->filterBlock(input, *result);
-            it++;
+        for (auto &pred: predicates_) {
+            result = pred->filterBlock(input, *result);
         }
         return result;
     }
@@ -103,7 +101,7 @@ namespace lqf {
         shared_ptr<Bitmap> SboostPredicate<DTYPE>::filterBlock(Block &block, Bitmap &) {
 //            unique_ptr<RawAccessor<DTYPE>> accessor = builder_();
 //            return dynamic_cast<ParquetBlock &>(block).raw(index_, accessor.get());
-            return FilterExecutor::inst->executeSboost(block, this);
+            return FilterExecutor::inst->executeSboost(block, *this);
         }
 
         template<typename DTYPE>
@@ -115,7 +113,7 @@ namespace lqf {
         DictEq<DTYPE>::DictEq(const T &target) : target_(target) {}
 
         template<typename DTYPE>
-        void DictEq<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
+        void DictEq<DTYPE>::dict(Dictionary<DTYPE> &dict) {
             rawTarget_ = dict.lookup(target_);
         }
 
@@ -136,7 +134,7 @@ namespace lqf {
         DictLess<DTYPE>::DictLess(const T &target) : target_(target) {}
 
         template<typename DTYPE>
-        void DictLess<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
+        void DictLess<DTYPE>::dict(Dictionary<DTYPE> &dict) {
             rawTarget_ = dict.lookup(target_);
         };
 
@@ -158,7 +156,7 @@ namespace lqf {
                 : lower_(lower), upper_(upper) {}
 
         template<typename DTYPE>
-        void DictBetween<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
+        void DictBetween<DTYPE>::dict(Dictionary<DTYPE> &dict) {
             rawLower_ = dict.lookup(lower_);
             rawUpper_ = dict.lookup(upper_);
         };
@@ -180,7 +178,7 @@ namespace lqf {
         DictMultiEq<DTYPE>::DictMultiEq(function<bool(const T &)> pred) : predicate_(pred) {}
 
         template<typename DTYPE>
-        void DictMultiEq<DTYPE>::processDict(Dictionary<DTYPE> &dict) {
+        void DictMultiEq<DTYPE>::dict(Dictionary<DTYPE> &dict) {
             keys_ = move(dict.list(predicate_));
         };
 
@@ -217,7 +215,7 @@ namespace lqf {
 
         DeltaEq::DeltaEq(const int target) : target_(target) {}
 
-        void DeltaEq::processDict(Int32Dictionary &) {}
+        void DeltaEq::dict(Int32Dictionary &) {}
 
         void DeltaEq::scanPage(uint64_t numEntry, const uint8_t *data,
                                uint64_t *bitmap, uint64_t bitmap_offset) {
@@ -230,7 +228,7 @@ namespace lqf {
 
         DeltaLess::DeltaLess(const int target) : target_(target) {}
 
-        void DeltaLess::processDict(Int32Dictionary &) {}
+        void DeltaLess::dict(Int32Dictionary &) {}
 
         void DeltaLess::scanPage(uint64_t numEntry, const uint8_t *data,
                                  uint64_t *bitmap, uint64_t bitmap_offset) {
@@ -244,7 +242,7 @@ namespace lqf {
         DeltaBetween::DeltaBetween(const int lower, const int upper)
                 : lower_(lower), upper_(upper) {}
 
-        void DeltaBetween::processDict(Int32Dictionary &) {}
+        void DeltaBetween::dict(Int32Dictionary &) {}
 
         void DeltaBetween::scanPage(uint64_t numEntry, const uint8_t *data,
                                     uint64_t *bitmap, uint64_t bitmap_offset) {

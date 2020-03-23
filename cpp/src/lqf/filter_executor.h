@@ -19,11 +19,9 @@ namespace lqf {
     class FilterExecutor {
     protected:
         unordered_map<string, unique_ptr<vector<ColPredicate *>>> regTable_;
-        unordered_map<string, unique_ptr<
-                unordered_map<ColPredicate *,
-                        shared_ptr<Bitmap>>>> result_;
+        unordered_map<string, unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>> result_;
 
-        string makeKey(Table *, uint32_t);
+        string makeKey(Table &, uint32_t);
 
     public:
 
@@ -31,12 +29,12 @@ namespace lqf {
 
         FilterExecutor();
 
-        void reg(Table *, ColPredicate *);
+        void reg(Table &, ColPredicate &);
 
-        shared_ptr<Bitmap> executeSimple(Block &, Bitmap &, SimpleColPredicate *);
+        shared_ptr<Bitmap> executeSimple(Block &, Bitmap &, SimpleColPredicate &);
 
         template<typename DTYPE>
-        shared_ptr<Bitmap> executeSboost(Block &, sboost::SboostPredicate<DTYPE> *);
+        shared_ptr<Bitmap> executeSboost(Block &, sboost::SboostPredicate<DTYPE> &);
     };
 
     template<typename DTYPE>

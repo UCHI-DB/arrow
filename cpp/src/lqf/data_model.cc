@@ -245,6 +245,11 @@ namespace lqf {
 
     using namespace parquet;
 
+    template <typename DTYPE>
+    Dictionary<DTYPE>::Dictionary() {
+
+    }
+
     template<typename DTYPE>
     Dictionary<DTYPE>::Dictionary(shared_ptr<DictionaryPage> dpage) {
         this->page_ = dpage;
@@ -257,7 +262,8 @@ namespace lqf {
 
     template<typename DTYPE>
     Dictionary<DTYPE>::~Dictionary() {
-        free(buffer_);
+        if (nullptr != buffer_)
+            free(buffer_);
     }
 
     template<typename DTYPE>
@@ -337,7 +343,7 @@ namespace lqf {
         shared_ptr<Page> page = pageReader->NextPage();
 
         if (page->type() == PageType::DICTIONARY_PAGE) {
-            auto dict = make_shared<Dictionary<DTYPE>>(static_pointer_cast<DictionaryPage>(page));
+            Dictionary<DTYPE> dict(static_pointer_cast<DictionaryPage>(page));
             accessor->dict(dict);
         } else {
             accessor->data((DataPage *) page.get());

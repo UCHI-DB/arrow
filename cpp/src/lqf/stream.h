@@ -86,8 +86,8 @@ namespace lqf {
         template<typename T>
         inline shared_ptr<vector<T>> evalParallel(vector<unique_ptr<EvalOp<T>>> &input) {
             vector<function<T()>> tasks;
-            for (auto ite = input.begin(); ite != input.end(); ite++) {
-                auto op = (*ite).get();
+            for (auto &eval:input) {
+                auto op = eval.get();
                 tasks.push_back([=]() {
                     return op->eval();
                 });
@@ -99,8 +99,8 @@ namespace lqf {
         template<typename T>
         inline shared_ptr<vector<T>> evalSequential(vector<unique_ptr<EvalOp<T>>> &input) {
             auto result = make_shared<vector<T>>();
-            for (auto ite = input.begin(); ite != input.end(); ++ite) {
-                result->push_back((*ite)->eval());
+            for (auto &eval:input) {
+                result->push_back(eval->eval());
             }
 
             return result;

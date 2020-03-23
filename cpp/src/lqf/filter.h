@@ -87,7 +87,7 @@ namespace lqf {
         public:
             DictEq(const T &target);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -107,7 +107,7 @@ namespace lqf {
         public:
             DictLess(const T &target);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -129,7 +129,7 @@ namespace lqf {
         public:
             DictBetween(const T &lower, const T &upper);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -149,7 +149,7 @@ namespace lqf {
         public:
             DictMultiEq(function<bool(const T &)> pred);
 
-            void processDict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -167,7 +167,7 @@ namespace lqf {
         public:
             DeltaEq(const int target);
 
-            void processDict(Int32Dictionary &) override;
+            void dict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -181,7 +181,7 @@ namespace lqf {
         public:
             DeltaLess(const int target);
 
-            void processDict(Int32Dictionary &) override;
+            void dict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -196,7 +196,7 @@ namespace lqf {
         public:
             DeltaBetween(const int lower, const int upper);
 
-            void processDict(Int32Dictionary &) override;
+            void dict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;

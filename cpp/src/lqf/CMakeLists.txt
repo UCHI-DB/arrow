@@ -46,7 +46,7 @@ add_arrow_lib(lqf
         sboost_static
         )
 
-target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS} )
+target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 
 set(LQF_TEST_SRC
         bitmap_test.cc
@@ -73,6 +73,9 @@ add_test_case(all-test
         GTest::Main
         EXTRA_FLAGS
         ${LQF_SIMD_FLAGS}
+        --coverage
+        EXTRA_LINK_LIBS
+        --coverage
         )
 
 arrow_install_all_headers(lqf)

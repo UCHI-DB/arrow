@@ -119,3 +119,54 @@ TEST_F(ColFilterTest, FilterSboost) {
     }
 
 }
+
+TEST_F(ColFilterTest, FilterMultiSboost) {
+    auto ptable = ParquetTable::Open("lineitem", (1 << 14) - 1);
+
+    function<bool(const ByteArray &)> sbstPred = [](const ByteArray &input) {
+        return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
+    };
+
+    ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, sbstPred))});
+
+    ByteArray filter2Pred("AIR");
+    ColFilter filter2({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictEq::build, filter2Pred))});
+
+    auto sbFiltered = filter.filter(*ptable);
+    auto sbFiltered2 = filter2.filter(*ptable);
+
+    auto sbResult = (*sbFiltered->blocks()->collect())[0];
+    auto sbResult2 = (*sbFiltered2->blocks()->collect())[0];
+
+
+    function<bool(const DataField &)> simplePred = [](const DataField &field) {
+        ByteArray *input = field.asByteArray();
+        return !strncmp(reinterpret_cast<const char *>(input->ptr + input->len - 3), "AIL", 3);
+    };
+    function<bool(const DataField &)> simplePred2 = [](const DataField &field) {
+        ByteArray *input = field.asByteArray();
+        return input->len == 3 && !strncmp(reinterpret_cast<const char *>(input->ptr), "AIR", 3);
+    };
+    ColFilter regFilter({new SimpleColPredicate(14, simplePred)});
+    auto simpleFiltered = regFilter.filter(*ptable)->blocks()->collect();
+    auto simpleResult = (*simpleFiltered)[0];
+
+    ColFilter regFilter2({new SimpleColPredicate(14, simplePred2)});
+    auto simpleFiltered2 = regFilter2.filter(*ptable)->blocks()->collect();
+    auto simpleResult2 = (*simpleFiltered2)[0];
+
+    auto sbraw1 = dynamic_pointer_cast<SimpleBitmap>(dynamic_pointer_cast<MaskedBlock>(sbResult)->mask())->raw();
+    auto sbraw2 = dynamic_pointer_cast<SimpleBitmap>(dynamic_pointer_cast<MaskedBlock>(sbResult2)->mask())->raw();
+    auto simraw1 = dynamic_pointer_cast<SimpleBitmap>(dynamic_pointer_cast<MaskedBlock>(simpleResult)->mask())->raw();
+    auto simraw2 = dynamic_pointer_cast<SimpleBitmap>(dynamic_pointer_cast<MaskedBlock>(simpleResult2)->mask())->raw();
+
+    EXPECT_EQ(sbResult->size(), simpleResult->size());
+    for (uint32_t i = 0; i < 94; i++) {
+        EXPECT_EQ(sbraw1[i], simraw1[i]) << i;
+    }
+    EXPECT_EQ(sbResult2->size(), simpleResult2->size());
+    for (uint32_t i = 0; i < 94; i++) {
+        EXPECT_EQ(sbraw2[i], simraw2[i]) << i;
+    }
+
+}
