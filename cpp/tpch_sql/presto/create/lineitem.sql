@@ -20,4 +20,4 @@ CREATE TABLE lineitem
 WITH (
     format='PARQUET',
     external_location = 'file:///local/hajiang/tpch/5/presto/lineitem'
-)
+);

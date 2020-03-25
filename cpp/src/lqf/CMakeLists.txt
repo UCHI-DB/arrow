@@ -14,6 +14,31 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+function(ADD_LQF_BENCHMARK REL_TEST_NAME)
+    set(options)
+    set(one_value_args PREFIX)
+    set(multi_value_args)
+    cmake_parse_arguments(ARG
+            "${options}"
+            "${one_value_args}"
+            "${multi_value_args}"
+            ${ARGN})
+    if (ARG_PREFIX)
+        set(PREFIX ${ARG_PREFIX})
+    else ()
+        set(PREFIX "lqf")
+    endif ()
+    add_benchmark(${REL_TEST_NAME}
+            PREFIX
+            ${PREFIX}
+            LABELS
+            "lqf-benchmarks"
+            STATIC_LINK_LIBS
+            ${LQF_BENCHMARK_LINK_OPTION}
+            EXTRA_FLAGS
+            ${LQF_SIMD_FLAGS}
+            ${ARG_UNPARSED_ARGUMENTS})
+endfunction()
 
 set(LQF_SIMD_FLAGS -msse4.1 -mavx -mavx2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mbmi2)
 
