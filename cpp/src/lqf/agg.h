@@ -125,6 +125,7 @@ namespace lqf {
             auto rows = block->rows();
             auto core = coreMaker_();
             uint64_t blockSize = block->size();
+
             for (uint32_t i = 0; i < blockSize; ++i) {
                 core->consume(rows->next());
             }

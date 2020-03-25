@@ -48,6 +48,11 @@ add_arrow_lib(lqf
 
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 
+if(${LQF_PARALLEL})
+    target_compile_definitions(lqf_objlib PUBLIC LQF_PARALLEL)
+endif()
+
+
 set(LQF_TEST_SRC
         bitmap_test.cc
         executor_test.cc

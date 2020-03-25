@@ -29,6 +29,8 @@ namespace lqf {
 
         FilterExecutor();
 
+        void reset();
+
         void reg(Table &, ColPredicate &);
 
         shared_ptr<Bitmap> executeSimple(Block &, Bitmap &, SimpleColPredicate &);

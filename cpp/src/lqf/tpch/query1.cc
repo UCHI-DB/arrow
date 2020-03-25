@@ -9,7 +9,7 @@
 #include <lqf/agg.h>
 #include <lqf/sort.h>
 #include <lqf/print.h>
-#include "tpch_query.h"
+#include "tpchquery.h"
 
 using namespace std;
 using namespace parquet;
@@ -90,13 +90,13 @@ namespace lqf {
 }
 
 //
-int main(int argc, char **argv) {
-    using namespace std;
-    using namespace std::chrono;
-    auto start = system_clock::now();
-    lqf::tpch::executeQ1();
-    auto stop = system_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-
-    cout << duration.count() << endl;
-}
+//int main(int argc, char **argv) {
+//    using namespace std;
+//    using namespace std::chrono;
+//    auto start = system_clock::now();
+//    lqf::tpch::executeQ1();
+//    auto stop = system_clock::now();
+//    auto duration = duration_cast<microseconds>(stop - start);
+//
+//    cout << duration.count() << endl;
+//}

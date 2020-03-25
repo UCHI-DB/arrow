@@ -38,8 +38,6 @@ namespace lqf {
 
         inline uint32_t index() { return index_; }
 
-        virtual bool supportBatch() { return false; }
-
         virtual shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) = 0;
     };
 
@@ -65,10 +63,6 @@ namespace lqf {
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
 
             unique_ptr<RawAccessor<DTYPE>> build();
-
-            bool supportBatch() override {
-                return true;
-            }
 
         protected:
             function<unique_ptr<RawAccessor<DTYPE>>()> builder_;

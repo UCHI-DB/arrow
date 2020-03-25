@@ -7,7 +7,7 @@
 #include <lqf/filter.h>
 #include <lqf/join.h>
 #include <lqf/mat.h>
-#include "tpch_query.h"
+#include "tpchquery.h"
 
 namespace lqf {
     namespace tpch {
@@ -190,7 +190,7 @@ namespace lqf {
     }
 }
 
-
-int main(int argc, char **argv) {
-
-}
+//
+//int main(int argc, char **argv) {
+//
+//}

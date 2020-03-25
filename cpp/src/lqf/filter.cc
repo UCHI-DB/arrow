@@ -57,10 +57,8 @@ namespace lqf {
 
     ColFilter::ColFilter(initializer_list<ColPredicate *> preds) {
         predicates_ = vector<unique_ptr<ColPredicate>>();
-        auto it = preds.begin();
-        while (it < preds.end()) {
-            predicates_.push_back(unique_ptr<ColPredicate>(*it));
-            it++;
+        for (auto &pred: preds) {
+            predicates_.push_back(unique_ptr<ColPredicate>(pred));
         }
     }
 
@@ -98,10 +96,10 @@ namespace lqf {
     namespace sboost {
 
         template<typename DTYPE>
-        shared_ptr<Bitmap> SboostPredicate<DTYPE>::filterBlock(Block &block, Bitmap &) {
+        shared_ptr<Bitmap> SboostPredicate<DTYPE>::filterBlock(Block &block, Bitmap &skip) {
 //            unique_ptr<RawAccessor<DTYPE>> accessor = builder_();
 //            return dynamic_cast<ParquetBlock &>(block).raw(index_, accessor.get());
-            return FilterExecutor::inst->executeSboost(block, *this);
+            return skip & *FilterExecutor::inst->executeSboost(block, *this);
         }
 
         template<typename DTYPE>

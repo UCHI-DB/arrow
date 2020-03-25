@@ -13,27 +13,36 @@ namespace lqf {
     FilterExecutor::FilterExecutor() {}
 
     void FilterExecutor::reg(Table &table, ColPredicate &predicate) {
-        if (predicate.supportBatch()) {
-            auto key = makeKey(table, predicate.index());
-            auto place = regTable_.emplace(key, new vector<ColPredicate *>());
-            (*place.first).second->push_back(&predicate);
-        }
+        auto key = makeKey(table, predicate.index());
+        auto place = regTable_.emplace(key, new vector<ColPredicate *>());
+        (*place.first).second->push_back(&predicate);
     }
 
     shared_ptr<Bitmap> FilterExecutor::executeSimple(Block &block, Bitmap &skip, SimpleColPredicate &predicate) {
         return predicate.filterBlock(block, skip);
     }
 
+    void FilterExecutor::reset() {
+        regTable_.clear();
+        result_.clear();
+    }
+
     using namespace lqf::sboost;
 
     template<typename DTYPE>
     shared_ptr<Bitmap> FilterExecutor::executeSboost(Block &block, SboostPredicate<DTYPE> &predicate) {
-        auto key = makeKey(*block.owner(), predicate.index());
-        auto found = result_.find(key);
+        auto mappingKey = makeKey(*block.owner(), predicate.index());
+        ParquetBlock &pblock = static_cast<ParquetBlock &>(block);
+
+        stringstream ss;
+        ss << mappingKey << "." << pblock.index();
+        auto resultKey = ss.str();
+
+        auto found = result_.find(resultKey);
         if (found != result_.end()) {
             return (*(found->second))[&predicate];
         }
-        auto ite = regTable_.find(key);
+        auto ite = regTable_.find(mappingKey);
         if (ite != regTable_.end()) {
             auto preds = *(ite->second).get();
             vector<unique_ptr<RawAccessor<DTYPE>>> content;
@@ -45,14 +54,13 @@ namespace lqf {
 
             PackedRawAccessor<DTYPE> packedAccessor(content);
 
-            ParquetBlock &pblock = dynamic_cast<ParquetBlock &>(block);
             pblock.raw(predicate.index(), &packedAccessor);
 
             auto resultMap = new unordered_map<ColPredicate *, shared_ptr<Bitmap>>();
             for (uint32_t i = 0; i < preds.size(); ++i) {
                 (*resultMap)[preds[i]] = content[i]->result();
             }
-            result_[key] = unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>(resultMap);
+            result_[resultKey] = unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>(resultMap);
             return (*resultMap)[&predicate];
         }
         return nullptr;

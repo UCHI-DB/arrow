@@ -245,7 +245,7 @@ namespace lqf {
 
     using namespace parquet;
 
-    template <typename DTYPE>
+    template<typename DTYPE>
     Dictionary<DTYPE>::Dictionary() {
 
     }
@@ -497,12 +497,16 @@ namespace lqf {
 
     ParquetTable::~ParquetTable() {}
 
+    using namespace std::placeholders;
+
     shared_ptr<Stream<shared_ptr<Block>>> ParquetTable::blocks() {
-        function<shared_ptr<Block>(const int &)> mapper = [=](const int &idx) {
-            return this->createParquetBlock(idx);
-        };
+        function<shared_ptr<Block>(const int &)> mapper = bind(&ParquetTable::createParquetBlock, this, _1);
         uint32_t numRowGroups = fileReader_->metadata()->num_row_groups();
+#ifdef LQF_PARALLEL
+        auto stream = IntStream::Make(0, numRowGroups)->map(mapper)->parallel();
+#else
         auto stream = IntStream::Make(0, numRowGroups)->map(mapper);
+#endif
         return stream;
     }
 

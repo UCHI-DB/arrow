@@ -2,22 +2,16 @@
 // Created by harper on 3/3/20.
 //
 
-#ifndef ARROW_TPCH_QUERY_H
-#define ARROW_TPCH_QUERY_H
+#ifndef ARROW_TPCHQUERY_H
+#define ARROW_TPCHQUERY_H
 
 #include <string>
+#include <sstream>
 
 using namespace std;
 
 namespace lqf {
     namespace tpch {
-
-
-        static const string tablePath(const string &name) {
-            std::ostringstream stringStream;
-            stringStream << "/local/hajiang/tpch/5/presto/" << name << "/" << name << ".parquet";
-            return stringStream.str();
-        }
 
         class LineItem {
         public:
@@ -40,8 +34,6 @@ namespace lqf {
             static const int COMMENT = 15;
         };
 
-        const string LineItem::path = tablePath("lineitem");
-
         class Part {
         public:
             static const string path;
@@ -56,8 +48,6 @@ namespace lqf {
             static const int COMMENT = 8;
         };
 
-        const string Part::path = tablePath("part");
-
         class PartSupp {
         public:
             static const string path;
@@ -67,8 +57,6 @@ namespace lqf {
             static const int SUPPLYCOST = 3;
             static const int COMMENT = 4;
         };
-
-        const string PartSupp::path = tablePath("partsupp");
 
         class Supplier {
         public:
@@ -82,8 +70,6 @@ namespace lqf {
             static const int COMMENT = 6;
         };
 
-        const string Supplier::path = tablePath("supplier");
-
         class Nation {
         public:
             static const string path;
@@ -93,8 +79,6 @@ namespace lqf {
             static const int COMMENT = 3;
         };
 
-        const string Nation::path = tablePath("nation");
-
         class Region {
         public:
             static const string path;
@@ -103,7 +87,7 @@ namespace lqf {
             static const int COMMENT = 2;
         };
 
-        const string Region::path = tablePath("region");
+        void executeQ1();
     }
 }
-#endif //ARROW_TPCH_QUERY_H
+#endif //ARROW_TPCHQUERY_H

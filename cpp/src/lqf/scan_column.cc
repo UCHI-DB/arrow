@@ -11,7 +11,7 @@
 #include <parquet/file_reader.h>
 #include "bitmap.h"
 #include "data_model.h"
-#include "tpch/tpch_query.h"
+#include "lqf/tpch/tpchquery.h"
 #include "filter.h"
 
 bool predicate(int32_t value) {
