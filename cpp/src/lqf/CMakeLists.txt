@@ -34,13 +34,14 @@ function(ADD_LQF_BENCHMARK REL_TEST_NAME)
             LABELS
             "lqf-benchmarks"
             STATIC_LINK_LIBS
-            ${LQF_BENCHMARK_LINK_OPTION}
+            ${LQF_BENCHMARK_LINK_LIBS}
             EXTRA_FLAGS
             ${LQF_SIMD_FLAGS}
             ${ARG_UNPARSED_ARGUMENTS})
 endfunction()
 
 set(LQF_SIMD_FLAGS -msse4.1 -mavx -mavx2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mbmi2)
+set(LQF_BENCHMARK_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads)
 
 set(LQF_SRCS
         executor.cc
