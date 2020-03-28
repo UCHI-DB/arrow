@@ -283,6 +283,8 @@ namespace lqf {
          * @return
          */
         virtual uint32_t numFields() = 0;
+
+        uint64_t size();
     };
 
     class ParquetTable : public Table {
@@ -300,6 +302,8 @@ namespace lqf {
         uint32_t numFields() override;
 
         void updateColumns(uint64_t columns);
+
+        inline uint64_t size() { return fileReader_->metadata()->num_rows(); }
 
         static shared_ptr<ParquetTable> Open(const string &filename, uint64_t columns = 0);
 

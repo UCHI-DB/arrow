@@ -472,6 +472,14 @@ namespace lqf {
         return make_shared<MaskedBlock>(dynamic_pointer_cast<ParquetBlock>(this->shared_from_this()), mask);
     }
 
+    uint64_t Table::size() {
+        uint64_t sum = 0;
+        function<void(const shared_ptr<Block>&)> counter = [&sum](const shared_ptr<Block>& block) {
+            sum+= block->size();
+        };
+        return sum;
+    }
+
     ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : columns_(columns) {
         fileReader_ = ParquetFileReader::OpenFile(fileName);
         if (!fileReader_) {

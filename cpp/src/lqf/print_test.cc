@@ -8,7 +8,7 @@
 using namespace lqf;
 
 TEST(PrinterTest, Print) {
-    auto printer = Printer::Make(PBEGIN PINT(0) PDOUBLE(1) PEND);
+    auto printer = Printer::Make(PBEGIN PI(0) PD(1) PEND);
     auto memTable = MemTable::Make(2);
     auto block = memTable->allocate(10);
     auto rows = block->rows();

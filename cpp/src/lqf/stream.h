@@ -141,13 +141,13 @@ namespace lqf {
             return result;
         }
 
-        VIEW reduce(function<VIEW(const VIEW &, const VIEW &)> reducer) {
+        VIEW reduce(function<VIEW(VIEW &, VIEW &)> reducer) {
             auto collected = collect();
             // TODO it is possible to execute reduce in parallel
             if (collected->size() == 1) {
-                return (*collected)[0];
+                return move((*collected)[0]);
             }
-            VIEW first = (*collected)[0];
+            VIEW first = move((*collected)[0]);
             auto ite = collected->begin();
             ite++;
             for (; ite != collected->end(); ite++) {

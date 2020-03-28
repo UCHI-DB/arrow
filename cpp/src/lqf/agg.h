@@ -82,6 +82,23 @@ namespace lqf {
         using DoubleMax = Max<double, AsDouble>;
 
         template<typename T, typename ACC>
+        class Min : public AggField {
+        protected:
+            T value_;
+        public:
+            Min(uint32_t rIndex);
+
+            virtual void reduce(DataRow &);
+
+            virtual void dump(DataRow &, uint32_t);
+
+            virtual void merge(AggField &);
+        };
+
+        using IntMin = Min<int32_t, AsInt>;
+        using DoubleMin = Min<double, AsDouble>;
+
+        template<typename T, typename ACC>
         class Avg : public AggField {
         protected:
             T value_;
@@ -119,9 +136,9 @@ namespace lqf {
     template<typename CORE>
     class Agg {
     protected:
-        function<shared_ptr<CORE>()> coreMaker_;
+        function<unique_ptr<CORE>()> coreMaker_;
 
-        shared_ptr<CORE> processBlock(const shared_ptr<Block> &block) {
+        unique_ptr<CORE> processBlock(const shared_ptr<Block> &block) {
             auto rows = block->rows();
             auto core = coreMaker_();
             uint64_t blockSize = block->size();
@@ -133,16 +150,16 @@ namespace lqf {
         }
 
     public:
-        Agg(function<shared_ptr<CORE>()> coreMaker) : coreMaker_(coreMaker) {}
+        Agg(function<unique_ptr<CORE>()> coreMaker) : coreMaker_(coreMaker) {}
 
         shared_ptr<Table> agg(Table &input) {
-            function<shared_ptr<CORE>(
+            function<unique_ptr<CORE>(
                     const shared_ptr<Block> &)> mapper = bind(&Agg::processBlock, this, _1);
 
-            function<shared_ptr<CORE>(const shared_ptr<CORE> &, const shared_ptr<CORE> &)> reducer =
-                    [](const shared_ptr<CORE> &a, const shared_ptr<CORE> &b) {
+            function<unique_ptr<CORE>(unique_ptr<CORE> &, unique_ptr<CORE> &)> reducer =
+                    [](unique_ptr<CORE> &a, unique_ptr<CORE> &b) {
                         a->reduce(*b);
-                        return a;
+                        return move(a);
                     };
             auto merged = input.blocks()->map(mapper)->reduce(reducer);
 

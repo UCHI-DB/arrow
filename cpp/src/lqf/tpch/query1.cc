@@ -75,15 +75,24 @@ namespace lqf {
             };
 
             TableAgg agg([=]() {
-                return make_shared<TableCore>(10, 8, indexer, headerInit);
+                return unique_ptr<TableCore>(new TableCore(10, 8, indexer, headerInit));
             });
             auto agged = agg.agg(*filtered);
 //
             SmallSort sort(SORTER2(0, 1));
             auto sorted = sort.sort(*agged);
 
-            auto printer = Printer::Make(PBEGIN PINT(0) PINT(1) PINT(2) PDOUBLE(3)
-                    PDOUBLE(4) PDOUBLE(5) PDOUBLE(6) PDOUBLE(7) PDOUBLE(8) PINT(9) PEND);
+            auto printer = Printer::Make(PBEGIN PI(0)
+                PI(1)
+                PI(2)
+                PD(3)
+                PD(4)
+                PD(5)
+                PD(6)
+                PD(7)
+                PD(8)
+                PI(9)
+            PEND);
             printer->print(*sorted);
         }
     }

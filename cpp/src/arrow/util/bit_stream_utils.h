@@ -161,6 +161,10 @@ class BitReader {
            (byte_offset_ + static_cast<int>(BitUtil::BytesForBits(bit_offset_)));
   }
 
+  inline uint32_t bytes_offset() {
+      return byte_offset_;
+  }
+
   /// Maximum byte length of a vlq encoded int
   static const int MAX_VLQ_BYTE_LEN = 5;
 

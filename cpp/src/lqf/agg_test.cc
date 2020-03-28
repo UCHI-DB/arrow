@@ -21,8 +21,8 @@ TEST(HashAggTest, Agg) {
                 reducer->header()[0] = row[0].asInt();
                 return reducer;
             };
-    function<shared_ptr<HashCore>()> maker = [=]() {
-        return make_shared<HashCore>(3, hasher, headerInit);
+    function<unique_ptr<HashCore>()> maker = [=]() {
+        return unique_ptr<HashCore>(new HashCore(3, hasher, headerInit));
     };
 
     HashAgg agg(maker);
@@ -68,8 +68,8 @@ TEST(TableAggTest, Agg) {
                 reducer->header()[0] = row[0].asInt();
                 return reducer;
             };
-    function<shared_ptr<TableCore>()> maker = [=]() {
-        return make_shared<TableCore>(3, 10, indexer, headerInit);
+    function<unique_ptr<TableCore>()> maker = [=]() {
+        return unique_ptr<TableCore>(new TableCore(3, 10, indexer, headerInit));
     };
 
     TableAgg agg(maker);
@@ -109,8 +109,8 @@ TEST(SimpleAggTest, Agg) {
                         new AggReducer(0, {new DoubleSum(1), new Count()}));
                 return reducer;
             };
-    function<shared_ptr<SimpleCore>()> maker = [=]() {
-        return make_shared<SimpleCore>(2, headerInit);
+    function<unique_ptr<SimpleCore>()> maker = [=]() {
+        return unique_ptr<SimpleCore>(new SimpleCore(2, headerInit));
     };
 
     SimpleAgg agg(maker);

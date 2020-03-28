@@ -82,6 +82,24 @@ namespace lqf {
         }
 
         template<typename T, typename ACC>
+        Min<T, ACC>::Min(uint32_t rIndex) : AggField(rIndex), value_(0) {}
+
+        template<typename T, typename ACC>
+        void Min<T, ACC>::merge(AggField &another) {
+            value_ = std::min(value_, static_cast<Min<T, ACC> &>(another).value_);
+        }
+
+        template<typename T, typename ACC>
+        void Min<T, ACC>::reduce(DataRow &input) {
+            value_ = std::min(value_, ACC::get(input[readIndex_]));
+        }
+
+        template<typename T, typename ACC>
+        void Min<T, ACC>::dump(DataRow &output, uint32_t index) {
+            output[index] = value_;
+        }
+
+        template<typename T, typename ACC>
         Avg<T, ACC>::Avg(uint32_t rIndex) : AggField(rIndex), value_(0), count_(0) {}
 
         template<typename T, typename ACC>
@@ -126,6 +144,12 @@ namespace lqf {
 
         template
         class Max<double, AsDouble>;
+
+        template
+        class Min<int32_t, AsInt>;
+
+        template
+        class Min<double, AsDouble>;
 
         template
         class Avg<int32_t, AsInt>;

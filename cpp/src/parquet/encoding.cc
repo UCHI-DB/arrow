@@ -2158,6 +2158,8 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
     return num_values;
   }
 
+  inline uint32_t offset() { return decoder_.bytes_offset(); }
+
  private:
   void ReadBlock() {
     uint8_t* bit_width_data = delta_bit_widths_->mutable_data();
@@ -2171,7 +2173,7 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
 
     int32_t* buffer = block_buffer_->data();
     int buffer_start = num_buffered_;
-    for(int i = 0 ; i < num_mini_blocks_;++i) {
+    for(int i = 0 ; i < num_mini_blocks_ && num_buffered_ < (uint64_t)num_values_;++i) {
         decoder_.GetBatch(bit_width_data[i], buffer + num_buffered_, values_per_mini_block_);
         num_buffered_ += values_per_mini_block_;
     }
@@ -2179,18 +2181,12 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
     // Speed up Delta computation using Sboost
     for(uint32_t i = buffer_start ; i < buffer_start+num_buffered_;i+=8) {
         int32_t* position = buffer+i;
-        __m256i lv256 = _mm256_set1_epi32(last_value_);
         __m256i loaded = _mm256_loadu_si256((const __m256i*)position);
-        loaded = _mm256_add_epi32(lv256,loaded);
+        loaded = _mm256_add_epi32(loaded, _mm256_set1_epi32(min_delta_));
         __m256i result = ::sboost::cumsum32(loaded);
+        result = _mm256_add_epi32(result, _mm256_set1_epi32(last_value_));
         _mm256_storeu_si256((__m256i*)position,result);
     }
-
-//     TODO This delta computation can be speed up using SBoost
-//    buffer[buffer_start] += last_value_+min_delta_;
-//    for(uint32_t i = buffer_start+1 ; i < num_buffered_;++i) {
-//       buffer[i] += min_delta_ + buffer[i-1];
-//    }
 
     last_value_ = buffer[num_buffered_-1];
     num_buffer_read_ = 0;
@@ -2237,6 +2233,7 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   int32_t last_value_;
 
   int32_t SKIP_BUFFER[SKIP_BUFFER_SIZE];
+
 };
 
 // ----------------------------------------------------------------------
@@ -2249,41 +2246,44 @@ class DeltaLengthByteArrayDecoder : public DecoderImpl,
                                        MemoryPool* pool = arrow::default_memory_pool())
       : DecoderImpl(descr, Encoding::DELTA_LENGTH_BYTE_ARRAY),
         len_decoder_(nullptr, pool),
-        pool_(pool) {}
+        pool_(pool),
+        len_data_(0,::arrow::stl::allocator<int>(pool_)),
+        len_data_pointer_(0) {}
 
   void SetData(int num_values, const uint8_t* data, int len) override {
     num_values_ = num_values;
     if (len == 0) return;
-    int total_lengths_len = arrow::util::SafeLoadAs<int32_t>(data);
-    data += 4;
-    this->len_decoder_.SetData(num_values, data, total_lengths_len);
-    data_ = data + total_lengths_len;
-    this->len_ = len - 4 - total_lengths_len;
+    this->len_decoder_.SetData(num_values, data, len);
+    if(len_data_.size() < (uint32_t)num_values) {
+        len_data_.resize(num_values);
+    }
+    len_decoder_.Decode(len_data_.data(), num_values);
+    len_data_pointer_ = 0;
+
+    uint32_t offset = len_decoder_.offset();
+    data_ = data + offset;
+    this->len_ = len - offset;
   }
 
   int Decode(ByteArray* buffer, int max_values) override {
-    using VectorT = ArrowPoolVector<int>;
     max_values = std::min(max_values, num_values_);
-    VectorT lengths(max_values, 0, ::arrow::stl::allocator<int>(pool_));
-    len_decoder_.Decode(lengths.data(), max_values);
     for (int i = 0; i < max_values; ++i) {
-      buffer[i].len = lengths[i];
+      auto len = len_data_[len_data_pointer_++];
+      buffer[i].len = len;
       buffer[i].ptr = data_;
-      this->data_ += lengths[i];
-      this->len_ -= lengths[i];
+      this->data_ += len;
+      this->len_ -= len;
     }
     this->num_values_ -= max_values;
     return max_values;
   }
 
   int Skip(int max_values) override {
-      using VectorT = ArrowPoolVector<int>;
       max_values = std::min(max_values, num_values_);
-      VectorT lengths(max_values, 0, ::arrow::stl::allocator<int>(pool_));
-      len_decoder_.Decode(lengths.data(), max_values);
       for (int i = 0; i < max_values; ++i) {
-          this->data_ += lengths[i];
-          this->len_ -= lengths[i];
+          auto len = len_data_[len_data_pointer_++];
+          this->data_ += len;
+          this->len_ -= len;
       }
       this->num_values_ -= max_values;
       return max_values;
@@ -2304,10 +2304,15 @@ class DeltaLengthByteArrayDecoder : public DecoderImpl,
  private:
   DeltaBitPackDecoder<Int32Type> len_decoder_;
   ::arrow::MemoryPool* pool_;
+
+  ArrowPoolVector<int32_t> len_data_;
+  uint32_t len_data_pointer_;
 };
 
 // ----------------------------------------------------------------------
 // DELTA_BYTE_ARRAY
+
+#define DBA_BUFFER_SIZE 100000
 
 class DeltaByteArrayDecoder : public DecoderImpl,
                               virtual public TypedDecoder<ByteArrayType> {
@@ -2317,58 +2322,130 @@ class DeltaByteArrayDecoder : public DecoderImpl,
       : DecoderImpl(descr, Encoding::DELTA_BYTE_ARRAY),
         prefix_len_decoder_(nullptr, pool),
         suffix_decoder_(nullptr, pool),
-        last_value_(0, nullptr) {}
+        init_last_value_{0, nullptr},
+        prefix_len_data_(0, 0, ::arrow::stl::allocator<int>(pool)),
+        prefix_len_data_pointer_(0),
+        pool_(pool) {
+      AllocateBuffer();
+      last_value_ = &init_last_value_;
+  }
 
-  virtual void SetData(int num_values, const uint8_t* data, int len) {
+  virtual ~DeltaByteArrayDecoder() {
+      for(auto b: buffers_) {
+        pool_->Free(b, DBA_BUFFER_SIZE);
+      }
+  }
+
+  void AllocateBuffer() {
+      auto assigned = pool_->Allocate(DBA_BUFFER_SIZE, &current_buffer_);
+      buffers_.push_back(current_buffer_);
+      buffer_pointer_ = 0;
+  }
+
+  virtual void SetData(int num_values, const uint8_t* data, int len) override {
+    if(prefix_len_data_.size() < (uint32_t)num_values) {
+        prefix_len_data_.resize(num_values);
+    }
+    prefix_len_data_pointer_ = 0;
+
     num_values_ = num_values;
     if (len == 0) return;
-    int prefix_len_length = arrow::util::SafeLoadAs<int32_t>(data);
-    data += 4;
-    len -= 4;
-    prefix_len_decoder_.SetData(num_values, data, prefix_len_length);
-    data += prefix_len_length;
-    len -= prefix_len_length;
-    suffix_decoder_.SetData(num_values, data, len);
+    prefix_len_decoder_.SetData(num_values, data, len);
+    prefix_len_decoder_.Decode(prefix_len_data_.data(), num_values);
+
+    uint32_t offset = prefix_len_decoder_.offset();
+    suffix_decoder_.SetData(num_values, data + offset, len - offset);
   }
 
   // TODO: this doesn't work and requires memory management. We need to allocate
   // new strings to store the results.
-  virtual int Decode(ByteArray* buffer, int max_values) {
+  virtual int Decode(ByteArray* buffer, int max_values) override {
     max_values = std::min(max_values, this->num_values_);
     for (int i = 0; i < max_values; ++i) {
-      int prefix_len = 0;
-      prefix_len_decoder_.Decode(&prefix_len, 1);
+      int prefix_len = prefix_len_data_[prefix_len_data_pointer_++];
       ByteArray suffix = {0, nullptr};
       suffix_decoder_.Decode(&suffix, 1);
       buffer[i].len = prefix_len + suffix.len;
 
-      uint8_t* result = reinterpret_cast<uint8_t*>(malloc(buffer[i].len));
-      memcpy(result, last_value_.ptr, prefix_len);
-      memcpy(result + prefix_len, suffix.ptr, suffix.len);
+      if(DBA_BUFFER_SIZE - buffer_pointer_ < buffer[i].len) {
+          AllocateBuffer();
+      }
+      buffer[i].ptr = current_buffer_ + buffer_pointer_;
+      memcpy(current_buffer_ + buffer_pointer_, last_value_->ptr, prefix_len);
+      memcpy(current_buffer_ + buffer_pointer_ + prefix_len, suffix.ptr, suffix.len);
+      buffer_pointer_ += buffer[i].len;
+      last_value_ = buffer + i;
 
-      buffer[i].ptr = result;
-      last_value_ = buffer[i];
+//      uint8_t* result = reinterpret_cast<uint8_t*>(malloc(buffer[i].len));
+//      memcpy(result, last_value_.ptr, prefix_len);
+//      memcpy(result + prefix_len, suffix.ptr, suffix.len);
+//
+//      buffer[i].ptr = result;
+//      last_value_ = buffer[i];
     }
     this->num_values_ -= max_values;
     return max_values;
   }
 
-  virtual int Skip(int max_values) {
-    max_values = std::min(max_values, this->num_values_);
-    for (int i = 0; i < max_values; ++i) {
-        int prefix_len = 0;
-        prefix_len_decoder_.Decode(&prefix_len, 1);
-        ByteArray suffix = {0, nullptr};
-        suffix_decoder_.Decode(&suffix, 1);
-    }
-    this->num_values_ -= max_values;
-    return max_values;
+  // Skipped data will not be kept in buffer
+  virtual int Skip(int max_values) override {
+      max_values = std::min(max_values, this->num_values_);
+      ByteArray value_buffer;
+      for (int i = 0; i < max_values; ++i) {
+          int prefix_len = prefix_len_data_[prefix_len_data_pointer_++];
+          ByteArray suffix = {0, nullptr};
+          suffix_decoder_.Decode(&suffix, 1);
+          value_buffer.len = prefix_len + suffix.len;
+
+          if(DBA_BUFFER_SIZE - buffer_pointer_ < value_buffer.len) {
+              AllocateBuffer();
+          }
+          value_buffer.ptr = current_buffer_ + buffer_pointer_;
+          memcpy(current_buffer_ + buffer_pointer_, last_value_->ptr, prefix_len);
+          memcpy(current_buffer_ + buffer_pointer_ + prefix_len, suffix.ptr, suffix.len);
+          // Do not increase buffer_pointer
+          last_value_ = &value_buffer;
+      }
+      // Keep the last_value to buffer
+      buffer_pointer_ += last_value_->len;
+      if(DBA_BUFFER_SIZE - buffer_pointer_ < sizeof(ByteArray)) {
+          AllocateBuffer();
+      }
+      last_value_ = reinterpret_cast<ByteArray*>(current_buffer_+buffer_pointer_);
+      last_value_->ptr = value_buffer.ptr;
+      last_value_->len = value_buffer.len;
+      buffer_pointer_+= sizeof(ByteArray);
+
+      this->num_values_ -= max_values;
+      return max_values;
+  }
+
+
+  int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
+                  int64_t valid_bits_offset,
+                  typename EncodingTraits<ByteArrayType>::Accumulator* out) override {
+      ParquetException::NYI("DecodeArrow for DeltaByteArrayDecoder");
+  }
+
+  int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
+                  int64_t valid_bits_offset,
+                  typename EncodingTraits<ByteArrayType>::DictAccumulator* out) override {
+      ParquetException::NYI("DecodeArrow for DeltaByteArrayDecoder");
   }
 
  private:
   DeltaBitPackDecoder<Int32Type> prefix_len_decoder_;
   DeltaLengthByteArrayDecoder suffix_decoder_;
-  ByteArray last_value_;
+  ByteArray* last_value_;
+  ByteArray init_last_value_;
+
+  ArrowPoolVector<int32_t> prefix_len_data_;
+  uint32_t prefix_len_data_pointer_;
+
+  MemoryPool* pool_;
+  vector<uint8_t*> buffers_;
+  uint8_t* current_buffer_;
+  uint32_t buffer_pointer_;
 };
 
 // ----------------------------------------------------------------------
@@ -2398,6 +2475,8 @@ std::unique_ptr<Decoder> MakeDecoder(Type::type type_num, Encoding::type encodin
     }
   } else if (encoding == Encoding::DELTA_BINARY_PACKED) {
       return std::unique_ptr<Decoder>(new DeltaBitPackDecoder<Int32Type>(descr));
+  } else if(encoding == Encoding::DELTA_BYTE_ARRAY) {
+      return std::unique_ptr<Decoder>(new DeltaByteArrayDecoder(descr));
   } else {
     ParquetException::NYI("Selected encoding is not supported");
   }

@@ -7,6 +7,7 @@
 #include <lqf/filter.h>
 #include <lqf/join.h>
 #include <lqf/mat.h>
+#include <lqf/agg.h>
 #include "tpchquery.h"
 
 namespace lqf {
@@ -19,39 +20,12 @@ namespace lqf {
             int size = 15;
             const char *const type = "BRASS";
 
-            auto partSuppTable = ParquetTable::Open(PartSupp::path, {PartSupp::PARTKEY, PartSupp::SUPPKEY});
-
+            auto partSuppTable = ParquetTable::Open(PartSupp::path,
+                                                    {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY});
-//            supplierTable.setSnapshot(source->
-//            {
-//                SupplierRow res = new SupplierRow();
-//                res.s_acctbal = source.getDouble(Supplier.ACCTBAL);
-//                res.s_address = source.getBinary(Supplier.ADDRESS);
-//                res.s_comment = source.getBinary(Supplier.COMMENT);
-//                res.s_name = source.getBinary(Supplier.NAME);
-//                res.s_phone = source.getBinary(Supplier.PHONE);
-//                res.s_nationkey = source.getInt(Supplier.NATIONKEY);
-//                return res;
-//            });
-
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::REGIONKEY});
-//            nationTable.setSnapshot(source->
-//            {
-//                FullDataRow ndr = new FullDataRow(new int[]{1, 0, 1});
-//                ndr.setInt(0, source.getInt(Nation.NATIONKEY));
-//                ndr.setBinary(1, source.getBinary(Nation.NAME));
-//                return ndr;
-//            });
-
             auto regionTable = ParquetTable::Open(Region::path, {Region::REGIONKEY, Region::NAME});
-
             auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE});
-//            partTable.setSnapshot(source->
-//            {
-//                PartRow pr = new PartRow();
-//                pr.p_mfgr = source.getBinary(Part.MFGR);
-//                return pr;
-//            });
 
             ColFilter regionFilter({new SimpleColPredicate(Region::NAME, [&region](const DataField &field) {
                 return (*field.asByteArray()) == region;
@@ -61,12 +35,13 @@ namespace lqf {
             HashFilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
+            cout << filteredNation->size() << endl;
 //            Reload reloadNation = new Reload();
 //            reloadNation.getLoadingProperties().setLoadColumns(new int[]{Nation.NATIONKEY, Nation.NAME});
-            MemMat nationMat(3, MLB MI(0, 0)
-                MB(1, 1)
-                MI(2, 2) MLE);
+            MemMat nationMat(3, MLB MI(0, 0) MLE);
             auto memNationTable = nationMat.mat(*filteredNation);
+
+            cout << memNationTable->size() << endl;
 
             HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
@@ -81,36 +56,36 @@ namespace lqf {
                                                                      bind(sboost::ByteArrayDictMultiEq::build,
                                                                           typePred))});
             auto filteredPart = partFilter.filter(*partTable);
+            cout << filteredPart->size() << endl;
 
-//            // Sequence of these two joins
-//            Join pspJoin = new HashFilterJoin(PartSupp.PARTKEY, Part.PARTKEY);
-//            Table filteredPs = pspJoin.join(partSuppTable, filteredPart);
+            // Sequence of these two joins
+            HashFilterJoin pspJoin(PartSupp::PARTKEY, Part::PARTKEY);
+            auto filteredPs = pspJoin.join(*partSuppTable, *filteredPart);
+
+            HashFilterJoin pssJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            filteredPs = pssJoin.join(*filteredPs, *filteredSupplier);
 //
-//            Join pssJoin = new HashFilterJoin(PartSupp.SUPPKEY, Supplier.SUPPKEY);
-//            filteredPs = pssJoin.join(filteredPs, filteredSupplier);
-//
-//            FilterMat psMat = new FilterMat();
-//            filteredPs = psMat.mat(filteredPs);
+            FilterMat psMat;
+            filteredPs = psMat.mat(*filteredPs);
 //
 //            Reload psReload = new Reload();
 //            psReload.getLoadingProperties().setLoadColumns(new int[]{PartSupp.PARTKEY, PartSupp.SUPPLYCOST});
 //            Table reloadedPs = psReload.reload(filteredPs);
 //
-//            Agg psAgg = new KeyAgg(new KeyReducerSource() {
-//                @Override
-//                public RowReducer apply(DataRow key) {
-//                    PrimitiveDataRow header = new PrimitiveDataRow(2);
-//                    header.setInt(0, key.getInt(PartSupp.PARTKEY));
-//                    FieldsReducer fr = new FieldsReducer(header, new DoubleMin(PartSupp.SUPPLYCOST, 1));
-//                    return fr;
-//                }
-//
-//                @Override
-//                public long applyAsLong(DataRow dataRow) {
-//                    return dataRow.getInt(PartSupp.PARTKEY);
-//                }
-//            });
-//            Table psMinCostTable = psAgg.agg(reloadedPs);
+            HashAgg psAgg([]() {
+                return unique_ptr<HashCore>(new HashCore(
+                        2,
+                        [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); },
+                        [](DataRow &dr) {
+                            AggReducer *header = new AggReducer(1, {new agg::DoubleMin(
+                                    PartSupp::SUPPLYCOST)});
+                            header->header()[0] = dr[PartSupp::PARTKEY].asInt();
+                            return unique_ptr<AggReducer>(header);
+                        }));
+            });
+            auto psMinCostTable = psAgg.agg(*filteredPs);
+
+            cout << psMinCostTable->size() << endl;
 //
 //            System.out.println(psMinCostTable.size());
 //
@@ -187,10 +162,25 @@ namespace lqf {
 //            printer.print(result);
 
         }
+
+
+        void executeQ2Debug() {
+            char buffer[100];
+            auto regionTable = ParquetTable::Open(Region::path, 3);
+            regionTable->blocks()->foreach([&buffer](const shared_ptr<Block>& block) {
+                auto col = (*block).col(1);
+                for(int i = 0 ; i < 5;++i) {
+                    auto ba = (*col)[i].asByteArray();
+                    memcpy((void*)buffer, ba->ptr,ba->len);
+                    buffer[ba->len] = 0;
+                    cout << buffer << endl;
+                }
+            });
+        }
     }
 }
 
 //
-//int main(int argc, char **argv) {
-//
-//}
+int main(int argc, char **argv) {
+    lqf::tpch::executeQ2();
+}

@@ -10,9 +10,9 @@
 
 #define PBEGIN [](DataRow& row) { std::cout <<
 #define PEND std::endl ;}
-#define PINT(x) row[x].asInt() << ", " <<
-#define PDOUBLE(x) row[x].asDouble() << ", " <<
-#define PSTRING " " <<
+#define PI(x) row[x].asInt() << ", " <<
+#define PD(x) row[x].asDouble() << ", " <<
+#define PB(x) row[x].asByteArray() << ", " <<
 
 using namespace std;
 using namespace std::placeholders;
