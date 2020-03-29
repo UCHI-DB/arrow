@@ -312,6 +312,7 @@ add_parquet_test(internals-test
         properties_test.cc
         statistics_test.cc
         encoding_test.cc
+        encoding_deltabp_test.cc
         metadata_test.cc
         public_api_test.cc
         types_test.cc

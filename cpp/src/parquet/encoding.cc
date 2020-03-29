@@ -2121,14 +2121,7 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   }
 
   int Skip(int max_values) override {
-     int remain = max_values;
-     int skipped = 0;
-     while(remain > 0) {
-        int current_batch = std::min(remain, SKIP_BUFFER_SIZE);
-        skipped += GetInternal(SKIP_BUFFER, current_batch);
-        remain -= current_batch;
-     }
-     return skipped;
+     return GetInternal((T*)nullptr, max_values);
   }
 
   int DecodeArrow(int num_values, int null_count, const uint8_t* valid_bits,
@@ -2179,16 +2172,19 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
     }
 
     // Speed up Delta computation using Sboost
-    for(uint32_t i = buffer_start ; i < buffer_start+num_buffered_;i+=8) {
+    for(uint32_t i = buffer_start ; i < num_buffered_; i+=8) {
         int32_t* position = buffer+i;
         __m256i loaded = _mm256_loadu_si256((const __m256i*)position);
         loaded = _mm256_add_epi32(loaded, _mm256_set1_epi32(min_delta_));
         __m256i result = ::sboost::cumsum32(loaded);
         result = _mm256_add_epi32(result, _mm256_set1_epi32(last_value_));
         _mm256_storeu_si256((__m256i*)position,result);
+        last_value_ = *(position + 7);
     }
-
-    last_value_ = buffer[num_buffered_-1];
+    if(last_value_ > 18000) {
+        num_buffer_read_ = 0;
+    }
+//    last_value_ = buffer[num_buffered_-1];
     num_buffer_read_ = 0;
   }
 
@@ -2197,18 +2193,23 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
       max_values = std::min(max_values, this->num_values_);
       int *bufferdata = block_buffer_->data();
 
+      int write_pos = 0;
       int remain = max_values;
       int read_in_block = std::min(max_values, static_cast<int>(num_buffered_ - num_buffer_read_));
-      memcpy(buffer, bufferdata + num_buffer_read_, sizeof(int32_t)*read_in_block);
+      if(buffer!= nullptr)
+        memcpy(buffer, bufferdata + num_buffer_read_, sizeof(T)*read_in_block);
       remain -= read_in_block;
+      write_pos += read_in_block;
       num_buffer_read_ += read_in_block;
 
       while (remain > 0) {
           num_buffered_ = 0;
           ReadBlock();
           read_in_block = std::min(remain, static_cast<int>(num_buffered_ - num_buffer_read_));
-          memcpy(buffer, bufferdata + num_buffer_read_, sizeof(int32_t)*read_in_block);
+          if(nullptr != buffer)
+              memcpy(buffer + write_pos, bufferdata + num_buffer_read_, sizeof(T)*read_in_block);
           remain -= read_in_block;
+          write_pos += read_in_block;
           num_buffer_read_ += read_in_block;
       }
 
@@ -2231,8 +2232,6 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   std::shared_ptr<std::vector<int32_t>> block_buffer_;
 
   int32_t last_value_;
-
-  int32_t SKIP_BUFFER[SKIP_BUFFER_SIZE];
 
 };
 

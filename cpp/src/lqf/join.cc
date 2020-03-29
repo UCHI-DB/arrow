@@ -199,7 +199,7 @@ namespace lqf {
 
     shared_ptr<Block> HashFilterJoin::probe(const shared_ptr<Block> &leftBlock) {
         auto col = leftBlock->col(leftKeyIndex_);
-        auto bitmap = make_shared<SimpleBitmap>(leftBlock->size());
+        auto bitmap = make_shared<SimpleBitmap>(leftBlock->limit());
         for (uint32_t i = 0; i < leftBlock->size(); ++i) {
             auto key = col->next().asInt();
             if (predicate_->test(key)) {

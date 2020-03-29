@@ -13,9 +13,9 @@ using namespace sboost::encoding::rlehybrid;
 
 TEST(RLEHybrid, equal) {
     struct stat st;
-    stat("rlecontent", &st);
+    stat("testres/sboost/rlecontent", &st);
     uint32_t filesize = st.st_size;
-    int fd = open("rlecontent", O_RDONLY, 0);
+    int fd = open("testres/sboost/rlecontent", O_RDONLY, 0);
     assert(fd != -1);
     //Execute mmap
     void *mmappedData = mmap(NULL, filesize, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);

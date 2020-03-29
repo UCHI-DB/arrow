@@ -862,5 +862,6 @@ TEST_F(DictEncoding, CheckDecodeIndicesNoNulls) {
   CheckDict(actual_num_values, *builder);
 }
 
+
 }  // namespace test
 }  // namespace parquet

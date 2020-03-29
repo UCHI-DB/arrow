@@ -8,6 +8,7 @@
 #include <lqf/join.h>
 #include <lqf/mat.h>
 #include <lqf/agg.h>
+#include <lqf/print.h>
 #include "tpchquery.h"
 
 namespace lqf {
@@ -23,28 +24,26 @@ namespace lqf {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY});
-            auto nationTable = ParquetTable::Open(Nation::path, {Nation::REGIONKEY});
+            auto nationTable = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::REGIONKEY});
             auto regionTable = ParquetTable::Open(Region::path, {Region::REGIONKEY, Region::NAME});
             auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE});
 
             ColFilter regionFilter({new SimpleColPredicate(Region::NAME, [&region](const DataField &field) {
-                return (*field.asByteArray()) == region;
+                return region == (*field.asByteArray());
             })});
             auto filteredRegion = regionFilter.filter(*regionTable);
 
             HashFilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
-            cout << filteredNation->size() << endl;
-//            Reload reloadNation = new Reload();
-//            reloadNation.getLoadingProperties().setLoadColumns(new int[]{Nation.NATIONKEY, Nation.NAME});
             MemMat nationMat(3, MLB MI(0, 0) MLE);
             auto memNationTable = nationMat.mat(*filteredNation);
 
-            cout << memNationTable->size() << endl;
-
             HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
+
+//            auto printer = Printer::Make(PBEGIN PI(Supplier::SUPPKEY) PEND);
+//            printer->print(*supplierTable);
 
             function<bool(const ByteArray &)> typePred = [=](const ByteArray &input) {
                 return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), type, 5);
@@ -56,7 +55,6 @@ namespace lqf {
                                                                      bind(sboost::ByteArrayDictMultiEq::build,
                                                                           typePred))});
             auto filteredPart = partFilter.filter(*partTable);
-            cout << filteredPart->size() << endl;
 
             // Sequence of these two joins
             HashFilterJoin pspJoin(PartSupp::PARTKEY, Part::PARTKEY);
@@ -68,24 +66,27 @@ namespace lqf {
             FilterMat psMat;
             filteredPs = psMat.mat(*filteredPs);
 //
-//            Reload psReload = new Reload();
-//            psReload.getLoadingProperties().setLoadColumns(new int[]{PartSupp.PARTKEY, PartSupp.SUPPLYCOST});
-//            Table reloadedPs = psReload.reload(filteredPs);
+            auto printer = Printer::Make(PBEGIN PI(0)
+            PI(1)
+            PEND);
+            printer->print(*filteredPs);
 //
-            HashAgg psAgg([]() {
-                return unique_ptr<HashCore>(new HashCore(
-                        2,
-                        [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); },
-                        [](DataRow &dr) {
-                            AggReducer *header = new AggReducer(1, {new agg::DoubleMin(
-                                    PartSupp::SUPPLYCOST)});
-                            header->header()[0] = dr[PartSupp::PARTKEY].asInt();
-                            return unique_ptr<AggReducer>(header);
-                        }));
-            });
-            auto psMinCostTable = psAgg.agg(*filteredPs);
+//            HashAgg psAgg([]() {
+//                return unique_ptr<HashCore>(new HashCore(
+//                        2,
+//                        [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); },
+//                        [](DataRow &dr) {
+//                            AggReducer *header = new AggReducer(1, {new agg::DoubleMin(
+//                                    PartSupp::SUPPLYCOST)});
+//                            header->header()[0] = dr[PartSupp::PARTKEY].asInt();
+//                            return unique_ptr<AggReducer>(header);
+//                        }));
+//            });
+//            auto psMinCostTable = psAgg.agg(*filteredPs);
+//
+//            cout << psMinCostTable->size() << endl;
 
-            cout << psMinCostTable->size() << endl;
+//            Java Version from Here
 //
 //            System.out.println(psMinCostTable.size());
 //
@@ -167,11 +168,11 @@ namespace lqf {
         void executeQ2Debug() {
             char buffer[100];
             auto regionTable = ParquetTable::Open(Region::path, 3);
-            regionTable->blocks()->foreach([&buffer](const shared_ptr<Block>& block) {
+            regionTable->blocks()->foreach([&buffer](const shared_ptr<Block> &block) {
                 auto col = (*block).col(1);
-                for(int i = 0 ; i < 5;++i) {
+                for (int i = 0; i < 5; ++i) {
                     auto ba = (*col)[i].asByteArray();
-                    memcpy((void*)buffer, ba->ptr,ba->len);
+                    memcpy((void *) buffer, ba->ptr, ba->len);
                     buffer[ba->len] = 0;
                     cout << buffer << endl;
                 }

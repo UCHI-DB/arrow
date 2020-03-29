@@ -20,6 +20,8 @@ namespace lqf {
 
     class Printer {
     protected:
+        uint64_t sum_;
+
         function<void(DataRow &)> linePrinter_;
 
         void printBlock(const shared_ptr<Block> &block);

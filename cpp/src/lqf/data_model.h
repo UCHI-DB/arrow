@@ -111,7 +111,11 @@ namespace lqf {
     public:
         virtual Table *owner() { return nullptr; }
 
+        /// Number of rows in the block
         virtual uint64_t size() = 0;
+
+        /// Block limit, used for creating bitmaps
+        virtual uint64_t limit() { return size(); };
 
         virtual unique_ptr<ColumnIterator> col(uint32_t col_index) = 0;
 
@@ -263,6 +267,8 @@ namespace lqf {
 
         uint64_t size() override;
 
+        uint64_t limit() override;
+
         inline shared_ptr<ParquetBlock> inner() { return inner_; }
 
         inline shared_ptr<Bitmap> mask() { return mask_; }
@@ -289,6 +295,8 @@ namespace lqf {
 
     class ParquetTable : public Table {
     private:
+        const string name_;
+
         uint64_t columns_;
 
         unique_ptr<ParquetFileReader> fileReader_;

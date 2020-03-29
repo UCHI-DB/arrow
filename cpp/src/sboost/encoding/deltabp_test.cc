@@ -22,9 +22,9 @@ protected:
 
     virtual void SetUp() override {
         struct stat st;
-        stat("deltabpcontent", &st);
+        stat("testres/sboost/deltabpcontent", &st);
         file_size = st.st_size;
-        fd = open("deltabpcontent", O_RDONLY, 0);
+        fd = open("testres/sboost/deltabpcontent", O_RDONLY, 0);
         assert(fd != -1);
         //Execute mmap
         void *mmappedData = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0);
@@ -46,7 +46,7 @@ TEST_F(DeltaBP, Equal) {
 
     uint64_t expect[10000] = {0};
     BitmapWriter expectedBitmap(expect, 0);
-    std::ifstream infile("deltabpval");
+    std::ifstream infile("testres/sboost/deltabpval");
     int lineval;
     while (infile >> lineval) {
         expectedBitmap.appendBits(lineval == pred, 1);
@@ -68,7 +68,7 @@ TEST_F(DeltaBP, Less) {
 
     uint64_t expect[10000] = {0};
     BitmapWriter expectedBitmap(expect, 0);
-    std::ifstream infile("deltabpval");
+    std::ifstream infile("testres/sboost/deltabpval");
     int lineval;
     while (infile >> lineval) {
         expectedBitmap.appendBits(lineval < pred, 1);
@@ -89,7 +89,7 @@ TEST_F(DeltaBP, Greater) {
 
     uint64_t expect[10000] = {0};
     BitmapWriter expectedBitmap(expect, 0);
-    std::ifstream infile("deltabpval");
+    std::ifstream infile("testres/sboost/deltabpval");
     int lineval;
     while (infile >> lineval) {
         expectedBitmap.appendBits(lineval > pred, 1);
@@ -111,7 +111,7 @@ TEST_F(DeltaBP, Between) {
 
     uint64_t expect[10000] = {0};
     BitmapWriter expectedBitmap(expect, 0);
-    std::ifstream infile("deltabpval");
+    std::ifstream infile("testres/sboost/deltabpval");
     int lineval;
     while (infile >> lineval) {
         expectedBitmap.appendBits(lineval >= lb && lineval <= ub, 1);
@@ -133,7 +133,7 @@ TEST_F(DeltaBP, Rangele) {
 
     uint64_t expect[10000] = {0};
     BitmapWriter expectedBitmap(expect, 0);
-    std::ifstream infile("deltabpval");
+    std::ifstream infile("testres/sboost/deltabpval");
     int lineval;
     while (infile >> lineval) {
         expectedBitmap.appendBits(lineval >= lb && lineval < ub, 1);

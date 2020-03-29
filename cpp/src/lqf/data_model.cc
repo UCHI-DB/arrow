@@ -187,6 +187,10 @@ namespace lqf {
         return mask_->cardinality();
     }
 
+    uint64_t MaskedBlock::limit() {
+        return inner_->size();
+    }
+
     class MaskedColumnIterator : public ColumnIterator {
     private:
         unique_ptr<ColumnIterator> inner_;
@@ -474,13 +478,13 @@ namespace lqf {
 
     uint64_t Table::size() {
         uint64_t sum = 0;
-        function<void(const shared_ptr<Block>&)> counter = [&sum](const shared_ptr<Block>& block) {
+        blocks()->foreach([&sum](const shared_ptr<Block>& block) {
             sum+= block->size();
-        };
+        });
         return sum;
     }
 
-    ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : columns_(columns) {
+    ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : name_(fileName), columns_(columns) {
         fileReader_ = ParquetFileReader::OpenFile(fileName);
         if (!fileReader_) {
             throw std::invalid_argument("ParquetTable-Open: file not found");

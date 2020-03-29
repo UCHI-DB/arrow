@@ -26,8 +26,6 @@
 #include "parquet/platform.h"
 #include "parquet/types.h"
 
-#define SKIP_BUFFER_SIZE 1000
-
 namespace arrow {
 
 class Array;

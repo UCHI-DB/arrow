@@ -12,6 +12,7 @@ namespace lqf {
         for (uint32_t i = 0; i < block->size(); ++i) {
             linePrinter_(rows->next());
         }
+        sum_ += block->size();
     }
 
     unique_ptr<Printer> Printer::Make(function<void(DataRow &)> linePrinter) {
@@ -21,8 +22,10 @@ namespace lqf {
     }
 
     void Printer::print(Table &table) {
+        sum_ = 0;
         function<void(const shared_ptr<Block> &)> printer = bind(&Printer::printBlock, this, _1);
         table.blocks()->foreach(printer);
+        cout << "Total: " << sum_ << " rows" << endl;
     }
 
 }

@@ -840,6 +840,9 @@ int64_t TypedColumnReaderImpl<DType>::ReadBatchSpaced(
 
 template <typename DType>
 int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
+  if(num_rows_to_skip == 0) {
+      return 0;
+  }
   int64_t rows_to_skip = num_rows_to_skip;
 
   if(rows_to_skip < this->num_buffered_values_ - this->num_decoded_values_) {
@@ -854,7 +857,7 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
       // This code here is similar to what we have in ReadNewPage, but as we only decode
       // a page when it contains the next record we want to read, we have to read a
       // page header without decode the content.
-      while (true) {
+      while (rows_to_skip > 0) {
           this->current_page_ = this->pager_.get()->NextPage();
           if(__builtin_expect(this->current_page_->type() == PageType::DICTIONARY_PAGE, 0)) {
               // This is a dictionary page and the first page

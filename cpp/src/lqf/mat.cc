@@ -27,7 +27,7 @@ namespace lqf {
 
         auto size = block->size();
         for (uint32_t i = 0; i < size; ++i) {
-            loader_((*irows)[i], (*orows)[i]);
+            loader_((*irows).next(), (*orows)[i]);
         }
     }
 
