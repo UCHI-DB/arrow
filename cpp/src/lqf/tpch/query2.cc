@@ -9,6 +9,7 @@
 #include <lqf/mat.h>
 #include <lqf/agg.h>
 #include <lqf/print.h>
+#include <lqf/sort.h>
 #include "tpchquery.h"
 
 namespace lqf {
@@ -29,14 +30,15 @@ namespace lqf {
             auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE});
 
             ColFilter regionFilter({new SimpleColPredicate(Region::NAME, [&region](const DataField &field) {
-                return region == (*field.asByteArray());
+                return region == (field.asByteArray());
             })});
             auto filteredRegion = regionFilter.filter(*regionTable);
 
             HashFilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
-            MemMat nationMat(3, MLB MI(0, 0) MLE);
+            MemMat nationMat(3, MLB MI(0, 0)
+                MB(2, 1) MLE);
             auto memNationTable = nationMat.mat(*filteredNation);
 
             HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
@@ -56,112 +58,63 @@ namespace lqf {
                                                                           typePred))});
             auto filteredPart = partFilter.filter(*partTable);
 
+
+            FilterMat filterMat;
+            auto matPart = filterMat.mat(*filteredPart);
+            auto matSupplier = filterMat.mat(*filteredSupplier);
+
             // Sequence of these two joins
             HashFilterJoin pspJoin(PartSupp::PARTKEY, Part::PARTKEY);
-            auto filteredPs = pspJoin.join(*partSuppTable, *filteredPart);
+            auto filteredPs = pspJoin.join(*partSuppTable, *matPart);
+
 
             HashFilterJoin pssJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
-            filteredPs = pssJoin.join(*filteredPs, *filteredSupplier);
+            filteredPs = pssJoin.join(*filteredPs, *matSupplier);
 //
             FilterMat psMat;
             filteredPs = psMat.mat(*filteredPs);
 //
-            auto printer = Printer::Make(PBEGIN PI(0)
-            PI(1)
-            PEND);
-            printer->print(*filteredPs);
-//
-//            HashAgg psAgg([]() {
-//                return unique_ptr<HashCore>(new HashCore(
-//                        2,
-//                        [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); },
-//                        [](DataRow &dr) {
-//                            AggReducer *header = new AggReducer(1, {new agg::DoubleMin(
-//                                    PartSupp::SUPPLYCOST)});
-//                            header->header()[0] = dr[PartSupp::PARTKEY].asInt();
-//                            return unique_ptr<AggReducer>(header);
-//                        }));
-//            });
-//            auto psMinCostTable = psAgg.agg(*filteredPs);
-//
-//            cout << psMinCostTable->size() << endl;
+            HashAgg psAgg(3, []() {
+                return unique_ptr<HashCore>(new HashCore(
+                        [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); },
+                        [](DataRow &dr) {
+                            auto header = new AggRecordingReducer(1, new agg::DoubleRecordingMin(
+                                    PartSupp::SUPPLYCOST, PartSupp::SUPPKEY));
+                            header->header()[0] = dr[PartSupp::PARTKEY].asInt();
+                            return unique_ptr<AggReducer>(header);
+                        }));
+            }, true);
+            // 0: PARTKEY 1: SUPPLYCOST 2: SUPPKEY
+            auto psMinCostTable = psAgg.agg(*filteredPs);
 
-//            Java Version from Here
-//
-//            System.out.println(psMinCostTable.size());
-//
-//            partSuppTable.getLoadingProperties().setLoadColumns(
-//                    new int[]{PartSupp.PARTKEY, PartSupp.SUPPKEY, PartSupp.SUPPLYCOST});
-//            Join psmcJoin = new HashJoin(new RowBuilder() {
-//                @Override
-//                public DataRow build(int key, DataRow left, DataRow right) {
-//                    PrimitiveDataRow result = new PrimitiveDataRow(3);
-//                    result.setInt(0, key);
-//                    result.setInt(1, left.getInt(PartSupp.SUPPKEY));
-//                    return result;
-//                }
-//            }, PartSupp.PARTKEY, 0,
-//                    (left, right)->left.getDouble(PartSupp.SUPPLYCOST) == right.getDouble(1));
-//            Table pswithMinCost = psmcJoin.join(filteredPs, psMinCostTable);
-//
-//            partTable.getLoadingProperties().setLoadColumns(new int[]{Part.PARTKEY, Part.MFGR});
-//            Join ps2part = new HashJoin(new RowBuilder() {
-//                @Override
-//                public DataRow build(int key, DataRow left, DataRow right) {
-//                    FullDataRow res = new FullDataRow(new int[]{3, 1, 6});
-//                    PartRow pr = (PartRow) right;
-//                    res.setBinary(4, pr.p_mfgr);
-//                    res.setInt(0, key);
-//                    res.setInt(2, left.getInt(1));// SUPPKEY
-//                    return res;
-//                }
-//            }, 0, Part.PARTKEY);
-//            Table ps2partTable = ps2part.join(pswithMinCost, filteredPart);
-//
-//
-//            // TODO When supplier is large, this can be replaced with BlockHashJoin
-//            supplierTable.getLoadingProperties().setLoadColumns(new int[]{
-//                    Supplier.SUPPKEY, Supplier.ACCTBAL,
-//                    Supplier.NATIONKEY, Supplier.COMMENT,
-//                    Supplier.PHONE, Supplier.NAME,
-//                    Supplier.ADDRESS, Supplier.NATIONKEY
-//            });
-//            Join ps2supp = new HashJoin(new RowBuilder() {
-//                @Override
-//                public DataRow build(int key, DataRow left, DataRow right) {
-//                    SupplierRow sr = (SupplierRow) right;
-//                    left.setDouble(3, sr.s_acctbal);
-//                    left.setBinary(7, sr.s_address);
-//                    left.setBinary(9, sr.s_comment);
-//                    left.setBinary(5, sr.s_name);
-//                    left.setBinary(8, sr.s_phone);
-//                    left.setInt(1, sr.s_nationkey);
-//                    return left;
-//                }
-//            }, 2, Supplier.SUPPKEY);
-//            Table result = ps2supp.join(ps2partTable, filteredSupplier);
-//
-//            Join supp2nationJoin = new HashJoin(new RowBuilder() {
-//                @Override
-//                public DataRow build(int key, DataRow left, DataRow right) {
-//                    left.setBinary(6, right.getBinary(1));
-//                    return left;
-//                }
-//            }, 1, Nation.NATIONKEY);
-//            result = supp2nationJoin.join(result, memNationTable);
-//
-//
+            HashColumnJoin ps2partJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(2), JRS(Part::MFGR)}));
+            // 0 PARTKEY 1 SUPPKEY 2 P_MFGR
+            auto pswithPartTable = ps2partJoin.join(*psMinCostTable, *matPart);
+
+            HashColumnJoin ps2suppJoin(1, Supplier::SUPPKEY, new ColumnBuilder(
+                    {JL(0), JR(Supplier::ACCTBAL), JR(Supplier::NATIONKEY), JRS(Supplier::NAME), JRS(Supplier::ADDRESS),
+                     JRS(Supplier::PHONE), JRS(Supplier::COMMENT), JLS(2)}));
+            // 0 PARTKEY 1 ACCTBAL 2 NATIONKEY 3 SNAME 4 ADDRESS 5 PHONE 6 COMMENT 7 MFGR
+            auto psWithBothTable = ps2suppJoin.join(*pswithPartTable, *matSupplier);
+
+            HashColumnJoin psWithNationJoin(2, 0, new ColumnBuilder(
+                    {JL(0), JL(1), JLS(3), JLS(4), JLS(5), JLS(6), JLS(7), JRS(1)}));
+            // 0 PARTKEY 1 ACCTBAL 2 SNAME 3 ADDRESS 4 PHONE 5 COMMENT 6 MFGR 7 NATIONNAME
+            auto alljoined = psWithNationJoin.join(*psWithBothTable, *memNationTable);
+
+            // s_acctbal desc, n_name, s_name, p_partkey
+            TopN top(100, [](DataRow *a, DataRow *b) {
+                return SDGE(1) || (SDE(1) && SBLE(7)) || (SDE(1) && SBE(7) && SBLE(2)) || (SDE(1) && SBE(7) && SBE(2) && SILE(0));
+            });
 //            TopN sort = new TopN(100,
 //                                 Comparator.nullsLast(Comparator.< DataRow > comparingDouble(row->- row.getDouble(3))
 //                                         .thenComparing(row->row.getBinary(6).toStringUsingUTF8())
 //                                         .thenComparing(row->row.getBinary(5).toStringUsingUTF8())
 //                                         .thenComparingInt(row->row.getInt(0))));
-//            result = sort.sort(result);
-//
-//            Printer.DefaultPrinter
-//            printer = new Printer.DefaultPrinter();
-//            printer.print(result);
+            auto result = top.sort(*alljoined);
 
+            auto printer = Printer::Make(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PB(8) PEND);
+            printer->print(*result);
         }
 
 
@@ -172,8 +125,8 @@ namespace lqf {
                 auto col = (*block).col(1);
                 for (int i = 0; i < 5; ++i) {
                     auto ba = (*col)[i].asByteArray();
-                    memcpy((void *) buffer, ba->ptr, ba->len);
-                    buffer[ba->len] = 0;
+                    memcpy((void *) buffer, ba.ptr, ba.len);
+                    buffer[ba.len] = 0;
                     cout << buffer << endl;
                 }
             });

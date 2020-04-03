@@ -22,7 +22,7 @@ TEST(TopNTest, Sort) {
         (*rows)[i][0] = next;
     }
 
-    auto top10 = TopN(10, [](DataRow *a, DataRow *b) {
+    TopN top10(10, [](DataRow *a, DataRow *b) {
         return (*a)[0].asInt() < (*b)[0].asInt();
     });
 

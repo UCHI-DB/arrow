@@ -1,6 +1,8 @@
 set(TPCH_SRC
         tpchquery.cc
         query1.cc
+        query3.cc
+        query4.cc
         )
 
 add_library(tpch_static ${TPCH_SRC})

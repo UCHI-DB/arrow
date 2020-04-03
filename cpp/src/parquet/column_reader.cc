@@ -689,9 +689,11 @@ class TypedColumnReaderImpl : public TypedColumnReader<DType>,
 
   int64_t MoveTo(int64_t move_to_pos) override;
 
+
   Type::type type() const override { return this->descr_->physical_type(); }
 
   const ColumnDescriptor* descr() const override { return this->descr_; }
+
 };
 
 template <typename DType>

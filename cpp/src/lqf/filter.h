@@ -114,6 +114,26 @@ namespace lqf {
         using ByteArrayDictLess = DictLess<ByteArrayType>;
 
         template<typename DTYPE>
+        class DictGreater : public RawAccessor<DTYPE> {
+            using T = typename DTYPE::c_type;
+            const T &target_;
+            int rawTarget_;
+        public:
+            DictGreater(const T &target);
+
+            void dict(Dictionary<DTYPE> &dict) override;
+
+            void scanPage(uint64_t numEntry, const uint8_t *data,
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DictGreater<DTYPE>> build(const T &target);
+        };
+
+        using Int32DictGreater = DictGreater<Int32Type>;
+        using DoubleDictGreater= DictGreater<DoubleType>;
+        using ByteArrayDictGreater= DictGreater<ByteArrayType>;
+
+        template<typename DTYPE>
         class DictBetween : public RawAccessor<DTYPE> {
             using T = typename DTYPE::c_type;
             const T &lower_;
@@ -134,6 +154,28 @@ namespace lqf {
         using Int32DictBetween = DictBetween<Int32Type>;
         using DoubleDictBetween = DictBetween<DoubleType>;
         using ByteArrayDictBetween = DictBetween<ByteArrayType>;
+
+        template<typename DTYPE>
+        class DictRangele : public RawAccessor<DTYPE> {
+            using T = typename DTYPE::c_type;
+            const T &lower_;
+            const T &upper_;
+            int rawLower_;
+            int rawUpper_;
+        public:
+            DictRangele(const T &lower, const T &upper);
+
+            void dict(Dictionary<DTYPE> &dict) override;
+
+            void scanPage(uint64_t numEntry, const uint8_t *data,
+                          uint64_t *bitmap, uint64_t bitmap_offset) override;
+
+            static unique_ptr<DictRangele<DTYPE>> build(const T &lower, const T &upper);
+        };
+
+        using Int32DictRangele= DictRangele<Int32Type>;
+        using DoubleDictRangele= DictRangele<DoubleType>;
+        using ByteArrayDictRangele= DictRangele<ByteArrayType>;
 
         template<typename DTYPE>
         class DictMultiEq : public RawAccessor<DTYPE> {

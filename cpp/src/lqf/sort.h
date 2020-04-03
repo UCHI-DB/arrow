@@ -10,6 +10,11 @@
 
 #define SORTER1(x) [](DataRow *a, DataRow *b) {return (*a)[x].asInt() < (*b)[x].asInt();}
 #define SORTER2(x, y) [](DataRow *a, DataRow *b) { auto a0 = (*a)[x].asInt(); auto b0 = (*b)[x].asInt(); return a0 < b0 || (a0 == b0 && (*a)[y].asInt() < (*b)[y].asInt()); }
+#define SDGE(x) (*a)[x].asDouble() > (*b)[x].asDouble()
+#define SDE(x) (*a)[x].asDouble() == (*b)[x].asDouble()
+#define SBLE(x) (*a)[x].asByteArray() < (*b)[x].asByteArray()
+#define SBE(x) (*a)[x].asByteArray() == (*b)[x].asByteArray()
+#define SILE(x) (*a)[x].asInt() < (*b)[x].asInt()
 using namespace std;
 
 namespace lqf {
@@ -30,15 +35,16 @@ namespace lqf {
     class TopN {
     private:
         uint32_t n_;
+        mutex collector_lock_;
         function<bool(DataRow *, DataRow *)> comparator_;
-        unique_ptr<Heap<DataRow *>> heap_;
+        function<DataRow *()> rowMaker_;
     public:
         TopN(uint32_t, function<bool(DataRow *, DataRow *)>);
 
         shared_ptr<Table> sort(Table &);
 
     protected:
-        void sortBlock(const shared_ptr<Block> &input);
+        void sortBlock(vector<DataRow *> *, const shared_ptr<Block> &input);
     };
 }
 #endif //ARROW_SORT_H

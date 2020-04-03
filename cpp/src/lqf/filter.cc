@@ -150,6 +150,28 @@ namespace lqf {
         }
 
         template<typename DTYPE>
+        DictGreater<DTYPE>::DictGreater(const T &target) : target_(target) {}
+
+        template<typename DTYPE>
+        void DictGreater<DTYPE>::dict(Dictionary<DTYPE> &dict) {
+            rawTarget_ = dict.lookup(target_);
+        };
+
+        template<typename DTYPE>
+        void DictGreater<DTYPE>::scanPage(uint64_t numEntry, const uint8_t *data,
+                                       uint64_t *bitmap, uint64_t bitmap_offset) {
+            uint8_t bitWidth = data[0];
+            ::sboost::encoding::rlehybrid::greater(data + 1, bitmap, bitmap_offset, bitWidth,
+                                                numEntry, rawTarget_);
+        }
+
+        template<typename DTYPE>
+        unique_ptr<DictGreater<DTYPE>> DictGreater<DTYPE>::build(const T &target) {
+            return unique_ptr<DictGreater<DTYPE>>(new DictGreater<DTYPE>(target));
+        }
+
+
+        template<typename DTYPE>
         DictBetween<DTYPE>::DictBetween(const T &lower, const T &upper)
                 : lower_(lower), upper_(upper) {}
 
@@ -171,6 +193,30 @@ namespace lqf {
         unique_ptr<DictBetween<DTYPE>> DictBetween<DTYPE>::build(const T &lower, const T &upper) {
             return unique_ptr<DictBetween<DTYPE>>(new DictBetween<DTYPE>(lower, upper));
         }
+
+        template<typename DTYPE>
+        DictRangele<DTYPE>::DictRangele(const T &lower, const T &upper)
+                : lower_(lower), upper_(upper) {}
+
+        template<typename DTYPE>
+        void DictRangele<DTYPE>::dict(Dictionary<DTYPE> &dict) {
+            rawLower_ = dict.lookup(lower_);
+            rawUpper_ = dict.lookup(upper_);
+        };
+
+        template<typename DTYPE>
+        void DictRangele<DTYPE>::scanPage(uint64_t numEntry, const uint8_t *data,
+                                          uint64_t *bitmap, uint64_t bitmap_offset) {
+            uint8_t bitWidth = data[0];
+            ::sboost::encoding::rlehybrid::rangele(data + 1, bitmap, bitmap_offset, bitWidth,
+                                                   numEntry, rawLower_, rawUpper_);
+        }
+
+        template<typename DTYPE>
+        unique_ptr<DictRangele<DTYPE>> DictRangele<DTYPE>::build(const T &lower, const T &upper) {
+            return unique_ptr<DictRangele<DTYPE>>(new DictRangele<DTYPE>(lower, upper));
+        }
+
 
         template<typename DTYPE>
         DictMultiEq<DTYPE>::DictMultiEq(function<bool(const T &)> pred) : predicate_(pred) {}

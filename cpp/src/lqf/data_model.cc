@@ -14,16 +14,55 @@ using namespace std;
 
 namespace lqf {
 
-    DataRow::~DataRow() {
+    mt19937 Block::rand_ = mt19937(time(NULL));
 
+    const array<vector<uint32_t>, 10> OFFSETS = {
+            vector<uint32_t>({0}),
+            {0, 1},
+            {0, 1, 2},
+            {0, 1, 2, 3},
+            {0, 1, 2, 3, 4},
+            {0, 1, 2, 3, 4, 5},
+            {0, 1, 2, 3, 4, 5, 6},
+            {0, 1, 2, 3, 4, 5, 6, 7},
+            {0, 1, 2, 3, 4, 5, 6, 7, 8},
+            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+    };
+
+    const array<vector<uint32_t>, 10> SIZES = {
+            vector<uint32_t>({1}),
+            vector<uint32_t>({1}),
+            vector<uint32_t>({1, 1}),
+            vector<uint32_t>({1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1, 1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1, 1, 1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1, 1, 1, 1, 1, 1})
+    };
+
+    const vector<uint32_t> &colOffset(uint32_t num_fields) {
+        return OFFSETS[num_fields];
     }
 
-    MemDataRow::MemDataRow(uint8_t num_fields) : data_(num_fields, 0x0) {}
+    const vector<uint32_t> &colSize(uint32_t num_fields) {
+        return SIZES[num_fields];
+    }
+
+    DataRow::~DataRow() {}
+
+    MemDataRow::MemDataRow(uint8_t num_fields)
+            : MemDataRow(OFFSETS[num_fields]) {}
+
+    MemDataRow::MemDataRow(const vector<uint32_t> &offset) : data_(offset.back(), 0x0), offset_(offset) {}
 
     MemDataRow::~MemDataRow() {}
 
     DataField &MemDataRow::operator[](uint64_t i) {
-        view_ = data_.data() + i;
+        view_ = data_.data() + offset_[i];
+        assert(i + 1 < offset_.size());
+        view_.size_ = offset_[i + 1] - offset_[i];
         return view_;
     }
 
@@ -36,24 +75,26 @@ namespace lqf {
         return data_.data();
     }
 
-    MemBlock::MemBlock(uint32_t size, uint8_t num_fields) : size_(size), num_fields_(num_fields) {
-        content_ = vector<uint64_t>(size * num_fields);
+    MemBlock::MemBlock(uint32_t size, uint32_t row_size, const vector<uint32_t> &col_offset)
+            : size_(size), row_size_(row_size), col_offset_(col_offset) {
+        content_ = vector<uint64_t>(size * row_size_);
     }
 
-    MemBlock::~MemBlock() {
-    }
+    MemBlock::MemBlock(uint32_t size, uint32_t row_size) : MemBlock(size, row_size, OFFSETS[row_size]) {}
+
+    MemBlock::~MemBlock() {}
 
     uint64_t MemBlock::size() {
         return size_;
     }
 
     void MemBlock::inc(uint32_t row_to_inc) {
-        content_.resize(content_.size() + num_fields_ * row_to_inc);
+        content_.resize(content_.size() + row_size_ * row_to_inc);
         size_ += row_to_inc;
     }
 
     void MemBlock::compact(uint32_t newsize) {
-        content_.resize(newsize * num_fields_);
+        content_.resize(newsize * row_size_);
         size_ = newsize;
     }
 
@@ -67,16 +108,196 @@ namespace lqf {
     private:
         vector<uint64_t> &data_;
         uint64_t index_;
-        uint8_t num_fields_;
+        uint32_t row_size_;
+        const vector<uint32_t> &col_offset_;
         DataField view_;
         friend MemDataRowIterator;
     public:
-        MemDataRowView(vector<uint64_t> &data, uint8_t num_fields)
-                : data_(data), index_(-1), num_fields_(num_fields) {}
+        MemDataRowView(vector<uint64_t> &data, uint32_t row_size, const vector<uint32_t> &col_offset)
+                : data_(data), index_(-1), row_size_(row_size), col_offset_(col_offset) {}
 
-        virtual ~MemDataRowView() {
+        virtual ~MemDataRowView() {}
 
+        void moveto(uint64_t index) { index_ = index; }
+
+        void next() { ++index_; }
+
+        DataField &operator[](uint64_t i) override {
+            assert(index_ < data_.size() / row_size_);
+            assert(col_offset_[i] < row_size_);
+            view_ = data_.data() + index_ * row_size_ + col_offset_[i];
+            view_.size_ = col_offset_[i + 1] - col_offset_[i];
+            return view_;
         }
+
+        uint64_t *raw() override {
+            return data_.data() + index_ * row_size_;
+        }
+
+        void operator=(DataRow &row) override {
+            memcpy(static_cast<void *>(data_.data() + index_ * row_size_), static_cast<void *>(row.raw()),
+                   sizeof(uint64_t) * row_size_);
+        }
+    };
+
+    class MemDataRowIterator : public DataRowIterator {
+    private:
+        MemDataRowView reference_;
+    public:
+        MemDataRowIterator(vector<uint64_t> &data, uint32_t row_size, const vector<uint32_t> &col_offset)
+                : reference_(data, row_size, col_offset) {}
+
+        DataRow &operator[](uint64_t idx) override {
+            reference_.moveto(idx);
+            return reference_;
+        }
+
+        DataRow &next() override {
+            reference_.next();
+            return reference_;
+        }
+
+        uint64_t pos() override {
+            return reference_.index_;
+        }
+
+        void translate(DataField &target, uint32_t col_index, uint32_t key) override {}
+    };
+
+    class MemColumnIterator : public ColumnIterator {
+    private:
+        vector<uint64_t> &data_;
+        uint32_t row_size_;
+        uint32_t col_offset_;
+        uint64_t row_index_;
+        DataField view_;
+    public:
+        MemColumnIterator(vector<uint64_t> &data, uint32_t row_size, uint32_t col_offset, uint32_t col_size)
+                : data_(data), row_size_(row_size), col_offset_(col_offset), row_index_(-1) {
+            view_.size_ = col_size;
+        }
+
+        DataField &operator[](uint64_t idx) override {
+            assert(idx < data_.size() / row_size_);
+            row_index_ = idx;
+            view_ = data_.data() + idx * row_size_ + col_offset_;
+            return view_;
+        }
+
+        DataField &next() override {
+            view_ = data_.data() + (++row_index_) * row_size_ + col_offset_;
+            return view_;
+        }
+
+        uint64_t pos() override {
+            return row_index_;
+        }
+
+        void translate(DataField &, uint32_t) override {}
+    };
+
+    unique_ptr<DataRowIterator> MemBlock::rows() {
+        return unique_ptr<DataRowIterator>(new MemDataRowIterator(content_, row_size_, col_offset_));
+    }
+
+    unique_ptr<ColumnIterator> MemBlock::col(uint32_t col_index) {
+        return unique_ptr<ColumnIterator>(new MemColumnIterator(content_, row_size_, col_offset_[col_index],
+                                                                col_offset_[col_index + 1] - col_offset_[col_index]));
+    }
+
+    shared_ptr<Block> MemBlock::mask(shared_ptr<Bitmap> mask) {
+        auto newBlock = make_shared<MemBlock>(mask->cardinality(), row_size_, col_offset_);
+        auto ite = mask->iterator();
+
+        auto newData = newBlock->content_.data();
+        auto oldData = content_.data();
+
+        auto newCounter = 0;
+        while (ite->hasNext()) {
+            auto next = ite->next();
+            memcpy((void *) (newData + (newCounter++) * row_size_),
+                   (void *) (oldData + next * row_size_),
+                   sizeof(uint64_t) * row_size_);
+        }
+        return newBlock;
+    }
+
+    MemvBlock::MemvBlock(uint32_t size, const vector<uint32_t> &col_size) : size_(size), col_size_(col_size) {
+        uint8_t num_fields = col_size.size();
+        for (uint8_t i = 0; i < num_fields; ++i) {
+            content_.push_back(unique_ptr<vector<uint64_t>>(new vector<uint64_t>(size * col_size_[i])));
+        }
+    }
+
+    MemvBlock::MemvBlock(uint32_t size, uint32_t num_fields) : MemvBlock(size, SIZES[num_fields]) {}
+
+    MemvBlock::~MemvBlock() {}
+
+    uint64_t MemvBlock::size() {
+        return size_;
+    }
+
+    void MemvBlock::inc(uint32_t row_to_inc) {
+        size_ += row_to_inc;
+
+        uint8_t num_fields = col_size_.size();
+        for (uint8_t i = 0; i < num_fields; ++i) {
+            content_[i]->resize(size_ * col_size_[i]);
+        }
+    }
+
+    void MemvBlock::compact(uint32_t newsize) {
+        size_ = newsize;
+        uint8_t num_fields = col_size_.size();
+        for (uint8_t i = 0; i < num_fields; ++i) {
+            content_[i]->resize(size_ * col_size_[i]);
+        }
+    }
+
+    class MemvColumnIterator : public ColumnIterator {
+    private:
+        vector<uint64_t> &data_;
+        uint64_t row_index_;
+        DataField view_;
+    public:
+        MemvColumnIterator(vector<uint64_t> &data, uint32_t col_size)
+                : data_(data), row_index_(-1) {
+            assert(col_size <= 2);
+            view_.size_ = col_size;
+        }
+
+        DataField &operator[](uint64_t idx) override {
+            assert(idx < data_.size() / view_.size_);
+            row_index_ = idx;
+            view_ = data_.data() + idx * view_.size_;
+            return view_;
+        }
+
+        DataField &next() override {
+            ++row_index_;
+            view_ = data_.data() + row_index_ * view_.size_;
+            return view_;
+        }
+
+        uint64_t pos() override {
+            return row_index_;
+        }
+
+        void translate(DataField &, uint32_t) override {}
+    };
+
+    class MemvDataRowIterator;
+
+    class MemvDataRowView : public DataRow {
+    private:
+        unique_ptr<vector<unique_ptr<ColumnIterator>>> cols_;
+        uint64_t index_;
+        friend MemvDataRowIterator;
+    public:
+        MemvDataRowView(vector<unique_ptr<ColumnIterator>> *cols)
+                : cols_(unique_ptr<vector<unique_ptr<ColumnIterator>>>(cols)), index_(-1) {}
+
+        virtual ~MemvDataRowView() {}
 
         void moveto(uint64_t index) {
             index_ = index;
@@ -87,98 +308,69 @@ namespace lqf {
         }
 
         DataField &operator[](uint64_t i) override {
-            view_ = data_.data() + index_ * num_fields_ + i;
-            return view_;
-        }
-
-        uint64_t *raw() override {
-            return data_.data() + index_ * num_fields_;
+            return (*(*cols_)[i])[index_];
         }
 
         void operator=(DataRow &row) override {
-            memcpy(static_cast<void *>(data_.data() + index_ * num_fields_), static_cast<void *>(row.raw()),
-                   sizeof(uint64_t) * num_fields_);
+            uint32_t num_cols = cols_->size();
+            for (uint32_t i = 0; i < num_cols; ++i) {
+                (*(*cols_)[i])[index_] = row[i];
+            }
         }
-
     };
 
-    class MemDataRowIterator : public DataRowIterator {
+    class MemvDataRowIterator : public DataRowIterator {
     private:
-        MemDataRowView reference_;
+        MemvDataRowView reference_;
     public:
-        MemDataRowIterator(vector<uint64_t> &data, uint8_t num_fields)
-                : reference_(data, num_fields) {}
+        MemvDataRowIterator(vector<unique_ptr<ColumnIterator>> *cols)
+                : reference_(cols) {}
 
-        virtual DataRow &operator[](uint64_t idx) override {
+        DataRow &operator[](uint64_t idx) override {
             reference_.moveto(idx);
             return reference_;
         }
 
-        virtual DataRow &next() override {
+        DataRow &next() override {
             reference_.next();
             return reference_;
         }
 
-        virtual uint64_t pos() override {
+        uint64_t pos() override {
             return reference_.index_;
         }
+
+        void translate(DataField &, uint32_t, uint32_t) override {}
     };
 
-    class MemColumnIterator : public ColumnIterator {
-    private:
-        uint8_t num_fields_;
-        vector<uint64_t> &data_;
-        uint8_t colindex_;
-        uint64_t rowindex_;
-        DataField view_;
-    public:
-        MemColumnIterator(vector<uint64_t> &data, uint8_t num_fields, uint8_t colindex)
-                : num_fields_(num_fields), data_(data), colindex_(colindex), rowindex_(-1) {}
 
-        virtual DataField &operator[](uint64_t idx) override {
-            rowindex_ = idx;
-            view_ = data_.data() + idx * num_fields_ + colindex_;
-            return view_;
+    unique_ptr<DataRowIterator> MemvBlock::rows() {
+        auto cols = new vector<unique_ptr<ColumnIterator>>();
+        for (auto i = 0u; i < col_size_.size(); ++i) {
+            cols->push_back(col(i));
         }
-
-        DataField &next() override {
-            ++rowindex_;
-            view_ = data_.data() + rowindex_ * num_fields_ + colindex_;
-            return view_;
-        }
-
-        uint64_t pos() override {
-            return rowindex_;
-        }
-
-    };
-
-    unique_ptr<DataRowIterator> MemBlock::rows() {
-        return unique_ptr<DataRowIterator>(new MemDataRowIterator(content_, num_fields_));
+        return unique_ptr<DataRowIterator>(new MemvDataRowIterator(cols));
     }
 
-    unique_ptr<ColumnIterator> MemBlock::col(uint32_t col_index) {
-        return unique_ptr<ColumnIterator>(new MemColumnIterator(content_, num_fields_, col_index));
+    unique_ptr<ColumnIterator> MemvBlock::col(uint32_t col_index) {
+        return unique_ptr<ColumnIterator>(new MemvColumnIterator(*content_[col_index], col_size_[col_index]));
     }
 
-    shared_ptr<Block> MemBlock::mask(shared_ptr<Bitmap> mask) {
-        auto newBlock = make_shared<MemBlock>(mask->cardinality(), num_fields_);
-        auto ite = mask->iterator();
+    shared_ptr<Block> MemvBlock::mask(shared_ptr<Bitmap> mask) {
+        // Does not support
+        return nullptr;
+    }
 
-        auto newData = newBlock->content_.data();
-        auto oldData = content_.data();
-
-        auto newCounter = 0;
-        while (ite->hasNext()) {
-            auto next = ite->next();
-            memcpy((void *) (newData + (newCounter++) * num_fields_),
-                   (void *) (oldData + next * num_fields_),
-                   sizeof(uint64_t) * num_fields_);
+    void MemvBlock::merge(MemvBlock &another, const vector<pair<uint8_t, uint8_t>> &merge_inst) {
+        this->size_ = std::max(size_, another.size_);
+        for (auto &inst: merge_inst) {
+            content_[inst.second] = move(another.content_[inst.first]);
         }
-        return newBlock;
+        // The old memblock is discarded
+        another.content_.clear();
     }
 
-    MaskedBlock::MaskedBlock(shared_ptr<ParquetBlock> inner, shared_ptr<Bitmap> mask)
+    MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)
             : inner_(inner), mask_(mask) {}
 
     MaskedBlock::~MaskedBlock() {}
@@ -199,17 +391,19 @@ namespace lqf {
         MaskedColumnIterator(unique_ptr<ColumnIterator> inner, unique_ptr<BitmapIterator> bite)
                 : inner_(move(inner)), bite_(move(bite)) {}
 
-        virtual DataField &operator[](uint64_t index) override {
+        DataField &operator[](uint64_t index) override {
             return (*inner_)[index];
         }
 
-        virtual DataField &next() override {
+        DataField &next() override {
             return (*inner_)[bite_->next()];
         }
 
         uint64_t pos() override {
             return inner_->pos();
         }
+
+        void translate(DataField &, uint32_t) override {}
     };
 
     unique_ptr<ColumnIterator> MaskedBlock::col(uint32_t col_index) {
@@ -236,6 +430,8 @@ namespace lqf {
         uint64_t pos() override {
             return inner_->pos();
         }
+
+        void translate(DataField &, uint32_t, uint32_t) override {}
     };
 
     unique_ptr<DataRowIterator> MaskedBlock::rows() {
@@ -265,8 +461,15 @@ namespace lqf {
     }
 
     template<typename DTYPE>
+    Dictionary<DTYPE>::Dictionary(T *buffer, uint32_t size) {
+        this->size_ = size;
+        this->buffer_ = buffer;
+        this->managed_ = false;
+    }
+
+    template<typename DTYPE>
     Dictionary<DTYPE>::~Dictionary() {
-        if (nullptr != buffer_)
+        if (managed_ && nullptr != buffer_)
             free(buffer_);
     }
 
@@ -302,7 +505,7 @@ namespace lqf {
 
 
     ParquetBlock::ParquetBlock(ParquetTable *owner, shared_ptr<RowGroupReader> rowGroup, uint32_t index,
-                               uint64_t columns) : owner_(owner), rowGroup_(rowGroup), index_(index),
+                               uint64_t columns) : Block(index), owner_(owner), rowGroup_(rowGroup), index_(index),
                                                    columns_(columns) {}
 
     ParquetBlock::~ParquetBlock() {}
@@ -326,17 +529,11 @@ namespace lqf {
         ParquetRowView(vector<unique_ptr<ColumnIterator>> &cols) : columns_(cols), index_(-1) {}
 
         virtual DataField &operator[](uint64_t colindex) override {
-//            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
             return (*(columns_[colindex]))[index_];
         }
 
         virtual DataField &operator()(uint64_t colindex) override {
-//            validate_true(colindex < columns_.size() && columns_[colindex], "column not available");
             return (*(columns_[colindex]))(index_);
-        }
-
-        void setIndex(uint64_t index) {
-            this->index_ = index;
         }
     };
 
@@ -391,6 +588,10 @@ namespace lqf {
         uint64_t pos() override {
             return view_.index_;
         }
+
+        void translate(DataField &target, uint32_t col_index, uint32_t key) override {
+            columns_[col_index]->translate(target, key);
+        }
     };
 
     unique_ptr<DataRowIterator> ParquetBlock::rows() {
@@ -398,24 +599,28 @@ namespace lqf {
     }
 
 #define COL_BUF_SIZE 8
-
-    const int8_t WIDTH[8] = {1, 4, 8, 0, 4, 8, sizeof(ByteArray), 0};
+    const int8_t WIDTH[8] = {1, sizeof(int32_t), sizeof(int64_t), 0, sizeof(float), sizeof(double), sizeof(ByteArray),
+                             0};
+    const int8_t SIZE[8] = {1, 1, 1, 1, 1, 1, sizeof(ByteArray) >> 3, 0};
 
     class ParquetColumnIterator : public ColumnIterator {
     private:
         shared_ptr<ColumnReader> columnReader_;
         DataField dataField_;
+        DataField rawField_;
         int64_t read_counter_;
         int64_t pos_;
         int64_t bufpos_;
         uint8_t width_;
         uint8_t *buffer_;
     public:
-        ParquetColumnIterator(shared_ptr<ColumnReader> colReader) : columnReader_(colReader),
-                                                                    dataField_(), read_counter_(0), pos_(-1),
-                                                                    bufpos_(-8) {
+        ParquetColumnIterator(shared_ptr<ColumnReader> colReader)
+                : columnReader_(colReader), dataField_(), rawField_(),
+                  read_counter_(0), pos_(-1), bufpos_(-8) {
             buffer_ = (uint8_t *) malloc(sizeof(ByteArray) * COL_BUF_SIZE);
             width_ = WIDTH[columnReader_->type()];
+            dataField_.size_ = SIZE[columnReader_->type()];
+            rawField_.size_ = 1;
         }
 
         virtual ~ParquetColumnIterator() {
@@ -432,8 +637,8 @@ namespace lqf {
         virtual DataField &operator()(uint64_t idx) override {
             uint64_t *pointer = loadBufferRaw(idx);
             pos_ = idx;
-            dataField_ = pointer;
-            return dataField_;
+            rawField_ = pointer;
+            return rawField_;
         }
 
         virtual DataField &next() override {
@@ -443,6 +648,12 @@ namespace lqf {
         uint64_t pos() override {
             return pos_;
         }
+
+        void translate(DataField &target, uint32_t key) override {
+            const uint8_t *dict = (const uint8_t *) columnReader_->dictionary();
+            target = (uint64_t *) (dict + key * width_);
+        }
+
 
     protected:
         inline uint64_t *loadBuffer(uint64_t idx) {
@@ -463,6 +674,7 @@ namespace lqf {
                 columnReader_->MoveTo(idx);
                 columnReader_->ReadBatchRaw(COL_BUF_SIZE, reinterpret_cast<uint32_t *>(buffer_), &read_counter_);
                 bufpos_ = idx;
+
                 return (uint64_t *) buffer_;
             }
         }
@@ -478,8 +690,8 @@ namespace lqf {
 
     uint64_t Table::size() {
         uint64_t sum = 0;
-        blocks()->foreach([&sum](const shared_ptr<Block>& block) {
-            sum+= block->size();
+        blocks()->foreach([&sum](const shared_ptr<Block> &block) {
+            sum += block->size();
         });
         return sum;
     }
@@ -522,7 +734,7 @@ namespace lqf {
         return stream;
     }
 
-    uint32_t ParquetTable::numFields() {
+    uint8_t ParquetTable::numFields() {
         return __builtin_popcount(columns_);
     }
 
@@ -549,7 +761,7 @@ namespace lqf {
         return inner_->blocks()->map(mapper);
     }
 
-    uint32_t MaskedTable::numFields() {
+    uint8_t MaskedTable::numFields() {
         return inner_->numFields();
     }
 
@@ -565,38 +777,68 @@ namespace lqf {
         return stream_;
     }
 
-    uint32_t TableView::numFields() {
+    uint8_t TableView::numFields() {
         return num_fields_;
     }
 
-    shared_ptr<MemTable> MemTable::Make(uint8_t num_fields) {
-        return shared_ptr<MemTable>(new MemTable(num_fields));
+    shared_ptr<MemTable> MemTable::Make(uint8_t num_fields, bool vertical) {
+        return shared_ptr<MemTable>(new MemTable(lqf::colSize(num_fields), vertical));
     }
 
-    MemTable::MemTable(uint8_t num_fields) : num_fields_(num_fields), blocks_(vector<shared_ptr<Block>>()) {}
+    shared_ptr<MemTable> MemTable::Make(uint8_t num_fields, uint8_t num_string_fields, bool vertical) {
+        uint8_t i = 0;
+        vector<uint32_t> col_size;
+        for (; i < num_fields - num_string_fields; ++i) {
+            col_size.push_back(1);
+        }
+        for (; i < num_fields; ++i) {
+            col_size.push_back(2);
+        }
+
+        return shared_ptr<MemTable>(new MemTable(col_size, vertical));
+    }
+
+    shared_ptr<MemTable> MemTable::Make(const vector<uint32_t> col_size, bool vertical) {
+        return shared_ptr<MemTable>(new MemTable(col_size, vertical));
+    }
+
+    MemTable::MemTable(const vector<uint32_t> col_size, bool vertical)
+            : vertical_(vertical), col_size_(col_size), blocks_(vector<shared_ptr<Block>>()) {
+        col_offset_.push_back(0);
+        auto num_fields = col_size_.size();
+        for (uint8_t k = 0; k < num_fields; ++k) {
+            row_size_ += col_size_[k];
+            col_offset_.push_back(col_offset_.back() + col_size_[k]);
+        }
+    }
 
     MemTable::~MemTable() {}
 
-    uint32_t MemTable::numFields() {
-        return num_fields_;
-    }
+    uint8_t MemTable::numFields() { return col_size_.size(); }
 
-    shared_ptr<MemBlock> MemTable::allocate(uint32_t num_rows) {
-        shared_ptr<MemBlock> block = make_shared<MemBlock>(num_rows, num_fields_);
+    uint8_t MemTable::numStringFields() { return row_size_ - col_size_.size(); }
+
+    shared_ptr<Block> MemTable::allocate(uint32_t num_rows) {
+        shared_ptr<Block> block;
+        if (vertical_)
+            block = make_shared<MemvBlock>(num_rows, col_size_);
+        else
+            block = make_shared<MemBlock>(num_rows, row_size_, col_offset_);
         blocks_.push_back(block);
         return block;
+    }
+
+    void MemTable::append(shared_ptr<Block> block) {
+        blocks_.push_back(block);
     }
 
     shared_ptr<Stream<shared_ptr<Block>>> MemTable::blocks() {
         return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_));
     }
 
-    shared_ptr<MemBlock> ParallelMemTable::allocate(uint32_t num_rows) {
-        unique_lock<mutex> lock(lock_);
-        auto result = MemTable::allocate(num_rows);
-        lock.unlock();
-        return result;
-    }
+    const vector<uint32_t> &MemTable::colSize() { return col_size_; }
+
+    const vector<uint32_t> &MemTable::colOffset() { return col_offset_; }
 
 /**
  * Initialize the templates
@@ -619,9 +861,11 @@ namespace lqf {
     template
     class RawAccessor<ByteArrayType>;
 
-    template shared_ptr<Bitmap> ParquetBlock::raw<Int32Type>(uint32_t col_index, RawAccessor<Int32Type> *accessor);
+    template shared_ptr<Bitmap>
+    ParquetBlock::raw<Int32Type>(uint32_t col_index, RawAccessor<Int32Type> *accessor);
 
-    template shared_ptr<Bitmap> ParquetBlock::raw<DoubleType>(uint32_t col_index, RawAccessor<DoubleType> *accessor);
+    template shared_ptr<Bitmap>
+    ParquetBlock::raw<DoubleType>(uint32_t col_index, RawAccessor<DoubleType> *accessor);
 
     template shared_ptr<Bitmap>
     ParquetBlock::raw<ByteArrayType>(uint32_t col_index, RawAccessor<ByteArrayType> *accessor);

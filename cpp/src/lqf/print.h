@@ -6,6 +6,7 @@
 #define ARROW_PRINT_H
 
 #include <functional>
+#include <string>
 #include "data_model.h"
 
 #define PBEGIN [](DataRow& row) { std::cout <<
@@ -31,5 +32,7 @@ namespace lqf {
 
         void print(Table &table);
     };
+
+    ostream &operator<<(ostream &os, const ByteArray &dt);
 }
 #endif //ARROW_PRINT_H

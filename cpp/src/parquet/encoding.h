@@ -377,6 +377,8 @@ class DictDecoder : virtual public TypedDecoder<DType> {
   /// \warning Remember to reset the builder each time the dict decoder is initialized
   /// with a new dictionary page
   virtual int DecodeIndices(int num_values, ::arrow::ArrayBuilder* builder) = 0;
+
+  virtual void* dictionary() = 0;
 };
 
 // ----------------------------------------------------------------------

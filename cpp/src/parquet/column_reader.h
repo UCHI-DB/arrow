@@ -26,6 +26,7 @@
 #include "parquet/platform.h"
 #include "parquet/schema.h"
 #include "parquet/types.h"
+#include "parquet/encoding.h"
 
 namespace arrow {
 
@@ -136,6 +137,8 @@ class PARQUET_EXPORT ColumnReader {
   virtual int64_t ReadBatchRaw(int64_t batch_size, uint32_t* values, int64_t* values_read) = 0;
 
   virtual const ColumnDescriptor* descr() const = 0;
+
+  virtual const void* dictionary() = 0;
 };
 
 // API to read values from a single column. This is a main client facing API.
@@ -207,6 +210,8 @@ class TypedColumnReader : public ColumnReader {
                               void* values, int64_t* values_read) override {
       return ReadBatch(batch_size, def_levels, rep_levels, (T*)values, values_read);
   }
+
+  virtual const void* dictionary() override { return nullptr; }
 };
 
 namespace internal {

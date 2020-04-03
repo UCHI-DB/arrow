@@ -7,6 +7,11 @@
 
 namespace lqf {
 
+    ostream &operator<<(ostream &os, const ByteArray &dt) {
+        os << std::string(reinterpret_cast<const char *>(dt.ptr), dt.len);
+        return os;
+    }
+
     void Printer::printBlock(const shared_ptr<Block> &block) {
         auto rows = block->rows();
         for (uint32_t i = 0; i < block->size(); ++i) {

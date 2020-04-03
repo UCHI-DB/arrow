@@ -74,8 +74,8 @@ namespace lqf {
                 return reducer;
             };
 
-            TableAgg agg([=]() {
-                return unique_ptr<TableCore>(new TableCore(10, 8, indexer, headerInit));
+            TableAgg agg(10, [=]() {
+                return unique_ptr<TableCore>(new TableCore(8, indexer, headerInit));
             });
             auto agged = agg.agg(*filtered);
 //

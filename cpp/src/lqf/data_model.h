@@ -6,6 +6,7 @@
 #define CHIDATA_LQF_DATA_MODEL_H
 
 #include <cstdint>
+#include <random>
 #include <iostream>
 #include <arrow/util/bit_stream_utils.h>
 #include <parquet/file_reader.h>
@@ -18,29 +19,47 @@ namespace lqf {
     using namespace std;
     using namespace parquet;
 
-    union DataField {
+    const vector<uint32_t> &colOffset(uint32_t num_fields);
+
+    const vector<uint32_t> &colSize(uint32_t num_fields);
+
+    union DataPointer {
         uint64_t *raw_;
         int32_t *ival_;
         double *dval_;
         ByteArray *sval_;
+    };
+
+    class DataField {
     public:
-        inline int32_t asInt() const { return *ival_; }
+        DataPointer pointer_;
+        uint8_t size_;
 
-        inline double asDouble() const { return *dval_; }
+        inline int32_t asInt() const { return *pointer_.ival_; }
 
-        inline ByteArray *asByteArray() const { return sval_; }
+        inline double asDouble() const { return *pointer_.dval_; }
 
-        inline void operator=(int32_t value) { *ival_ = value; }
+        inline ByteArray &asByteArray() const { return *pointer_.sval_; }
 
-        inline void operator=(double value) { *dval_ = value; }
+        inline void operator=(int32_t value) { *pointer_.ival_ = value; }
 
-        inline void operator=(ByteArray *value) { sval_ = value; }
+        inline void operator=(double value) { *pointer_.dval_ = value; }
 
-        inline void operator=(uint64_t *raw) { raw_ = raw; };
+        inline void operator=(ByteArray &value) { *pointer_.sval_ = value; }
 
-        inline uint64_t *data() const { return raw_; }
+        inline void operator=(uint64_t *raw) { pointer_.raw_ = raw; };
 
-        inline void operator=(DataField &df) { *raw_ = *df.raw_; }
+        inline uint64_t *data() const { return pointer_.raw_; }
+
+        inline void operator=(DataField &df) {
+            assert(size_ <= 2);
+            assert(df.size_ <= 2);
+            assert(df.size_ <= size_);
+            // We allow the input size to be smaller than local size, allowing a larger field
+            // to be used for smaller field
+            memcpy((void *) pointer_.raw_, (void *) df.pointer_.raw_, sizeof(uint64_t) * df.size_);
+//            *raw_ = *df.raw_;
+        }
     };
 
     /*
@@ -66,9 +85,12 @@ namespace lqf {
     class MemDataRow : public DataRow {
     private:
         vector<uint64_t> data_;
+        const vector<uint32_t> &offset_;
         DataField view_;
     public:
         MemDataRow(uint8_t num_fields);
+
+        MemDataRow(const vector<uint32_t> &offset);
 
         virtual ~MemDataRow();
 
@@ -90,6 +112,8 @@ namespace lqf {
         virtual DataRow &next() = 0;
 
         virtual uint64_t pos() = 0;
+
+        virtual void translate(DataField &, uint32_t, uint32_t) = 0;
     };
 
     class ColumnIterator {
@@ -102,14 +126,26 @@ namespace lqf {
             return (*this)[idx];
         }
 
+        virtual void translate(DataField &, uint32_t) = 0;
+
         virtual uint64_t pos() = 0;
     };
 
     class Table;
 
     class Block : public enable_shared_from_this<Block> {
+    private:
+        static mt19937 rand_;
+    protected:
+        uint32_t id_;
     public:
+        Block(uint32_t id) : id_(id) {}
+
+        Block() : Block(rand_()) {}
+
         virtual Table *owner() { return nullptr; }
+
+        inline uint32_t id() { return id_; };
 
         /// Number of rows in the block
         virtual uint64_t size() = 0;
@@ -122,15 +158,21 @@ namespace lqf {
         virtual unique_ptr<DataRowIterator> rows() = 0;
 
         virtual shared_ptr<Block> mask(shared_ptr<Bitmap> mask) = 0;
+
+        virtual void compact(uint32_t newsize) {}
     };
 
     class MemBlock : public Block {
     private:
         uint32_t size_;
-        uint8_t num_fields_;
+        uint32_t row_size_;
+        const vector<uint32_t> &col_offset_;
+
         vector<uint64_t> content_;
     public:
-        MemBlock(uint32_t size, uint8_t num_fields);
+        MemBlock(uint32_t size, uint32_t row_size, const vector<uint32_t> &col_offset);
+
+        MemBlock(uint32_t size, uint32_t row_size);
 
         virtual ~MemBlock();
 
@@ -142,7 +184,7 @@ namespace lqf {
          */
         void inc(uint32_t row_to_inc);
 
-        void compact(uint32_t newsize);
+        void compact(uint32_t newsize) override;
 
         inline vector<uint64_t> &content();
 
@@ -154,11 +196,42 @@ namespace lqf {
 
     };
 
+    class MemvBlock : public Block {
+    private:
+        uint32_t size_;
+        const vector<uint32_t> &col_size_;
+
+        vector<unique_ptr<vector<uint64_t>>> content_;
+    public:
+        MemvBlock(uint32_t size, const vector<uint32_t> &col_size);
+
+        MemvBlock(uint32_t size, uint32_t num_fields);
+
+        virtual ~MemvBlock();
+
+        uint64_t size() override;
+
+        void inc(uint32_t row_to_inc);
+
+        void compact(uint32_t newsize) override;
+
+        inline vector<uint64_t> &content();
+
+        unique_ptr<ColumnIterator> col(uint32_t col_index) override;
+
+        unique_ptr<DataRowIterator> rows() override;
+
+        shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
+
+        void merge(MemvBlock &, const vector<pair<uint8_t, uint8_t>> &);
+    };
+
     template<typename DTYPE>
     class Dictionary {
     private:
         using T = typename DTYPE::c_type;
         // This page need to be cached. Otherwise when it is released, byte array data may be lost.
+        bool managed_ = true;
         shared_ptr<DictionaryPage> page_;
         T *buffer_;
         uint32_t size_;
@@ -166,6 +239,8 @@ namespace lqf {
         Dictionary();
 
         Dictionary(shared_ptr<DictionaryPage> data);
+
+        Dictionary(T *buffer, uint32_t size);
 
         virtual ~Dictionary();
 
@@ -229,11 +304,13 @@ namespace lqf {
     class ParquetTable;
 
     class ParquetBlock : public Block {
-    private:
+    protected:
         ParquetTable *owner_;
         shared_ptr<RowGroupReader> rowGroup_;
         uint32_t index_;
         uint64_t columns_;
+
+        vector<void *> dictionaries_;
     public:
         ParquetBlock(ParquetTable *, shared_ptr<RowGroupReader>, uint32_t, uint64_t);
 
@@ -252,16 +329,15 @@ namespace lqf {
 
         unique_ptr<DataRowIterator> rows() override;
 
-        unique_ptr<ParquetFileReader> fileReader_;
-
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
+
     };
 
     class MaskedBlock : public Block {
-        shared_ptr<ParquetBlock> inner_;
+        shared_ptr<Block> inner_;
         shared_ptr<Bitmap> mask_;
     public:
-        MaskedBlock(shared_ptr<ParquetBlock> inner, shared_ptr<Bitmap> mask);
+        MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask);
 
         virtual ~MaskedBlock();
 
@@ -269,7 +345,7 @@ namespace lqf {
 
         uint64_t limit() override;
 
-        inline shared_ptr<ParquetBlock> inner() { return inner_; }
+        inline shared_ptr<Block> inner() { return inner_; }
 
         inline shared_ptr<Bitmap> mask() { return mask_; }
 
@@ -288,7 +364,9 @@ namespace lqf {
          * The number of columns in the table
          * @return
          */
-        virtual uint32_t numFields() = 0;
+        virtual uint8_t numFields() = 0;
+
+        virtual uint8_t numStringFields() { return 0; }
 
         uint64_t size();
     };
@@ -307,7 +385,7 @@ namespace lqf {
 
         virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint32_t numFields() override;
+        uint8_t numFields() override;
 
         void updateColumns(uint64_t columns);
 
@@ -334,7 +412,7 @@ namespace lqf {
 
         virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint32_t numFields() override;
+        uint8_t numFields() override;
 
     protected:
         shared_ptr<Block> buildMaskedBlock(const shared_ptr<Block> &);
@@ -348,33 +426,46 @@ namespace lqf {
 
         shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint32_t numFields() override;
+        uint8_t numFields() override;
     };
 
     class MemTable : public Table {
-    private:
-        uint8_t num_fields_;
+    private:;
+        bool vertical_;
+
+        // For columnar view
+        vector<uint32_t> col_size_;
+
+        // For row view
+        uint32_t row_size_;
+        vector<uint32_t> col_offset_;
+
         vector<shared_ptr<Block>> blocks_;
     protected:
-        MemTable(uint8_t num_fields);
+        MemTable(const vector<uint32_t> col_size, bool vertical);
 
     public:
-        static shared_ptr<MemTable> Make(uint8_t num_fields);
+        static shared_ptr<MemTable> Make(uint8_t num_fields, bool vertical = false);
+
+        static shared_ptr<MemTable> Make(uint8_t num_fields, uint8_t num_string_fields, bool vertical = false);
+
+        static shared_ptr<MemTable> Make(const vector<uint32_t> col_size, bool vertical);
 
         virtual ~MemTable();
 
-        virtual shared_ptr<MemBlock> allocate(uint32_t num_rows);
+        shared_ptr<Block> allocate(uint32_t num_rows);
+
+        void append(shared_ptr<Block>);
 
         shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint32_t numFields() override;
-    };
+        uint8_t numFields() override;
 
-    class ParallelMemTable : MemTable {
-    protected:
-        mutex lock_;
-    public:
-        shared_ptr<MemBlock> allocate(uint32_t) override;
+        uint8_t numStringFields() override;
+
+        const vector<uint32_t> &colSize();
+
+        const vector<uint32_t> &colOffset();
     };
 
 }

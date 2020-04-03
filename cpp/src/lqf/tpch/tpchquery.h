@@ -87,6 +87,33 @@ namespace lqf {
             static const int COMMENT = 2;
         };
 
+        class Customer {
+        public:
+            static const string path;
+            static const int CUSTKEY = 0;
+            static const int NAME = 1;
+            static const int ADDRESS = 2;
+            static const int NATIONKEY = 3;
+            static const int PHONE = 4;
+            static const int ACCTBAL = 5;
+            static const int MKTSEGMENT = 6;
+            static const int COMMENT = 7;
+        };
+
+        class Orders {
+        public:
+            static const string path;
+            static const int ORDERKEY = 0;
+            static const int CUSTKEY = 1;
+            static const int ORDERSTATUS = 2;
+            static const int TOTALPRICE = 3;
+            static const int ORDERDATE = 4;
+            static const int ORDERPRIORITY = 5;
+            static const int CLERK = 6;
+            static const int SHIPPRIORITY = 7;
+            static const int COMMENT = 8;
+        };
+
         void executeQ1();
     }
 }

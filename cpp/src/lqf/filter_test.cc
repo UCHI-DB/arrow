@@ -98,8 +98,8 @@ TEST_F(ColFilterTest, FilterSboost) {
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
     function<bool(const DataField &)> pred2 = [](const DataField &field) {
-        ByteArray *input = field.asByteArray();
-        return !strncmp(reinterpret_cast<const char *>(input->ptr + input->len - 3), "AIL", 3);
+        ByteArray& input = field.asByteArray();
+        return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
     ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, pred))});
 
@@ -140,12 +140,12 @@ TEST_F(ColFilterTest, FilterMultiSboost) {
 
 
     function<bool(const DataField &)> simplePred = [](const DataField &field) {
-        ByteArray *input = field.asByteArray();
-        return !strncmp(reinterpret_cast<const char *>(input->ptr + input->len - 3), "AIL", 3);
+        ByteArray& input = field.asByteArray();
+        return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
     function<bool(const DataField &)> simplePred2 = [](const DataField &field) {
-        ByteArray *input = field.asByteArray();
-        return input->len == 3 && !strncmp(reinterpret_cast<const char *>(input->ptr), "AIR", 3);
+        ByteArray& input = field.asByteArray();
+        return input.len == 3 && !strncmp(reinterpret_cast<const char *>(input.ptr), "AIR", 3);
     };
     ColFilter regFilter({new SimpleColPredicate(14, simplePred)});
     auto simpleFiltered = regFilter.filter(*ptable)->blocks()->collect();

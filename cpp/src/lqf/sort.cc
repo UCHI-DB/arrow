@@ -14,35 +14,49 @@ namespace lqf {
             : n_(n), comparator_(comp) {}
 
     shared_ptr<Table> TopN::sort(Table &table) {
-        uint32_t num_fields = table.numFields();
-        auto resultTable = MemTable::Make(num_fields);
-        auto resultBlock = resultTable->allocate(n_);
+        auto resultTable = MemTable::Make(table.numFields(), table.numStringFields());
+        auto tablePointer = resultTable.get();
 
-        heap_ = unique_ptr<Heap<DataRow *>>(
-                new Heap<DataRow *>(n_, [=]() { return new MemDataRow(num_fields); }, comparator_));
 
-        vector<DataRow *> &heapContainer = heap_->content();
+        rowMaker_ = [tablePointer]() { return new MemDataRow(tablePointer->colOffset()); };
 
-        function<void(const shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, _1);
+        vector<DataRow *> collector;
+
+        function<void(const shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, &collector, _1);
         table.blocks()->foreach(proc);
 
-        heap_->done();
+        /// Make a final sort and fetch the top n
+        if (collector.size() > n_) {
+            std::sort(collector.begin(), collector.end(), comparator_);
+        }
 
+        auto resultBlock = resultTable->allocate(n_);
         auto resultRows = resultBlock->rows();
         for (uint32_t i = 0; i < n_; ++i) {
-            (*resultRows)[i] = *(heapContainer[i]);
-            delete heapContainer[i];
+            (*resultRows)[i] = *(collector[i]);
+        }
+        // Clean up
+        for (auto &row:collector) {
+            delete row;
         }
 
         return resultTable;
     }
 
-    void TopN::sortBlock(const shared_ptr<Block> &input) {
+    void TopN::sortBlock(vector<DataRow *> *collector, const shared_ptr<Block> &input) {
+        Heap<DataRow *> heap(n_, rowMaker_, comparator_);
         auto rows = input->rows();
         for (uint32_t i = 0; i < input->size(); ++i) {
             DataRow &row = rows->next();
-            heap_->add(&row);
+            heap.add(&row);
         }
+        heap.done();
+
+        /// Collect the result
+        collector_lock_.lock();
+        auto content = heap.content();
+        collector->insert(collector->end(), content.begin(), content.end());
+        collector_lock_.unlock();
     }
 
     SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp) : comparator_(comp) {}

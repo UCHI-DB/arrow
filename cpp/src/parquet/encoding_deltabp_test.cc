@@ -42,10 +42,9 @@ namespace parquet {
             vector<int32_t> buffer2(buffer.size());
             decoder->Decode(buffer2.data(), buffer.size());
 
-            for(int i = 0 ; i < buffer.size(); ++i) {
+            for(uint32_t i = 0 ; i < buffer.size(); ++i) {
                 EXPECT_EQ(buffer[i], buffer2[i]);
             }
-
 
             munmap(content, file_size);
             close(fd);

@@ -11,20 +11,177 @@ using namespace lqf;
 TEST(MemBlockTest, Column) {
     MemBlock mb(100, 5);
 
-    auto col = mb.col(0);
+    vector<double> buf1;
+    vector<int32_t> buf2;
 
-    (*col)[4] = 3.27f;
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+    }
 
-    ASSERT_DOUBLE_EQ(3.27f, (*col)[4].asDouble());
+    auto col0 = mb.col(0);
+    auto col1 = mb.col(1);
+    for (int i = 0; i < 100; ++i) {
+        (*col0)[i] = buf1[i];
+        (*col1)[i] = buf2[i];
+    }
+
+    auto col0r = mb.col(0);
+    auto col1r = mb.col(1);
+
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*col0r)[i].asDouble());
+        EXPECT_EQ(1, (*col0r)[i].size_);
+
+        EXPECT_EQ(buf2[i], (*col1r)[i].asInt());
+        EXPECT_EQ(1, (*col1r)[i].size_);
+    }
+}
+
+TEST(MemBlockTest, ColumnString) {
+    vector<uint32_t> col_offsets({0, 1, 2, 4});
+    MemBlock mb(100, 5, col_offsets);
+
+    char buffer[3000];
+    for (int i = 0; i < 3000; ++i) {
+        buffer[i] = 'a' + (i % 26);
+        if (i != 0 && i % 29 == 0) {
+            buffer[i] = 0;
+        }
+    }
+
+    vector<double> buf1;
+    vector<int32_t> buf2;
+    vector<ByteArray> buf3;
+
+
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+        buf3.push_back(ByteArray(buffer + i * 30));
+    }
+
+    auto col0 = mb.col(0);
+    auto col1 = mb.col(1);
+    auto col2 = mb.col(2);
+    for (int i = 0; i < 100; ++i) {
+        (*col0)[i] = buf1[i];
+        (*col1)[i] = buf2[i];
+        (*col2)[i] = buf3[i];
+    }
+
+    auto col0r = mb.col(0);
+    auto col1r = mb.col(1);
+    auto col2r = mb.col(2);
+
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*col0r)[i].asDouble());
+        EXPECT_EQ(1, (*col0r)[i].size_);
+
+        EXPECT_EQ(buf2[i], (*col1r)[i].asInt());
+        EXPECT_EQ(1, (*col1r)[i].size_);
+
+        EXPECT_EQ(buf3[i], (*col2r)[i].asByteArray());
+        EXPECT_TRUE(buf3.data() + i != (*col2r)[i].pointer_.sval_);
+        EXPECT_EQ(2, (*col2r)[i].size_);
+    }
 }
 
 TEST(MemBlockTest, Row) {
-    MemBlock mb(100, 5);
+    vector<uint32_t> col_offsets({0, 1, 2, 4});
+    MemBlock mb(100, 5, col_offsets);
+
+    char buffer[3000];
+    for (int i = 0; i < 3000; ++i) {
+        buffer[i] = 'a' + (i % 26);
+        if (i != 0 && i % 29 == 0) {
+            buffer[i] = 0;
+        }
+    }
+
+    vector<double> buf1;
+    vector<int32_t> buf2;
+    vector<ByteArray> buf3;
+
+
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+        buf3.push_back(ByteArray(buffer + i * 30));
+    }
+
 
     auto row = mb.rows();
 
-    (*row)[4][0] = 4;
-    ASSERT_EQ(4, (*row)[4][0].asInt());
+    for (int i = 0; i < 100; ++i) {
+        (*row)[i][0] = buf1[i];
+        (*row)[i][1] = buf2[i];
+        (*row)[i][2] = buf3[i];
+    }
+
+    auto roww = mb.rows();
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*roww)[i][0].asDouble());
+        EXPECT_EQ(1, (*roww)[i][0].size_);
+
+        EXPECT_EQ(buf2[i], (*roww)[i][1].asInt());
+        EXPECT_EQ(1, (*roww)[i][1].size_);
+
+        EXPECT_EQ(buf3[i], (*roww)[i][2].asByteArray());
+        EXPECT_TRUE(buf3.data() + i != (*roww)[i][2].pointer_.sval_);
+        EXPECT_EQ(2, (*roww)[i][2].size_);
+    }
+}
+
+TEST(MemBlockTest, RowCopy) {
+    vector<uint32_t> col_offsets({0, 1, 2, 4});
+    MemBlock mb(100, 5, col_offsets);
+
+    char buffer[3000];
+    for (int i = 0; i < 3000; ++i) {
+        buffer[i] = 'a' + (i % 26);
+        if (i != 0 && i % 29 == 0) {
+            buffer[i] = 0;
+        }
+    }
+
+    vector<double> buf1;
+    vector<int32_t> buf2;
+    vector<ByteArray> buf3;
+
+
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+        buf3.push_back(ByteArray(buffer + i * 30));
+    }
+
+    MemDataRow mdr(col_offsets);
+
+    auto write_row = mb.rows();
+    for (int i = 0; i < 100; ++i) {
+        mdr[0] = buf1[i];
+        mdr[1] = buf2[i];
+        mdr[2] = buf3[i];
+        (*write_row)[i] = mdr;
+    }
+
+    auto roww = mb.rows();
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*roww)[i][0].asDouble());
+        EXPECT_EQ(1, (*roww)[i][0].size_);
+
+        EXPECT_EQ(buf2[i], (*roww)[i][1].asInt());
+        EXPECT_EQ(1, (*roww)[i][1].size_);
+
+        EXPECT_EQ(buf3[i], (*roww)[i][2].asByteArray());
+        EXPECT_TRUE(buf3.data() + i != (*roww)[i][2].pointer_.sval_);
+        EXPECT_EQ(2, (*roww)[i][2].size_);
+    }
 }
 
 TEST(MemBlockTest, Mask) {
@@ -47,6 +204,153 @@ TEST(MemBlockTest, Mask) {
     EXPECT_EQ(95, (*rows)[2][0].asInt());
 }
 
+TEST(MemvBlockTest, Column) {
+    vector<uint32_t> col_offsets({0, 1, 2, 4});
+    vector<uint32_t> col_size({1, 1, 2});
+    MemvBlock mb(100, col_size);
+
+    char buffer[3000];
+    for (int i = 0; i < 3000; ++i) {
+        buffer[i] = 'a' + (i % 26);
+        if (i != 0 && i % 29 == 0) {
+            buffer[i] = 0;
+        }
+    }
+
+    vector<double> buf1;
+    vector<int32_t> buf2;
+    vector<ByteArray> buf3;
+
+
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+        buf3.push_back(ByteArray(buffer + i * 30));
+    }
+
+    auto col0 = mb.col(0);
+    auto col1 = mb.col(1);
+    auto col2 = mb.col(2);
+    for (int i = 0; i < 100; ++i) {
+        (*col0)[i] = buf1[i];
+        (*col1)[i] = buf2[i];
+        (*col2)[i] = buf3[i];
+    }
+
+    auto col0r = mb.col(0);
+    auto col1r = mb.col(1);
+    auto col2r = mb.col(2);
+
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*col0r)[i].asDouble());
+        EXPECT_EQ(1, (*col0r)[i].size_);
+
+        EXPECT_EQ(buf2[i], (*col1r)[i].asInt());
+        EXPECT_EQ(1, (*col1r)[i].size_);
+
+        EXPECT_EQ(buf3[i], (*col2r)[i].asByteArray());
+        EXPECT_TRUE(buf3.data() + i != (*col2r)[i].pointer_.sval_);
+        EXPECT_EQ(2, (*col2r)[i].size_);
+    }
+}
+
+TEST(MemvBlockTest, Row) {
+    vector<uint32_t> col_size({1, 1, 2});
+    MemvBlock mb(100, col_size);
+
+    char buffer[3000];
+    for (int i = 0; i < 3000; ++i) {
+        buffer[i] = 'a' + (i % 26);
+        if (i != 0 && i % 29 == 0) {
+            buffer[i] = 0;
+        }
+    }
+
+    vector<double> buf1;
+    vector<int32_t> buf2;
+    vector<ByteArray> buf3;
+
+
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+        buf3.push_back(ByteArray(buffer + i * 30));
+    }
+
+
+    auto row = mb.rows();
+
+    for (int i = 0; i < 100; ++i) {
+        (*row)[i][0] = buf1[i];
+        (*row)[i][1] = buf2[i];
+        (*row)[i][2] = buf3[i];
+    }
+
+    auto roww = mb.rows();
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*roww)[i][0].asDouble());
+        EXPECT_EQ(1, (*roww)[i][0].size_);
+
+        EXPECT_EQ(buf2[i], (*roww)[i][1].asInt());
+        EXPECT_EQ(1, (*roww)[i][1].size_);
+
+        EXPECT_EQ(buf3[i], (*roww)[i][2].asByteArray());
+        EXPECT_TRUE(buf3.data() + i != (*roww)[i][2].pointer_.sval_);
+        EXPECT_EQ(2, (*roww)[i][2].size_);
+    }
+}
+
+TEST(MemvBlockTest, RowCopy) {
+    char buffer[3000];
+    for (int i = 0; i < 3000; ++i) {
+        buffer[i] = 'a' + (i % 26);
+        if (i != 0 && i % 29 == 0) {
+            buffer[i] = 0;
+        }
+    }
+
+    vector<double> buf1;
+    vector<int32_t> buf2;
+    vector<ByteArray> buf3;
+
+    srand(time(NULL));
+    for (int i = 0; i < 100; ++i) {
+        buf1.push_back(drand48());
+        buf2.push_back(rand() % 500);
+        buf3.push_back(ByteArray(buffer + i * 30));
+    }
+
+    vector<uint32_t> col_size({1, 1, 2});
+    vector<uint32_t> col_offset({0, 1, 2, 4});
+
+    MemvBlock mb(100, col_size);
+    MemDataRow mdr(col_offset);
+
+    auto write_row = mb.rows();
+    for (int i = 0; i < 100; ++i) {
+        mdr[0] = buf1[i];
+        mdr[1] = buf2[i];
+        mdr[2] = buf3[i];
+        (*write_row)[i] = mdr;
+    }
+
+
+    auto roww = mb.rows();
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_DOUBLE_EQ(buf1[i], (*roww)[i][0].asDouble());
+        EXPECT_EQ(1, (*roww)[i][0].size_);
+
+        EXPECT_EQ(buf2[i], (*roww)[i][1].asInt());
+        EXPECT_EQ(1, (*roww)[i][1].size_);
+
+        EXPECT_EQ(buf3[i], (*roww)[i][2].asByteArray());
+        EXPECT_TRUE(buf3.data() + i != (*roww)[i][2].pointer_.sval_);
+        EXPECT_EQ(2, (*roww)[i][2].size_);
+    }
+}
+
 class ParquetBlockTest : public ::testing::Test {
 protected:
     shared_ptr<ParquetFileReader> fileReader_;
@@ -67,8 +371,11 @@ TEST_F(ParquetBlockTest, Column) {
 //        buffer.push_back((*col)[i].asInt());
 //    }
     EXPECT_EQ(156, (*col)[0].asInt());
+    EXPECT_EQ(1, (*col)[0].size_);
     EXPECT_EQ(68, (*col)[1].asInt());
+    EXPECT_EQ(1, (*col)[1].size_);
     EXPECT_EQ(64, (*col)[2].asInt());
+    EXPECT_EQ(1, (*col)[2].size_);
 //    EXPECT_EQ(3, (*col)[3].asInt());
 //    EXPECT_EQ(25, (*col)[4].asInt());
 //    EXPECT_EQ(16, (*col)[5].asInt());
@@ -160,8 +467,10 @@ TEST_F(ParquetBlockTest, Row) {
     EXPECT_EQ(1, (*rows)[2][0].asInt());
     EXPECT_EQ(25, (*rows)[4][1].asInt());
     EXPECT_EQ(25, (*rows)[4][1].asInt());
-    EXPECT_EQ(ByteArray("NONE"), *(*rows)[4][13].asByteArray());
-    EXPECT_EQ(ByteArray("DELIVER IN PERSON"), *(*rows)[5][13].asByteArray());
+    EXPECT_EQ(ByteArray("NONE"), (*rows)[4][13].asByteArray());
+    EXPECT_EQ(2, (*rows)[4][13].size_);
+    EXPECT_EQ(ByteArray("DELIVER IN PERSON"), (*rows)[5][13].asByteArray());
+    EXPECT_EQ(2, (*rows)[5][13].size_);
 
     auto rows2 = block->rows();
     DataRow &row = rows2->next();

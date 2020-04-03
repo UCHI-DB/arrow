@@ -23,5 +23,9 @@ namespace lqf {
         const string Nation::path = tablePath("nation");
 
         const string Region::path = tablePath("region");
+
+        const string Customer::path = tablePath("customer");
+
+        const string Orders::path = tablePath("orders");
     }
 }
