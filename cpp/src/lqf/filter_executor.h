@@ -33,7 +33,7 @@ namespace lqf {
 
         void reg(Table &, ColPredicate &);
 
-        shared_ptr<Bitmap> executeSimple(Block &, Bitmap &, SimpleColPredicate &);
+        shared_ptr<Bitmap> executeSimple(Block &, Bitmap &, SimplePredicate &);
 
         template<typename DTYPE>
         shared_ptr<Bitmap> executeSboost(Block &, sboost::SboostPredicate<DTYPE> &);

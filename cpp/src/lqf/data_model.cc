@@ -14,6 +14,32 @@ using namespace std;
 
 namespace lqf {
 
+    ostream &operator<<(ostream &os, MemDataRow &dt) {
+        uint64_t *raw = dt.raw();
+        auto offsets = dt.offset();
+        auto limit = offsets.size() - 1;
+        for (uint32_t i = 0; i < limit; ++i) {
+            auto size = offsets[i + 1] - offsets[i];
+            if (size == 1) {
+                os.write((char *) (raw + offsets[i]), 8);
+            } else {
+                auto value = dt[i].asByteArray();
+                os << string((const char *) value.ptr, value.len);
+            }
+        }
+        return os;
+    }
+
+    ostream &operator<<(ostream &os, DataField &dt) {
+        if (dt.size_ == 1) {
+            os.write((char *) dt.data(), 8);
+        } else {
+            auto value = dt.asByteArray();
+            os.write((const char *) value.ptr, value.len);
+        }
+        return os;
+    }
+
     mt19937 Block::rand_ = mt19937(time(NULL));
 
     const array<vector<uint32_t>, 10> OFFSETS = {
@@ -30,7 +56,7 @@ namespace lqf {
     };
 
     const array<vector<uint32_t>, 10> SIZES = {
-            vector<uint32_t>({1}),
+            vector<uint32_t>({}),
             vector<uint32_t>({1}),
             vector<uint32_t>({1, 1}),
             vector<uint32_t>({1, 1, 1}),
@@ -52,6 +78,8 @@ namespace lqf {
 
     DataRow::~DataRow() {}
 
+    MemDataRow MemDataRow::EMPTY = MemDataRow(0);
+
     MemDataRow::MemDataRow(uint8_t num_fields)
             : MemDataRow(OFFSETS[num_fields]) {}
 
@@ -71,6 +99,12 @@ namespace lqf {
                sizeof(uint64_t) * data_.size());
     }
 
+    MemDataRow &MemDataRow::operator=(MemDataRow &row) {
+        memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.raw()),
+               sizeof(uint64_t) * data_.size());
+        return *this;
+    }
+
     uint64_t *MemDataRow::raw() {
         return data_.data();
     }
@@ -88,12 +122,7 @@ namespace lqf {
         return size_;
     }
 
-    void MemBlock::inc(uint32_t row_to_inc) {
-        content_.resize(content_.size() + row_size_ * row_to_inc);
-        size_ += row_to_inc;
-    }
-
-    void MemBlock::compact(uint32_t newsize) {
+    void MemBlock::resize(uint32_t newsize) {
         content_.resize(newsize * row_size_);
         size_ = newsize;
     }
@@ -237,16 +266,7 @@ namespace lqf {
         return size_;
     }
 
-    void MemvBlock::inc(uint32_t row_to_inc) {
-        size_ += row_to_inc;
-
-        uint8_t num_fields = col_size_.size();
-        for (uint8_t i = 0; i < num_fields; ++i) {
-            content_[i]->resize(size_ * col_size_[i]);
-        }
-    }
-
-    void MemvBlock::compact(uint32_t newsize) {
+    void MemvBlock::resize(uint32_t newsize) {
         size_ = newsize;
         uint8_t num_fields = col_size_.size();
         for (uint8_t i = 0; i < num_fields; ++i) {
@@ -651,7 +671,7 @@ namespace lqf {
 
         void translate(DataField &target, uint32_t key) override {
             const uint8_t *dict = (const uint8_t *) columnReader_->dictionary();
-            target = (uint64_t *) (dict + key * width_);
+            target = (dict + key * width_);
         }
 
 
@@ -734,8 +754,8 @@ namespace lqf {
         return stream;
     }
 
-    uint8_t ParquetTable::numFields() {
-        return __builtin_popcount(columns_);
+    const vector<uint32_t> &ParquetTable::colSize() {
+        return lqf::colSize(0);
     }
 
     shared_ptr<ParquetBlock> ParquetTable::createParquetBlock(const int &block_idx) {
@@ -761,8 +781,8 @@ namespace lqf {
         return inner_->blocks()->map(mapper);
     }
 
-    uint8_t MaskedTable::numFields() {
-        return inner_->numFields();
+    const vector<uint32_t> &MaskedTable::colSize() {
+        return inner_->colSize();
     }
 
     shared_ptr<Block> MaskedTable::buildMaskedBlock(const shared_ptr<Block> &input) {
@@ -770,32 +790,19 @@ namespace lqf {
         return make_shared<MaskedBlock>(pblock, masks_[pblock->index()]);
     }
 
-    TableView::TableView(uint32_t num_fields, shared_ptr<Stream<shared_ptr<Block>>> stream)
-            : num_fields_(num_fields), stream_(stream) {}
+    TableView::TableView(const vector<uint32_t> &col_size, shared_ptr<Stream<shared_ptr<Block>>> stream)
+            : col_size_(col_size), stream_(stream) {}
+
+    const vector<uint32_t> &TableView::colSize() {
+        return col_size_;
+    }
 
     shared_ptr<Stream<shared_ptr<Block>>> TableView::blocks() {
         return stream_;
     }
 
-    uint8_t TableView::numFields() {
-        return num_fields_;
-    }
-
     shared_ptr<MemTable> MemTable::Make(uint8_t num_fields, bool vertical) {
         return shared_ptr<MemTable>(new MemTable(lqf::colSize(num_fields), vertical));
-    }
-
-    shared_ptr<MemTable> MemTable::Make(uint8_t num_fields, uint8_t num_string_fields, bool vertical) {
-        uint8_t i = 0;
-        vector<uint32_t> col_size;
-        for (; i < num_fields - num_string_fields; ++i) {
-            col_size.push_back(1);
-        }
-        for (; i < num_fields; ++i) {
-            col_size.push_back(2);
-        }
-
-        return shared_ptr<MemTable>(new MemTable(col_size, vertical));
     }
 
     shared_ptr<MemTable> MemTable::Make(const vector<uint32_t> col_size, bool vertical) {
@@ -803,7 +810,7 @@ namespace lqf {
     }
 
     MemTable::MemTable(const vector<uint32_t> col_size, bool vertical)
-            : vertical_(vertical), col_size_(col_size), blocks_(vector<shared_ptr<Block>>()) {
+            : vertical_(vertical), col_size_(col_size), row_size_(0), blocks_(vector<shared_ptr<Block>>()) {
         col_offset_.push_back(0);
         auto num_fields = col_size_.size();
         for (uint8_t k = 0; k < num_fields; ++k) {
@@ -813,10 +820,6 @@ namespace lqf {
     }
 
     MemTable::~MemTable() {}
-
-    uint8_t MemTable::numFields() { return col_size_.size(); }
-
-    uint8_t MemTable::numStringFields() { return row_size_ - col_size_.size(); }
 
     shared_ptr<Block> MemTable::allocate(uint32_t num_rows) {
         shared_ptr<Block> block;

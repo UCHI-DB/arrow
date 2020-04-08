@@ -41,31 +41,69 @@ namespace lqf {
         virtual shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) = 0;
     };
 
-    class SimpleColPredicate : public ColPredicate {
+    class SimplePredicate : public ColPredicate {
     private:
         function<bool(const DataField &)> predicate_;
     public:
-        SimpleColPredicate(uint32_t, function<bool(const DataField &)>);
+        SimplePredicate(uint32_t, function<bool(const DataField &)>);
 
-        ~SimpleColPredicate() {}
+        ~SimplePredicate() {}
 
         shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) override;
     };
+
+    namespace raw {
+
+        template<typename DTYPE>
+        class Not : RawAccessor<DTYPE> {
+        protected:
+            unique_ptr<RawAccessor < DTYPE>> inner_;
+        public:
+            Not(unique_ptr<RawAccessor < DTYPE>>
+
+            inner);
+
+            void init(uint64_t) override;
+
+            void dict(Dictionary <DTYPE> &dict) override;
+
+            void data(DataPage *dpage) override;
+
+            shared_ptr<Bitmap> result() override;
+
+            static unique_ptr<RawAccessor < DTYPE>> build(
+
+            function<unique_ptr<RawAccessor < DTYPE>>()
+
+            >);
+        };
+
+        using Int32Not = Not<Int32Type>;
+        using DoubleNot = Not<DoubleType>;
+        using ByteArrayNot = Not<ByteArrayType>;
+    }
 
     namespace sboost {
 
         template<typename DTYPE>
         class SboostPredicate : public ColPredicate {
         public:
-            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()> accbuilder) :
-                    ColPredicate(index), builder_(accbuilder) {}
+            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor < DTYPE>>()
+
+            > accbuilder)
+            :
+
+            ColPredicate (index), builder_(accbuilder) {}
 
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
 
-            unique_ptr<RawAccessor<DTYPE>> build();
+            unique_ptr<RawAccessor < DTYPE>> build();
 
         protected:
-            function<unique_ptr<RawAccessor<DTYPE>>()> builder_;
+            function<unique_ptr<RawAccessor < DTYPE>>()
+
+            >
+            builder_;
         };
 
         using SBoostInt32Predicate = SboostPredicate<Int32Type>;
@@ -81,7 +119,7 @@ namespace lqf {
         public:
             DictEq(const T &target);
 
-            void dict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -101,7 +139,7 @@ namespace lqf {
         public:
             DictLess(const T &target);
 
-            void dict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -121,7 +159,7 @@ namespace lqf {
         public:
             DictGreater(const T &target);
 
-            void dict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -143,7 +181,7 @@ namespace lqf {
         public:
             DictBetween(const T &lower, const T &upper);
 
-            void dict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -165,7 +203,7 @@ namespace lqf {
         public:
             DictRangele(const T &lower, const T &upper);
 
-            void dict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -185,7 +223,7 @@ namespace lqf {
         public:
             DictMultiEq(function<bool(const T &)> pred);
 
-            void dict(Dictionary<DTYPE> &dict) override;
+            void dict(Dictionary <DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
                           uint64_t *bitmap, uint64_t bitmap_offset) override;
@@ -248,6 +286,8 @@ namespace lqf {
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
 
     public:
+        ColFilter(ColPredicate *);
+
         ColFilter(initializer_list<ColPredicate *>);
 
         virtual ~ColFilter();
@@ -257,14 +297,27 @@ namespace lqf {
 
     class RowFilter : public Filter {
     private:
-        function<bool(DataRow &)> predicate_;
+        function<bool(DataRow & )> predicate_;
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
 
     public:
-        RowFilter(function<bool(DataRow &)> pred);
+        RowFilter(function<bool(DataRow & )> pred);
 
         virtual ~RowFilter() {}
+    };
+
+    class KeyFinder {
+    protected:
+        uint32_t key_index_;
+        function<bool(DataRow & )> predicate_;
+
+        int32_t filterBlock(const shared_ptr<Block> &);
+
+    public:
+        KeyFinder(uint32_t key_index, function<bool(DataRow & )>);
+
+        int32_t find(Table &);
     };
 }
 #endif //LQF_OPERATOR_FILTER_H

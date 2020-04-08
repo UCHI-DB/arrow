@@ -29,7 +29,7 @@ namespace lqf {
             auto regionTable = ParquetTable::Open(Region::path, {Region::REGIONKEY, Region::NAME});
             auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE});
 
-            ColFilter regionFilter({new SimpleColPredicate(Region::NAME, [&region](const DataField &field) {
+            ColFilter regionFilter({new SimplePredicate(Region::NAME, [&region](const DataField &field) {
                 return region == (field.asByteArray());
             })});
             auto filteredRegion = regionFilter.filter(*regionTable);
@@ -74,16 +74,13 @@ namespace lqf {
             FilterMat psMat;
             filteredPs = psMat.mat(*filteredPs);
 //
-            HashAgg psAgg(3, []() {
-                return unique_ptr<HashCore>(new HashCore(
-                        [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); },
-                        [](DataRow &dr) {
-                            auto header = new AggRecordingReducer(1, new agg::DoubleRecordingMin(
-                                    PartSupp::SUPPLYCOST, PartSupp::SUPPKEY));
-                            header->header()[0] = dr[PartSupp::PARTKEY].asInt();
-                            return unique_ptr<AggReducer>(header);
-                        }));
-            }, true);
+            function<uint64_t(DataRow &)> hasher = [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); };
+            HashAgg psAgg(lqf::colSize(3), {AGI(PartSupp::PARTKEY)}, []() {
+                return vector<AggField *>{new agg::DoubleRecordingMin(PartSupp::SUPPLYCOST, PartSupp::SUPPKEY)};
+            }, hasher);
+            psAgg.useVertical();
+            psAgg.useRecording();
+
             // 0: PARTKEY 1: SUPPLYCOST 2: SUPPKEY
             auto psMinCostTable = psAgg.agg(*filteredPs);
 
@@ -104,7 +101,8 @@ namespace lqf {
 
             // s_acctbal desc, n_name, s_name, p_partkey
             TopN top(100, [](DataRow *a, DataRow *b) {
-                return SDGE(1) || (SDE(1) && SBLE(7)) || (SDE(1) && SBE(7) && SBLE(2)) || (SDE(1) && SBE(7) && SBE(2) && SILE(0));
+                return SDGE(1) || (SDE(1) && SBLE(7)) || (SDE(1) && SBE(7) && SBLE(2)) ||
+                       (SDE(1) && SBE(7) && SBE(2) && SILE(0));
             });
 //            TopN sort = new TopN(100,
 //                                 Comparator.nullsLast(Comparator.< DataRow > comparingDouble(row->- row.getDouble(3))
@@ -114,7 +112,8 @@ namespace lqf {
             auto result = top.sort(*alljoined);
 
             auto printer = Printer::Make(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PB(8) PEND);
-            printer->print(*result);
+            printer->
+                    print(*result);
         }
 
 

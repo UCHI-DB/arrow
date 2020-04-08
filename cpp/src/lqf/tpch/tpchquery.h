@@ -7,6 +7,7 @@
 
 #include <string>
 #include <sstream>
+#include <parquet/types.h>
 
 using namespace std;
 
@@ -115,6 +116,11 @@ namespace lqf {
         };
 
         void executeQ1();
+
+    }
+
+    namespace udf {
+        int date2year(parquet::ByteArray &);
     }
 }
 #endif //ARROW_TPCHQUERY_H

@@ -41,8 +41,8 @@ namespace lqf {
                 Field3() : DoubleSum(0) {}
 
                 void reduce(DataRow &dataRow) {
-                    value_ += dataRow[LineItem::EXTENDEDPRICE].asDouble()
-                              * (1 - dataRow[LineItem::DISCOUNT].asDouble());
+                    *value_ += dataRow[LineItem::EXTENDEDPRICE].asDouble()
+                               * (1 - dataRow[LineItem::DISCOUNT].asDouble());
                 }
             };
 
@@ -51,14 +51,14 @@ namespace lqf {
                 Field4() : DoubleSum(0) {}
 
                 void reduce(DataRow &dataRow) {
-                    value_ += dataRow[LineItem::EXTENDEDPRICE].asDouble()
-                              * (1 - dataRow[LineItem::DISCOUNT].asDouble()) *
-                              (1 + dataRow[LineItem::TAX].asDouble());
+                    *value_ += dataRow[LineItem::EXTENDEDPRICE].asDouble()
+                               * (1 - dataRow[LineItem::DISCOUNT].asDouble()) *
+                               (1 + dataRow[LineItem::TAX].asDouble());
                 }
             };
 
-            function<unique_ptr<AggReducer>(DataRow &)> headerInit = [](DataRow &source) {
-                auto reducer = unique_ptr<AggReducer>(new AggReducer(2, {
+            function<vector<AggField *>()> aggFields = []() {
+                return vector<AggField *>{
                         new IntSum(LineItem::QUANTITY),
                         new DoubleSum(LineItem::EXTENDEDPRICE),
                         new Field3(),
@@ -67,31 +67,27 @@ namespace lqf {
                         new DoubleAvg(LineItem::EXTENDEDPRICE),
                         new DoubleAvg(LineItem::DISCOUNT),
                         new Count()
-                }));
-                reducer->header()[0] = source(LineItem::RETURNFLAG);
-                reducer->header()[1] = source(LineItem::LINESTATUS);
-
-                return reducer;
+                };
             };
 
-            TableAgg agg(10, [=]() {
-                return unique_ptr<TableCore>(new TableCore(8, indexer, headerInit));
-            });
+            TableAgg agg(lqf::colSize(10),
+                         {AGR(LineItem::RETURNFLAG), AGR(LineItem::LINESTATUS)},
+                         aggFields, 10, indexer);
             auto agged = agg.agg(*filtered);
 //
             SmallSort sort(SORTER2(0, 1));
             auto sorted = sort.sort(*agged);
 
             auto printer = Printer::Make(PBEGIN PI(0)
-                PI(1)
-                PI(2)
-                PD(3)
-                PD(4)
-                PD(5)
-                PD(6)
-                PD(7)
-                PD(8)
-                PI(9)
+                    PI(1)
+                    PI(2)
+                    PD(3)
+                    PD(4)
+                    PD(5)
+                    PD(6)
+                    PD(7)
+                    PD(8)
+                    PI(9)
             PEND);
             printer->print(*sorted);
         }

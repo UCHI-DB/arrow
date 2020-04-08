@@ -18,7 +18,7 @@ namespace lqf {
         (*place.first).second->push_back(&predicate);
     }
 
-    shared_ptr<Bitmap> FilterExecutor::executeSimple(Block &block, Bitmap &skip, SimpleColPredicate &predicate) {
+    shared_ptr<Bitmap> FilterExecutor::executeSimple(Block &block, Bitmap &skip, SimplePredicate &predicate) {
         return predicate.filterBlock(block, skip);
     }
 

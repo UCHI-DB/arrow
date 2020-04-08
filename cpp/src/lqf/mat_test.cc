@@ -41,7 +41,7 @@ TEST(FilterMatTest, Mat) {
     function<bool(const DataField &)> pred = [](const DataField &field) {
         return field.asInt() % 10 == 0;
     };
-    ColFilter filter({new SimpleColPredicate(0, pred)});
+    ColFilter filter({new SimplePredicate(0, pred)});
 
     auto filtered = filter.filter(*ptable);
 

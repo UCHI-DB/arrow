@@ -138,7 +138,7 @@ class PARQUET_EXPORT ColumnReader {
 
   virtual const ColumnDescriptor* descr() const = 0;
 
-  virtual const void* dictionary() = 0;
+  virtual const void* dictionary() const = 0;
 };
 
 // API to read values from a single column. This is a main client facing API.
@@ -211,7 +211,7 @@ class TypedColumnReader : public ColumnReader {
       return ReadBatch(batch_size, def_levels, rep_levels, (T*)values, values_read);
   }
 
-  virtual const void* dictionary() override { return nullptr; }
+  virtual const void* dictionary() const override { return nullptr; }
 };
 
 namespace internal {

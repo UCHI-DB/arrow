@@ -17,13 +17,13 @@ namespace lqf {
 
     class MemMat {
     public:
-        MemMat(uint32_t, function<void(DataRow &, DataRow &)>);
+        MemMat(uint32_t, function<void(DataRow & , DataRow & )>);
 
         shared_ptr<MemTable> mat(Table &input);
 
     protected:
         uint32_t num_fields_;
-        function<void(DataRow &, DataRow &)> loader_;
+        function<void(DataRow & , DataRow & )> loader_;
 
         void matBlock(MemTable *table, const shared_ptr<Block> &);
     };
@@ -35,6 +35,25 @@ namespace lqf {
         shared_ptr<Table> mat(Table &input);
     };
 
+    class HashMat {
+    private:
+        uint32_t key_index_;
+        function<unique_ptr<MemDataRow>(DataRow & )> snapshoter_;
+    public:
+        HashMat(uint32_t, function<unique_ptr<MemDataRow>(DataRow & )>);
+
+        shared_ptr<Table> mat(Table &input);
+    };
+
+    class PowerHashMat {
+    private:
+        function<int64_t(DataRow & )> key_maker_;
+        function<unique_ptr<MemDataRow>(DataRow & )> snapshoter_;
+    public:
+        PowerHashMat(function<int64_t(DataRow & )>, function<unique_ptr<MemDataRow>(DataRow & )>);
+
+        shared_ptr<Table> mat(Table &input);
+    };
 }
 
 

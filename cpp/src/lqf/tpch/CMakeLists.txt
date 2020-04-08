@@ -3,6 +3,24 @@ set(TPCH_SRC
         query1.cc
         query3.cc
         query4.cc
+        query5.cc
+        query6.cc
+        query7.cc
+        query8.cc
+        query9.cc
+        query10.cc
+        query11.cc
+        query12.cc
+        query13.cc
+        query14.cc
+        query15.cc
+        query16.cc
+        query17.cc
+        query18.cc
+        query19.cc
+        query20.cc
+        query21.cc
+        query22.cc
         )
 
 add_library(tpch_static ${TPCH_SRC})

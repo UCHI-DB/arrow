@@ -53,32 +53,24 @@ namespace lqf {
                 Field() : DoubleSum(0) {}
 
                 void reduce(DataRow &dataRow) {
-                    value_ += dataRow[1].asDouble() * (1 - dataRow[2].asDouble());
+                    *value_ += dataRow[1].asDouble() * (1 - dataRow[2].asDouble());
                 }
             };
-
-            HashAgg orderItemAgg(4, []() {
-                return unique_ptr<HashCore>(
-                        new HashCore([](DataRow &data) {
-                                         int orderkey = data[0].asInt();
-                                         int shipdate = data(3).asInt();
-                                         int priority = data(4).asInt();
-                                         uint64_t key = 0;
-                                         key += static_cast<uint64_t>(orderkey) << 32;
-                                         key += shipdate << 5;
-                                         key += priority;
-                                         return key;
-                                     },
-                                     [](DataRow &source) {
-                                         auto reducer = unique_ptr<AggReducer>(
-                                                 new AggReducer(3, {new Field()}));
-                                         reducer->header()[0] = source[0];
-                                         reducer->header()[1] = source[3];
-                                         reducer->header()[2] = source[4];
-
-                                         return reducer;
-                                     }));
-            });
+            function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
+                int orderkey = data[0].asInt();
+                int shipdate = data(3).asInt();
+                int priority = data(4).asInt();
+                uint64_t key = 0;
+                key += static_cast<uint64_t>(orderkey) << 32;
+                key += shipdate << 5;
+                key += priority;
+                return key;
+            };
+            function<vector<AggField *>()> aggFields = []() {
+                return vector<AggField *>{new Field()};
+            };
+            HashAgg orderItemAgg(vector<uint32_t>{1, 2, 2}, {AGI(0), AGB(3), AGB(4)}, aggFields, hasher);
+//            orderItemAgg.useVertical();
 
             auto result = orderItemAgg.agg(*orderItemTable);
 

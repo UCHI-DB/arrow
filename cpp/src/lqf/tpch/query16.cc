@@ -1,0 +1,97 @@
+//
+// Created by harper on 4/6/20.
+//
+
+#include <parquet/types.h>
+#include <lqf/data_model.h>
+#include <lqf/filter.h>
+#include <lqf/agg.h>
+#include <lqf/sort.h>
+#include <lqf/print.h>
+#include <lqf/join.h>
+#include <lqf/mat.h>
+#include <lqf/util.h>
+#include "tpchquery.h"
+
+
+namespace lqf {
+    namespace tpch {
+
+        ByteArray brand("Brand#45");
+        const char *type = "MEDIUM POLISHED";
+        unordered_set<int32_t> size{49, 14, 23, 45, 19, 3, 36, 9};
+
+        void executeQ16() {
+
+//            String supplierComment = "%Customer%Complaints%";
+
+
+            auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::TYPE, Part::SIZE});
+            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::COMMENT});
+            auto partsupp = ParquetTable::Open(PartSupp::path, {PartSupp::SUPPKEY});
+
+            using namespace sboost;
+            using namespace raw;
+
+            function<unique_ptr<RawAccessor<ByteArrayType>>()> brandgen = bind(&ByteArrayDictEq::build, brand);
+            function<unique_ptr<RawAccessor<ByteArrayType>>()> typegen = bind(&ByteArrayDictMultiEq::build,
+                                                                              [](const ByteArray &field) {
+                                                                                  const char *start = (const char *) field.ptr;
+                                                                                  return start ==
+                                                                                         lqf::util::strnstr(start, type,
+                                                                                                            field.len);
+                                                                              });
+            ColFilter partFilter(
+                    {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayNot::build, brandgen)),
+                     new SboostPredicate<Int32Type>(Part::SIZE,
+                                                    bind(&Int32DictMultiEq::build, [](const int32_t &field) {
+                                                        return size.find(field) != size.end();
+                                                    })),
+                     new SboostPredicate<ByteArrayType>(Part::TYPE, bind(&ByteArrayNot::build, typegen))});
+            auto validPart = FilterMat().mat(*partFilter.filter(*part));
+
+            ColFilter supplierFilter({new SimplePredicate(Supplier::COMMENT, [](const DataField &field) {
+                ByteArray &comment = field.asByteArray();
+                const char *start = (const char *) comment.ptr;
+                char *index = lqf::util::strnstr(start, "Customer", comment.len);
+                if (index != NULL) {
+                    return lqf::util::strnstr(index, "Complaints", comment.len - 8 - (index - start)) != NULL;
+                }
+                return false;
+            })});
+            auto validSupplier = supplierFilter.filter(*supplier);
+
+            HashFilterJoin psSupplierFilter(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            psSupplierFilter.useAnti();
+            auto validps = psSupplierFilter.join(*partsupp, *validSupplier);
+
+            HashJoin pswithsJoin(PartSupp::PARTKEY, 0, new RowBuilder({JR(PartSupp::SUPPKEY),
+                                                                       JLR(Part::BRAND), JLR(Part::TYPE),
+                                                                       JLR(Part::SIZE)}));
+            // TODO Which is on the right ?
+            // SUPPKEY, BRAND, TYPE, SIZE
+            auto partWithSupplier = pswithsJoin.join(*validPart, *validps);
+
+
+            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
+                return (input[1].asInt() << 20) + (input[2].asInt() << 10) + input[3].asInt();
+            };
+            using namespace agg;
+            HashAgg psagg(vector<uint32_t>({1, 1, 1, 1}), {AGI(1), AGI(2), AGI(3)},
+                          []() { return vector<AggField *>({new IntDistinctCount(0)}); },
+                          hasher);
+            auto result = psagg.agg(*partWithSupplier);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SILE(3) || (SIE(3) && SILE(0)) || (SIE(3) && SIE(0) && SILE(1)) ||
+                       (SIE(3) && SIE(0) && SIE(1) && SILE(2));
+            };
+            SmallSort sort(comparator);
+            result = sort.sort(*result);
+
+            auto printer = Printer::Make(PBEGIN PI(0) PI(1) PI(2) PI(3) PEND);
+            printer->print(*result);
+        }
+
+    }
+}

@@ -14,7 +14,7 @@ namespace lqf {
             : n_(n), comparator_(comp) {}
 
     shared_ptr<Table> TopN::sort(Table &table) {
-        auto resultTable = MemTable::Make(table.numFields(), table.numStringFields());
+        auto resultTable = MemTable::Make(table.colSize());
         auto tablePointer = resultTable.get();
 
 
@@ -59,28 +59,49 @@ namespace lqf {
         collector_lock_.unlock();
     }
 
-    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp) : comparator_(comp) {}
+    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp) : comparator_(comp), snapshoter_(nullptr) {}
+
+    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp,
+                         function<unique_ptr<MemDataRow>(DataRow &)> snapshot)
+            : comparator_(comp), snapshoter_(snapshot) {}
 
     shared_ptr<Table> SmallSort::sort(Table &table) {
-        uint32_t num_fields = table.numFields();
-        vector<MemDataRow *> sortingRows;
-        table.blocks()->foreach([&sortingRows, num_fields](const shared_ptr<Block> &block) {
-            auto inputRows = block->rows();
-            for (uint32_t i = 0; i < block->size(); ++i) {
-                MemDataRow *copy = new MemDataRow(num_fields);
-                *copy = inputRows->next();
-                sortingRows.push_back(copy);
-            }
-        });
+        const vector<uint32_t> &col_size = table.colSize();
+        vector<uint32_t> col_offset;
+        col_offset.push_back(0);
+        for (auto &i:col_size) {
+            col_offset.push_back(i + col_offset.back());
+        }
+
+        vector<MemDataRow*> sortingRows;
+        if (snapshoter_) {
+            table.blocks()->foreach([&sortingRows, this](const shared_ptr<Block> &block) {
+                auto inputRows = block->rows();
+                for (uint32_t i = 0; i < block->size(); ++i) {
+                    unique_ptr<MemDataRow> copy = snapshoter_(inputRows->next());
+                    sortingRows.push_back(copy.release());
+                }
+            });
+        } else {
+            table.blocks()->foreach([&sortingRows, &col_offset](const shared_ptr<Block> &block) {
+                auto inputRows = block->rows();
+                for (uint32_t i = 0; i < block->size(); ++i) {
+                    MemDataRow *copy = new MemDataRow(col_offset);
+                    *copy = inputRows->next();
+                    sortingRows.push_back(copy);
+                }
+            });
+        }
 
         std::sort(sortingRows.begin(), sortingRows.end(), comparator_);
 
-        auto resultTable = MemTable::Make(table.numFields());
+        auto resultTable = MemTable::Make(table.colSize());
         auto resultBlock = resultTable->allocate(sortingRows.size());
         auto resultRows = resultBlock->rows();
 
         for (uint32_t i = 0; i < sortingRows.size(); ++i) {
             (*resultRows)[i] = *sortingRows[i];
+            delete sortingRows[i];
         }
         return resultTable;
     }

@@ -85,6 +85,8 @@ namespace lqf {
 
         virtual shared_ptr<Bitmap> operator|(Bitmap &x1) = 0;
 
+        virtual shared_ptr<Bitmap> operator~()=0;
+
         virtual uint64_t cardinality() = 0;
 
         virtual uint64_t size() = 0;
@@ -110,27 +112,29 @@ namespace lqf {
 
         virtual ~SimpleBitmap();
 
-        virtual bool check(uint64_t pos) override;
+        bool check(uint64_t pos) override;
 
-        virtual void put(uint64_t pos) override;
+        void put(uint64_t pos) override;
 
-        virtual void clear() override;
+        void clear() override;
 
-        virtual shared_ptr<Bitmap> operator&(Bitmap &x1) override;
+        shared_ptr<Bitmap> operator&(Bitmap &x1) override;
 
-        virtual shared_ptr<Bitmap> operator|(Bitmap &x1) override;
+        shared_ptr<Bitmap> operator|(Bitmap &x1) override;
 
-        virtual uint64_t cardinality() override;
+        shared_ptr<Bitmap> operator~() override;
 
-        virtual uint64_t size() override;
+        uint64_t cardinality() override;
 
-        virtual bool isFull() override;
+        uint64_t size() override;
 
-        virtual bool isEmpty() override;
+        bool isFull() override;
 
-        virtual double ratio() override;
+        bool isEmpty() override;
 
-        virtual std::unique_ptr<BitmapIterator> iterator() override;
+        double ratio() override;
+
+        std::unique_ptr<BitmapIterator> iterator() override;
 
         uint64_t *raw();
     };
@@ -141,27 +145,29 @@ namespace lqf {
 
         virtual ~FullBitmap();
 
-        virtual bool check(uint64_t pos) override;
+        bool check(uint64_t pos) override;
 
-        virtual void put(uint64_t pos) override;
+        void put(uint64_t pos) override;
 
-        virtual void clear() override;
+        void clear() override;
 
-        virtual shared_ptr<Bitmap> operator&(Bitmap &x1) override;
+        shared_ptr<Bitmap> operator&(Bitmap &x1) override;
 
-        virtual shared_ptr<Bitmap> operator|(Bitmap &x1) override;
+        shared_ptr<Bitmap> operator|(Bitmap &x1) override;
 
-        virtual uint64_t cardinality() override;
+        shared_ptr<Bitmap> operator~() override;
 
-        virtual uint64_t size() override;
+        uint64_t cardinality() override;
 
-        virtual bool isFull() override;
+        uint64_t size() override;
 
-        virtual bool isEmpty() override;
+        bool isFull() override;
 
-        virtual double ratio() override;
+        bool isEmpty() override;
 
-        virtual std::unique_ptr<BitmapIterator> iterator() override;
+        double ratio() override;
+
+        std::unique_ptr<BitmapIterator> iterator() override;
 
     private:
         uint64_t size_;

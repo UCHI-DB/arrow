@@ -3,30 +3,32 @@
 //
 
 #include <climits>
+#include <limits>
+//#include <boost/container_hash/hash.hpp>
 #include "agg.h"
 
 using namespace std;
 using namespace std::placeholders;
 namespace lqf {
 
-    AggReducer::AggReducer(uint32_t numHeaders, initializer_list<AggField *> fields) :
-            AggReducer(lqf::colSize(numHeaders), fields) {}
+    AggReducer::AggReducer(uint32_t numFields, vector<AggField *> fields) :
+            AggReducer(lqf::colOffset(numFields), fields) {}
 
 
-    AggReducer::AggReducer(const vector<uint32_t> &col_size, initializer_list<AggField *> fields)
-            : header_(col_size) {
+    AggReducer::AggReducer(const vector<uint32_t> &col_offset, vector<AggField *> fields)
+            : storage_(col_offset) {
+        header_size_ = col_offset.size() - 1 - fields.size();
+        auto start = header_size_;
         for (auto &field:fields) {
+            field->storage_ = storage_[start++].data();
+            field->init();
             fields_.push_back(unique_ptr<AggField>(field));
         }
     }
 
-    MemDataRow &AggReducer::header() {
-        return header_;
-    }
-
     void AggReducer::reduce(DataRow &row) {
-        for (uint32_t i = 0; i < fields_.size(); ++i) {
-            fields_[i]->reduce(row);
+        for (auto &field: fields_) {
+            field->reduce(row);
         }
     }
 
@@ -36,36 +38,33 @@ namespace lqf {
         }
     }
 
-    void AggReducer::dump(DataRowIterator &iterator) {
-        DataRow &target = iterator.next();
-        for (uint32_t i = 0; i < header_.size(); ++i) {
-            target[i] = header_[i];
+    void AggReducer::dump(MemDataRow &target) {
+        for (auto &field:fields_) {
+            field->dump();
         }
-        for (uint32_t i = 0; i < fields_.size(); ++i) {
-            fields_[i]->dump(target, i + header_.size());
-        }
+        target = storage_;
     }
 
-    AggRecordingReducer::AggRecordingReducer(uint32_t numHeaders, AggRecordingField *field)
-            : AggReducer(numHeaders, {field}), field_(unique_ptr<AggRecordingField>(field)) {}
+    AggRecordingReducer::AggRecordingReducer(vector<uint32_t> &col_offset, AggRecordingField *field)
+            : AggReducer(col_offset, {field}), field_(field) {}
 
     uint32_t AggRecordingReducer::size() {
         return field_->keys().size();
     }
 
-    void AggRecordingReducer::dump(DataRowIterator &iterator) {
-        auto keys = field_->keys();
-        for (auto &key: keys) {
-            DataRow &target = iterator.next();
-            for (uint32_t i = 0; i < header_.size(); ++i) {
-                target[i] = header_[i];
-            }
-            field_->dump(target, header_.size());
-            target[header_.size() + 1] = key;
+    void AggRecordingReducer::dump(MemDataRow &target) {
+        for (auto &field:fields_) {
+            field->dump();
         }
+        target = storage_;
+        auto key = field_->keys().back();
+        field_->keys().pop_back();
+        target[header_size_ - 1] = key;
     }
 
-    AggField::AggField(uint32_t index) : readIndex_(index) {}
+    AggField::AggField(uint32_t index) : readIndex_(index) {
+        storage_.size_ = 1;
+    }
 
     AggRecordingField::AggRecordingField(uint32_t rIndex, uint32_t kIndex)
             : AggField(rIndex), keyIndex_(kIndex) {}
@@ -76,70 +75,79 @@ namespace lqf {
 
     namespace agg {
         template<typename T, typename ACC>
-        Sum<T, ACC>::Sum(uint32_t rIndex) : AggField(rIndex), value_(0) {}
+        Sum<T, ACC>::Sum(uint32_t rIndex) : AggField(rIndex) {}
+
+        template<typename T, typename ACC>
+        void Sum<T, ACC>::init() {
+            value_ = (T *) storage_.pointer_.raw_;
+            *value_ = 0;
+        }
 
         template<typename T, typename ACC>
         void Sum<T, ACC>::merge(AggField &another) {
-            value_ += static_cast<Sum<T, ACC> &>(another).value_;
+            *value_ += *(static_cast<Sum<T, ACC> &>(another).value_);
         }
 
         template<typename T, typename ACC>
         void Sum<T, ACC>::reduce(DataRow &input) {
-            value_ += ACC::get(input[readIndex_]);
+            *value_ += ACC::get(input[readIndex_]);
         }
 
         template<typename T, typename ACC>
-        void Sum<T, ACC>::dump(DataRow &output, uint32_t index) {
-            output[index] = value_;
-        }
+        Max<T, ACC>::Max(uint32_t rIndex) : AggField(rIndex) {}
 
         template<typename T, typename ACC>
-        Max<T, ACC>::Max(uint32_t rIndex) : AggField(rIndex), value_(INT_MIN) {}
+        void Max<T, ACC>::init() {
+            value_ = (T *) storage_.pointer_.raw_;
+            *value_ = INT_MIN;
+        }
 
         template<typename T, typename ACC>
         void Max<T, ACC>::merge(AggField &another) {
-            value_ = std::max(value_, static_cast<Max<T, ACC> &>(another).value_);
+            *value_ = std::max(*value_, *static_cast<Max<T, ACC> &>(another).value_);
         }
 
         template<typename T, typename ACC>
         void Max<T, ACC>::reduce(DataRow &input) {
-            value_ = std::max(value_, ACC::get(input[readIndex_]));
+            *value_ = std::max(*value_, ACC::get(input[readIndex_]));
         }
 
         template<typename T, typename ACC>
-        void Max<T, ACC>::dump(DataRow &output, uint32_t index) {
-            output[index] = value_;
-        }
+        Min<T, ACC>::Min(uint32_t rIndex) : AggField(rIndex) {}
 
         template<typename T, typename ACC>
-        Min<T, ACC>::Min(uint32_t rIndex) : AggField(rIndex), value_(INT_MAX) {}
+        void Min<T, ACC>::init() {
+            value_ = (T *) storage_.pointer_.raw_;
+            *value_ = INT_MAX;
+        }
 
         template<typename T, typename ACC>
         void Min<T, ACC>::merge(AggField &another) {
-            value_ = std::min(value_, static_cast<Min<T, ACC> &>(another).value_);
+            *value_ = std::min(*value_, *static_cast<Min<T, ACC> &>(another).value_);
         }
 
         template<typename T, typename ACC>
         void Min<T, ACC>::reduce(DataRow &input) {
-            value_ = std::min(value_, ACC::get(input[readIndex_]));
-        }
-
-        template<typename T, typename ACC>
-        void Min<T, ACC>::dump(DataRow &output, uint32_t index) {
-            output[index] = value_;
+            *value_ = std::min(*value_, ACC::get(input[readIndex_]));
         }
 
         template<typename T, typename ACC>
         RecordingMin<T, ACC>::RecordingMin(uint32_t vIndex, uint32_t kIndex)
-                : AggRecordingField(vIndex, kIndex), value_(INT_MAX) {}
+                : AggRecordingField(vIndex, kIndex) {}
+
+        template<typename T, typename ACC>
+        void RecordingMin<T, ACC>::init() {
+            value_ = (T *) storage_.pointer_.raw_;
+            *value_ = INT_MAX;
+        }
 
         template<typename T, typename ACC>
         void RecordingMin<T, ACC>::merge(AggField &another) {
             auto arm = static_cast<RecordingMin<T, ACC> &>(another);
-            if (value_ > arm.value_) {
-                value_ = arm.value_;
+            if (*value_ > *arm.value_) {
+                *value_ = *arm.value_;
                 keys_ = arm.keys_;
-            } else if (value_ == arm.value_) {
+            } else if (*value_ == *arm.value_) {
                 keys_.insert(keys_.end(), arm.keys_.begin(), arm.keys_.end());
             }
         }
@@ -147,22 +155,53 @@ namespace lqf {
         template<typename T, typename ACC>
         void RecordingMin<T, ACC>::reduce(DataRow &input) {
             auto newval = ACC::get(input[readIndex_]);
-            if (newval < value_) {
-                value_ = newval;
+            if (newval < *value_) {
+                *value_ = newval;
                 keys_.clear();
                 keys_.push_back(input[keyIndex_].asInt());
-            } else if (newval == value_) {
+            } else if (newval == *value_) {
                 keys_.push_back(input[keyIndex_].asInt());
             }
         }
 
         template<typename T, typename ACC>
-        void RecordingMin<T, ACC>::dump(DataRow &output, uint32_t index) {
-            output[index] = value_;
+        RecordingMax<T, ACC>::RecordingMax(uint32_t vIndex, uint32_t kIndex)
+                : AggRecordingField(vIndex, kIndex) {}
+
+        template<typename T, typename ACC>
+        void RecordingMax<T, ACC>::init() {
+            value_ = (T *) storage_.pointer_.raw_;
+            *value_ = INT_MIN;
+        }
+
+        template<typename T, typename ACC>
+        void RecordingMax<T, ACC>::merge(AggField &another) {
+            auto arm = static_cast<RecordingMax<T, ACC> &>(another);
+            if (*value_ < *arm.value_) {
+                *value_ = *arm.value_;
+                keys_ = arm.keys_;
+            } else if (value_ == arm.value_) {
+                keys_.insert(keys_.end(), arm.keys_.begin(), arm.keys_.end());
+            }
+        }
+
+        template<typename T, typename ACC>
+        void RecordingMax<T, ACC>::reduce(DataRow &input) {
+            auto newval = ACC::get(input[readIndex_]);
+            if (newval > *value_) {
+                *value_ = newval;
+                keys_.clear();
+                keys_.push_back(input[keyIndex_].asInt());
+            } else if (newval == *value_) {
+                keys_.push_back(input[keyIndex_].asInt());
+            }
         }
 
         template<typename T, typename ACC>
         Avg<T, ACC>::Avg(uint32_t rIndex) : AggField(rIndex), value_(0), count_(0) {}
+
+        template<typename T, typename ACC>
+        void Avg<T, ACC>::init() {}
 
         template<typename T, typename ACC>
         void Avg<T, ACC>::merge(AggField &another) {
@@ -177,22 +216,45 @@ namespace lqf {
         }
 
         template<typename T, typename ACC>
-        void Avg<T, ACC>::dump(DataRow &output, uint32_t index) {
-            output[index] = static_cast<double>(value_) / count_;
+        void Avg<T, ACC>::dump() {
+            storage_ = static_cast<double>(value_) / count_;
         }
 
-        Count::Count() : AggField(-1), count_(0) {}
+        template<typename T, typename ACC>
+        DistinctCount<T, ACC>::DistinctCount(uint32_t rIndex): AggField(rIndex) {}
+
+        template<typename T, typename ACC>
+        void DistinctCount<T, ACC>::init() {}
+
+        template<typename T, typename ACC>
+        void DistinctCount<T, ACC>::reduce(DataRow &input) {
+            values_.insert(ACC::get(input[readIndex_]));
+        }
+
+        template<typename T, typename ACC>
+        void DistinctCount<T, ACC>::merge(AggField &another) {
+            auto to_insert = static_cast<DistinctCount<T, ACC> &>(another).values_;
+            values_.insert(to_insert.begin(), to_insert.end());
+        }
+
+        template<typename T, typename ACC>
+        void DistinctCount<T, ACC>::dump() {
+            storage_ = values_.size();
+        }
+
+        Count::Count() : AggField(-1) {}
+
+        void Count::init() {
+            count_ = storage_.pointer_.ival_;
+            *count_ = 0;
+        }
 
         void Count::merge(AggField &another) {
-            count_ += static_cast<Count &>(another).count_;
+            *count_ += *static_cast<Count &>(another).count_;
         }
 
         void Count::reduce(DataRow &input) {
-            count_ += 1;
-        }
-
-        void Count::dump(DataRow &output, uint32_t index) {
-            output[index] = count_;
+            *count_ += 1;
         }
 
         template
@@ -206,6 +268,12 @@ namespace lqf {
 
         template
         class Max<double, AsDouble>;
+
+        template
+        class RecordingMax<int32_t, AsInt>;
+
+        template
+        class RecordingMax<double, AsDouble>;
 
         template
         class Min<int32_t, AsInt>;
@@ -224,6 +292,8 @@ namespace lqf {
 
         template
         class Avg<double, AsDouble>;
+
+        template class DistinctCount<int32_t, AsInt>;
     }
 
     HashCore::HashCore(function<uint64_t(DataRow &)> hasher,
@@ -246,19 +316,40 @@ namespace lqf {
         }
     }
 
-    void HashCore::dump(MemTable &table) {
-        uint32_t size = 0;
-        for (auto &item: container_) {
-            size += item.second->size();
-        }
+    void HashCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+        // Use an init size
+        uint32_t size = container_.size();
         auto block = table.allocate(size);
 
-        auto it = container_.begin();
+        MemDataRow buffer(table.colOffset());
+
         auto wit = block->rows();
-        for (uint32_t i = 0; i < container_.size(); ++i) {
-            it->second->dump((*wit));
-            it++;
+
+        uint32_t counter = 0;
+        uint32_t remain = size;
+        for (auto &pair: container_) {
+            uint32_t item_size = pair.second->size();
+            if (__builtin_expect(item_size > remain, 0)) {
+                remain += size;
+                size *= 2;
+                block->resize(size);
+            }
+
+            uint32_t written = 0;
+            for (uint32_t i = 0; i < item_size; ++i) {
+                pair.second->dump(buffer);
+                if (__builtin_expect(!pred || pred(buffer), 1)) {
+                    DataRow &nextrow = wit->next();
+                    // Copy data
+                    nextrow = buffer;
+                    ++written;
+                }
+            }
+            counter += written;
+            remain -= written;
         }
+        if (size != counter)
+            block->resize(counter);
     }
 
     void HashCore::reduce(HashCore &another) {
@@ -274,8 +365,89 @@ namespace lqf {
         }
     }
 
-    void HashCore::translate(function<void(DataField &, uint32_t)> translator) {
+    HashDictCore::HashDictCore(function<uint64_t(DataRow &)> hasher,
+                               function<unique_ptr<AggReducer>(DataRow &)> headerInit)
+            : HashCore(hasher, headerInit) {}
 
+    void HashDictCore::translate(vector<pair<uint32_t, uint32_t>> &need_trans,
+                                 function<void(DataField &, uint32_t, uint32_t)> translator) {
+        for (auto &reducer: container_) {
+            auto &storage = reducer.second->storage();
+            for (auto &field_pair: need_trans) {
+                DataField &field = storage[field_pair.second];
+                int32_t key = storage[field_pair.second].asInt();
+                translator(field, field_pair.first, key);
+                continue;
+            }
+            // Need a new key, temporarily just merge everything together
+            stringstream keymaker;
+            uint32_t limit = reducer.second->header_size();
+            for (uint32_t i = 0; i < limit; ++i) {
+                keymaker << storage[i];
+            }
+            auto newkey = keymaker.str();
+            translated_[newkey] = move(reducer.second);
+        }
+    }
+
+    void HashDictCore::reduce(HashDictCore &another) {
+        auto it = another.translated_.begin();
+        while (it != another.translated_.end()) {
+            auto exist = translated_.find(it->first);
+            if (exist == translated_.end()) {
+                translated_[it->first] = move(it->second);
+            } else {
+                exist->second->merge(*it->second);
+            }
+            it++;
+        }
+    }
+
+    void HashDictCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+        // Use an init size
+        uint32_t size = container_.size();
+        auto block = table.allocate(size);
+
+        MemDataRow buffer(table.colOffset());
+
+        auto wit = block->rows();
+
+        uint32_t counter = 0;
+        uint32_t remain = size;
+        for (auto &pair: translated_) {
+            uint32_t item_size = pair.second->size();
+            if (__builtin_expect(item_size > remain, 0)) {
+                remain += size;
+                size *= 2;
+                block->resize(size);
+            }
+
+            uint32_t written = 0;
+            for (uint32_t i = 0; i < item_size; ++i) {
+                pair.second->dump(buffer);
+                if (__builtin_expect(!pred || pred(buffer), 1)) {
+                    DataRow &nextrow = wit->next();
+                    // Copy data
+                    nextrow = buffer;
+                    ++written;
+                }
+            }
+            counter += written;
+            remain -= written;
+        }
+        if (size != counter)
+            block->resize(counter);
+    }
+
+    HashDictAgg::HashDictAgg(const vector<uint32_t> &col_size, const initializer_list<int32_t> &header_fields,
+                             function<vector<AggField *>()> agg_fields,
+                             function<uint64_t(DataRow &)> hasher,
+                             initializer_list<pair<uint32_t, uint32_t>> need_trans) :
+            DictAgg<HashDictCore>(col_size, need_trans),
+            CoreMaker(col_size, header_fields, agg_fields), hasher_(hasher) {}
+
+    unique_ptr<HashDictCore> HashDictAgg::makeCore() {
+        return unique_ptr<HashDictCore>(new HashDictCore(hasher_, headerInit()));
     }
 
     TableCore::TableCore(uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
@@ -304,20 +476,40 @@ namespace lqf {
         }
     }
 
-    void TableCore::dump(MemTable &table) {
-        uint32_t size = 0;
-        for (uint32_t i = 0; i < container_.size(); ++i) {
-            if (container_[i].get()) {
-                size += container_[i]->size();
-            }
-        }
+    void TableCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+        // Use an init size
+        uint32_t size = container_.size();
         auto block = table.allocate(size);
-        auto rows = block->rows();
-        for (uint32_t i = 0; i < container_.size(); ++i) {
-            if (container_[i].get()) {
-                container_[i]->dump((*rows));
+
+        MemDataRow buffer(table.colOffset());
+
+        auto wit = block->rows();
+
+        uint32_t counter = 0;
+        uint32_t remain = size;
+        for (auto &item: container_) {
+            uint32_t item_size = item->size();
+            if (__builtin_expect(item_size > remain, 0)) {
+                remain += size;
+                size *= 2;
+                block->resize(size);
             }
+
+            uint32_t written = 0;
+            for (uint32_t i = 0; i < item_size; ++i) {
+                item->dump(buffer);
+                if (__builtin_expect(!pred || pred(buffer), 1)) {
+                    DataRow &nextrow = wit->next();
+                    // Copy data
+                    nextrow = buffer;
+                    ++written;
+                }
+            }
+            counter += written;
+            remain -= written;
         }
+        if (size != counter)
+            block->resize(counter);
     }
 
     SimpleCore::SimpleCore(function<unique_ptr<AggReducer>(DataRow &)> headerInit)
@@ -334,20 +526,33 @@ namespace lqf {
         reducer_->merge(*(another.reducer_));
     }
 
-    void SimpleCore::dump(MemTable &table) {
-        auto block = table.allocate(reducer_->size());
-        reducer_->dump((*block->rows()));
+    void SimpleCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+        // Use an init size
+        uint32_t size = reducer_->size();
+        auto block = table.allocate(size);
+
+        MemDataRow buffer(table.colOffset());
+
+        auto wit = block->rows();
+
+        uint32_t written = 0;
+        for (uint32_t i = 0; i < size; ++i) {
+            reducer_->dump(buffer);
+            if (__builtin_expect(!pred || pred(buffer), 1)) {
+                DataRow &nextrow = wit->next();
+                // Copy data
+                nextrow = buffer;
+                ++written;
+            }
+        }
+        if (size != written)
+            block->resize(written);
     }
 
 
     template<typename CORE>
-    Agg<CORE>::Agg(const vector<uint32_t> &col_size, function<unique_ptr<CORE>()> coreMaker, bool vertical)
-            : output_col_size_(col_size), vertical_(vertical), coreMaker_(coreMaker) {}
-
-    template<typename CORE>
-    Agg<CORE>::Agg(uint32_t num_fields, function<unique_ptr<CORE>()> coreMaker, bool vertical)
-            : Agg(lqf::colSize(num_fields), coreMaker, vertical) {}
-
+    Agg<CORE>::Agg(const vector<uint32_t> &col_size, bool vertical)
+            : output_col_size_(col_size), vertical_(vertical), predicate_(nullptr) {}
 
     template<typename CORE>
     shared_ptr<Table> Agg<CORE>::agg(Table &input) {
@@ -362,7 +567,7 @@ namespace lqf {
         auto merged = input.blocks()->map(mapper)->reduce(reducer);
 
         auto result = MemTable::Make(output_col_size_, vertical_);
-        merged->dump(*result);
+        merged->dump(*result, predicate_);
 
         return result;
     }
@@ -370,7 +575,7 @@ namespace lqf {
     template<typename CORE>
     unique_ptr<CORE> Agg<CORE>::processBlock(const shared_ptr<Block> &block) {
         auto rows = block->rows();
-        auto core = coreMaker_();
+        auto core = makeCore();
         uint64_t blockSize = block->size();
 
         for (uint32_t i = 0; i < blockSize; ++i) {
@@ -379,17 +584,28 @@ namespace lqf {
         return core;
     }
 
+    // Subclass should override this
     template<typename CORE>
-    DictAgg<CORE>::DictAgg(const vector<uint32_t> &col_size, function<unique_ptr<CORE>()> coreMaker,
-                           initializer_list<uint32_t> need_trans, bool vertical)
-            : Agg<CORE>(col_size, coreMaker, vertical), need_trans_(need_trans) {}
+    unique_ptr<CORE> Agg<CORE>::makeCore() { return nullptr; }
+
+    template<typename CORE>
+    void Agg<CORE>::useVertical() { vertical_ = true; }
+
+    template<typename CORE>
+    void Agg<CORE>::setPredicate(function<bool(DataRow &)> pred) {
+        predicate_ = pred;
+    }
+
+    template<typename CORE>
+    DictAgg<CORE>::DictAgg(const vector<uint32_t> &col_size, initializer_list<pair<uint32_t, uint32_t>> need_trans)
+            : Agg<CORE>(col_size), need_trans_(need_trans) {}
 
     using namespace std::placeholders;
 
     template<typename CORE>
     unique_ptr<CORE> DictAgg<CORE>::processBlock(const shared_ptr<Block> &block) {
         auto rows = block->rows();
-        auto core = this->coreMaker_();
+        auto core = this->makeCore();
         uint64_t blockSize = block->size();
 
         for (uint32_t i = 0; i < blockSize; ++i) {
@@ -399,6 +615,111 @@ namespace lqf {
         core->translate(need_trans_, translator);
 
         return core;
+    }
+
+    CoreMaker::CoreMaker(const vector<uint32_t> &output_col_size, const initializer_list<int32_t> &header_fields,
+                         function<vector<AggField *>()> agg_fields)
+            : output_col_size_(output_col_size), agg_fields_(agg_fields) {
+        output_offset_.push_back(0);
+        for (auto col_size: output_col_size) {
+            output_offset_.push_back(output_offset_.back() + col_size);
+        }
+
+        uint32_t i = 0;
+        for (auto &inst: header_fields) {
+            switch (inst >> 16) {
+                case 0:
+                    // INT
+                    int_fields_.push_back(pair<uint32_t, uint32_t>(i, inst & 0xFFFF));
+                    break;
+                case 1:
+                    // DOUBLE
+                    double_fields_.push_back(pair<uint32_t, uint32_t>(i, inst & 0xFFFF));
+                    break;
+                case 2:
+                    // ByteArray
+                    bytearray_fields_.push_back(pair<uint32_t, uint32_t>(i, inst & 0xFFFF));
+                    break;
+                case 3:
+                    // Raw
+                    raw_fields_.push_back(pair<uint32_t, uint32_t>(i, inst & 0xFFFF));
+                    break;
+                default:
+                    break;
+            }
+            ++i;
+        }
+    }
+
+    function<unique_ptr<AggReducer>(DataRow &)> CoreMaker::headerInit() {
+        return bind(useRecording_ ? &CoreMaker::initRecordingHeader
+                                  : &CoreMaker::initHeader, this, placeholders::_1);
+    }
+
+    unique_ptr<AggReducer> CoreMaker::initHeader(DataRow &row) {
+        unique_ptr<AggReducer> reducer = unique_ptr<AggReducer>(
+                new AggReducer(output_offset_, agg_fields_()));
+        for (auto &item : int_fields_) {
+            reducer->storage()[item.first] = row[item.second].asInt();
+        }
+        for (auto &item: double_fields_) {
+            reducer->storage()[item.first] = row[item.second].asDouble();
+        }
+        for (auto &item: bytearray_fields_) {
+            reducer->storage()[item.first] = row[item.second].asByteArray();
+        }
+        for (auto &item : raw_fields_) {
+            reducer->storage()[item.first] = row(item.second).asInt();
+        }
+        return reducer;
+    }
+
+    unique_ptr<AggReducer> CoreMaker::initRecordingHeader(DataRow &row) {
+        unique_ptr<AggReducer> reducer = unique_ptr<AggReducer>(
+                new AggRecordingReducer(output_offset_, dynamic_cast<AggRecordingField *>(agg_fields_()[0])));
+        for (auto &item : int_fields_) {
+            reducer->storage()[item.first] = row[item.second].asInt();
+        }
+        for (auto &item: double_fields_) {
+            reducer->storage()[item.first] = row[item.second].asDouble();
+        }
+        for (auto &item: bytearray_fields_) {
+            reducer->storage()[item.first] = row[item.second].asByteArray();
+        }
+        for (auto &item : raw_fields_) {
+            reducer->storage()[item.first] = row(item.second).asInt();
+        }
+        return reducer;
+    }
+
+    void CoreMaker::useRecording() {
+        useRecording_ = true;
+    }
+
+    HashAgg::HashAgg(const vector<uint32_t> &col_size,
+                     const initializer_list<int32_t> &header_fields, function<vector<AggField *>()> agg_fields,
+                     function<uint64_t(DataRow &)> hasher, bool vertical)
+            : Agg<HashCore>(col_size, vertical), CoreMaker(col_size, header_fields, agg_fields), hasher_(hasher) {}
+
+    unique_ptr<HashCore> HashAgg::makeCore() {
+        return unique_ptr<HashCore>(new HashCore(hasher_, headerInit()));
+    }
+
+    TableAgg::TableAgg(const vector<uint32_t> &col_size,
+                       const initializer_list<int32_t> &header_fields, function<vector<AggField *>()> agg_fields,
+                       uint32_t table_size, function<uint32_t(DataRow &)> indexer)
+            : Agg<TableCore>(col_size), CoreMaker(col_size, header_fields, agg_fields),
+              table_size_(table_size), indexer_(indexer) {}
+
+    unique_ptr<TableCore> TableAgg::makeCore() {
+        return unique_ptr<TableCore>(new TableCore(table_size_, indexer_, headerInit()));
+    }
+
+    SimpleAgg::SimpleAgg(const vector<uint32_t> &col_size, function<vector<AggField *>()> agg_fields) :
+            Agg<SimpleCore>(col_size), CoreMaker(col_size, {}, agg_fields) {}
+
+    unique_ptr<SimpleCore> SimpleAgg::makeCore() {
+        return unique_ptr<SimpleCore>(new SimpleCore(headerInit()));
     }
 
     template
@@ -411,11 +732,9 @@ namespace lqf {
     class Agg<SimpleCore>;
 
     template
-    class DictAgg<HashCore>;
+    class Agg<HashDictCore>;
 
     template
-    class DictAgg<TableCore>;
+    class DictAgg<HashDictCore>;
 
-    template
-    class DictAgg<SimpleCore>;
 }

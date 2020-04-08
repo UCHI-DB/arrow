@@ -55,6 +55,8 @@ set(LQF_SRCS
         print.cc
         sort.cc
         mat.cc
+        util.cc
+        union.cc
         )
 
 add_arrow_lib(lqf

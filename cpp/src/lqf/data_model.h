@@ -49,6 +49,11 @@ namespace lqf {
 
         inline void operator=(uint64_t *raw) { pointer_.raw_ = raw; };
 
+        inline void operator=(const uint8_t *raw) {
+            assert(size_ <= 2);
+            memcpy((void *) pointer_.raw_, (void *) raw, sizeof(uint64_t) * size_);
+        };
+
         inline uint64_t *data() const { return pointer_.raw_; }
 
         inline void operator=(DataField &df) {
@@ -61,6 +66,8 @@ namespace lqf {
 //            *raw_ = *df.raw_;
         }
     };
+
+    ostream &operator<<(ostream &os, DataField &dt);
 
     /*
      * A Union representing in-memory data fields
@@ -80,6 +87,7 @@ namespace lqf {
         virtual uint64_t *raw() {
             return nullptr;
         }
+
     };
 
     class MemDataRow : public DataRow {
@@ -98,12 +106,20 @@ namespace lqf {
 
         void operator=(DataRow &row) override;
 
+        MemDataRow &operator=(MemDataRow &row);
+
         uint64_t *raw() override;
 
-        inline uint32_t size() {
-            return data_.size();
-        }
+        inline uint32_t size() { return data_.size(); }
+
+        inline uint32_t num_fields() { return offset_.size() - 1; }
+
+        inline const vector<uint32_t> &offset() const { return offset_; };
+
+        static MemDataRow EMPTY;
     };
+
+    ostream &operator<<(ostream &os, MemDataRow &dt);
 
     class DataRowIterator {
     public:
@@ -159,7 +175,7 @@ namespace lqf {
 
         virtual shared_ptr<Block> mask(shared_ptr<Bitmap> mask) = 0;
 
-        virtual void compact(uint32_t newsize) {}
+        virtual void resize(uint32_t newsize) {}
     };
 
     class MemBlock : public Block {
@@ -178,13 +194,7 @@ namespace lqf {
 
         uint64_t size() override;
 
-        /**
-         * Increase the block row
-         * @param size
-         */
-        void inc(uint32_t row_to_inc);
-
-        void compact(uint32_t newsize) override;
+        void resize(uint32_t newsize) override;
 
         inline vector<uint64_t> &content();
 
@@ -211,9 +221,7 @@ namespace lqf {
 
         uint64_t size() override;
 
-        void inc(uint32_t row_to_inc);
-
-        void compact(uint32_t newsize) override;
+        void resize(uint32_t newsize) override;
 
         inline vector<uint64_t> &content();
 
@@ -292,7 +300,7 @@ namespace lqf {
             offset_ += dpage->num_values();
         }
 
-        inline shared_ptr<Bitmap> result() {
+        virtual shared_ptr<Bitmap> result() {
             return bitmap_;
         }
     };
@@ -364,9 +372,7 @@ namespace lqf {
          * The number of columns in the table
          * @return
          */
-        virtual uint8_t numFields() = 0;
-
-        virtual uint8_t numStringFields() { return 0; }
+        virtual const vector<uint32_t> &colSize() = 0;
 
         uint64_t size();
     };
@@ -385,7 +391,7 @@ namespace lqf {
 
         virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint8_t numFields() override;
+        const vector<uint32_t> &colSize() override;
 
         void updateColumns(uint64_t columns);
 
@@ -412,21 +418,21 @@ namespace lqf {
 
         virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint8_t numFields() override;
+        const vector<uint32_t> &colSize() override;
 
     protected:
         shared_ptr<Block> buildMaskedBlock(const shared_ptr<Block> &);
     };
 
     class TableView : public Table {
-        uint32_t num_fields_;
+        vector<uint32_t> col_size_;
         shared_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
-        TableView(uint32_t, shared_ptr<Stream<shared_ptr<Block>>>);
+        TableView(const vector<uint32_t> &, shared_ptr<Stream<shared_ptr<Block>>>);
 
         shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint8_t numFields() override;
+        const vector<uint32_t> &colSize() override;
     };
 
     class MemTable : public Table {
@@ -447,9 +453,7 @@ namespace lqf {
     public:
         static shared_ptr<MemTable> Make(uint8_t num_fields, bool vertical = false);
 
-        static shared_ptr<MemTable> Make(uint8_t num_fields, uint8_t num_string_fields, bool vertical = false);
-
-        static shared_ptr<MemTable> Make(const vector<uint32_t> col_size, bool vertical);
+        static shared_ptr<MemTable> Make(const vector<uint32_t> col_size, bool vertical = false);
 
         virtual ~MemTable();
 
@@ -459,11 +463,7 @@ namespace lqf {
 
         shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
-        uint8_t numFields() override;
-
-        uint8_t numStringFields() override;
-
-        const vector<uint32_t> &colSize();
+        const vector<uint32_t> &colSize() override;
 
         const vector<uint32_t> &colOffset();
     };

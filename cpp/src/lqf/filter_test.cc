@@ -55,7 +55,7 @@ using namespace lqf;
 TEST_F(ColFilterTest, FilterOnSimpleCol) {
     auto ptable = ParquetTable::Open("lineitem", 7);
     initializer_list<ColPredicate *> list = {
-            new SimpleColPredicate(0, [](const DataField &field) { return field.asInt() % 10 == 0; })};
+            new SimplePredicate(0, [](const DataField &field) { return field.asInt() % 10 == 0; })};
     auto filter = make_shared<ColFilter>(list);
 
     auto filtered = filter->filter(*ptable);
@@ -106,7 +106,7 @@ TEST_F(ColFilterTest, FilterSboost) {
     auto filtered = filter.filter(*ptable)->blocks()->collect();
     auto result = (*filtered)[0];
 
-    ColFilter regFilter({new SimpleColPredicate(14, pred2)});
+    ColFilter regFilter({new SimplePredicate(14, pred2)});
     auto filtered2 = regFilter.filter(*ptable)->blocks()->collect();
     auto result2 = (*filtered2)[0];
 
@@ -147,11 +147,11 @@ TEST_F(ColFilterTest, FilterMultiSboost) {
         ByteArray& input = field.asByteArray();
         return input.len == 3 && !strncmp(reinterpret_cast<const char *>(input.ptr), "AIR", 3);
     };
-    ColFilter regFilter({new SimpleColPredicate(14, simplePred)});
+    ColFilter regFilter({new SimplePredicate(14, simplePred)});
     auto simpleFiltered = regFilter.filter(*ptable)->blocks()->collect();
     auto simpleResult = (*simpleFiltered)[0];
 
-    ColFilter regFilter2({new SimpleColPredicate(14, simplePred2)});
+    ColFilter regFilter2({new SimplePredicate(14, simplePred2)});
     auto simpleFiltered2 = regFilter2.filter(*ptable)->blocks()->collect();
     auto simpleResult2 = (*simpleFiltered2)[0];
 

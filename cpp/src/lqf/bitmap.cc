@@ -175,6 +175,22 @@ namespace lqf {
         return shared_from_this();
     }
 
+    shared_ptr<Bitmap> SimpleBitmap::operator~() {
+        this->first_valid_ = -1;
+        uint64_t limit = array_size_ >> 2;
+        uint64_t i = 0;
+        __m256i ONE = _mm256_set1_epi64x(-1);
+        for (i = 0; i < limit; i += 4) {
+            __m256i a = _mm256_loadu_si256((__m256i *) (this->bitmap_ + i));
+            __m256i res = _mm256_xor_si256(a, ONE);
+            _mm256_storeu_si256((__m256i *) (this->bitmap_ + i), res);
+        }
+        for (; i < array_size_; i++) {
+            this->bitmap_[i] ^= -1;
+        }
+        return shared_from_this();
+    }
+
     uint64_t SimpleBitmap::cardinality() {
         uint64_t counter = 0;
         for (uint64_t i = 0; i < array_size_; i++) {
@@ -233,7 +249,11 @@ namespace lqf {
     }
 
     shared_ptr<Bitmap> FullBitmap::operator|(Bitmap &x1) {
-        return x1.shared_from_this();
+        return shared_from_this();
+    }
+
+    shared_ptr<Bitmap> FullBitmap::operator~() {
+        return make_shared<SimpleBitmap>(size_);
     }
 
     uint64_t FullBitmap::cardinality() {

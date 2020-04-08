@@ -18,7 +18,7 @@ namespace lqf {
     shared_ptr<Table> Filter::filter(Table &input) {
         function<shared_ptr<Block>(
                 const shared_ptr<Block> &)> mapper = bind(&Filter::processBlock, this, _1);
-        return make_shared<TableView>(input.numFields(), input.blocks()->map(mapper));
+        return make_shared<TableView>(input.colSize(), input.blocks()->map(mapper));
     }
 
     shared_ptr<Block> Filter::processBlock(const shared_ptr<Block> &input) {
@@ -30,10 +30,10 @@ namespace lqf {
 
     ColPredicate::~ColPredicate() {}
 
-    SimpleColPredicate::SimpleColPredicate(uint32_t index, function<bool(const DataField &)> pred)
+    SimplePredicate::SimplePredicate(uint32_t index, function<bool(const DataField &)> pred)
             : ColPredicate(index), predicate_(pred) {}
 
-    shared_ptr<Bitmap> SimpleColPredicate::filterBlock(Block &block, Bitmap &skip) {
+    shared_ptr<Bitmap> SimplePredicate::filterBlock(Block &block, Bitmap &skip) {
         auto result = make_shared<SimpleBitmap>(block.size());
         uint64_t block_size = block.size();
         auto ite = block.col(index_);
@@ -55,8 +55,11 @@ namespace lqf {
         return result;
     }
 
+    ColFilter::ColFilter(ColPredicate *pred) {
+        predicates_.push_back(unique_ptr<ColPredicate>(pred));
+    }
+
     ColFilter::ColFilter(initializer_list<ColPredicate *> preds) {
-        predicates_ = vector<unique_ptr<ColPredicate>>();
         for (auto &pred: preds) {
             predicates_.push_back(unique_ptr<ColPredicate>(pred));
         }
@@ -91,6 +94,67 @@ namespace lqf {
             }
         }
         return result;
+    }
+
+    KeyFinder::KeyFinder(uint32_t key_index, function<bool(DataRow &)> pred)
+            : key_index_(key_index), predicate_(pred) {}
+
+    int32_t KeyFinder::find(Table &table) {
+        function<int32_t(const shared_ptr<Block> &)> mapper = bind(&KeyFinder::filterBlock, this,
+                                                                   placeholders::_1);
+        auto values = table.blocks()->map(mapper)->collect();
+        return (*values)[0];
+    }
+
+    int32_t KeyFinder::filterBlock(const shared_ptr<Block> &block) {
+        auto rows = block->rows();
+        auto block_size = block->size();
+        for (uint32_t i = 0; i < block_size; ++i) {
+            DataRow &row = rows->next();
+            if (predicate_(row)) {
+                return row[key_index_].asInt();
+            }
+        }
+        return -1;
+    }
+
+    namespace raw {
+        template<typename DTYPE>
+        Not<DTYPE>::Not(unique_ptr<lqf::RawAccessor<DTYPE>> inner):inner_(move(inner)) {}
+
+        template<typename DTYPE>
+        void Not<DTYPE>::init(uint64_t size) {
+            inner_->init(size);
+        }
+
+        template<typename DTYPE>
+        void Not<DTYPE>::dict(lqf::Dictionary<DTYPE> &dict) {
+            inner_->dict(dict);
+        }
+
+        template<typename DTYPE>
+        void Not<DTYPE>::data(DataPage *dpage) {
+            inner_->data(dpage);
+        }
+
+        template<typename DTYPE>
+        shared_ptr<Bitmap> Not<DTYPE>::result() {
+            return ~(*inner_->result());
+        }
+
+        template<typename DTYPE>
+        unique_ptr<RawAccessor<DTYPE>> Not<DTYPE>::build(function<unique_ptr<RawAccessor<DTYPE>>()> builder) {
+            return unique_ptr<RawAccessor<DTYPE>>(new Not<DTYPE>(builder()));
+        }
+
+        template
+        class Not<Int32Type>;
+
+        template
+        class Not<DoubleType>;
+
+        template
+        class Not<ByteArrayType>;
     }
 
     namespace sboost {
@@ -159,10 +223,10 @@ namespace lqf {
 
         template<typename DTYPE>
         void DictGreater<DTYPE>::scanPage(uint64_t numEntry, const uint8_t *data,
-                                       uint64_t *bitmap, uint64_t bitmap_offset) {
+                                          uint64_t *bitmap, uint64_t bitmap_offset) {
             uint8_t bitWidth = data[0];
             ::sboost::encoding::rlehybrid::greater(data + 1, bitmap, bitmap_offset, bitWidth,
-                                                numEntry, rawTarget_);
+                                                   numEntry, rawTarget_);
         }
 
         template<typename DTYPE>

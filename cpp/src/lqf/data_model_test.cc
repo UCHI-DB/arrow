@@ -611,7 +611,7 @@ TEST(MemTableTest, Create) {
 TEST(TableViewTest, Create) {
     auto parquetTable = ParquetTable::Open("lineitem");
     auto blocks = parquetTable->blocks();
-    TableView tableView(parquetTable->numFields(), blocks);
+    TableView tableView(parquetTable->colSize(), blocks);
 
     tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
     tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });

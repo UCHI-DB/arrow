@@ -1,6 +1,7 @@
 //
 // Created by harper on 3/25/20.
 //
+#include <parquet/types.h>
 #include "tpchquery.h"
 
 namespace lqf {
@@ -27,5 +28,12 @@ namespace lqf {
         const string Customer::path = tablePath("customer");
 
         const string Orders::path = tablePath("orders");
+    }
+
+    namespace udf {
+        int date2year(parquet::ByteArray &date) {
+            return (date.ptr[0] - '0') * 1000 + (date.ptr[1] - '0') * 100 + (date.ptr[2] - '0') * 10 + date.ptr[3] -
+                   '0';
+        }
     }
 }

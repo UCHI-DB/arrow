@@ -694,6 +694,7 @@ class TypedColumnReaderImpl : public TypedColumnReader<DType>,
 
   const ColumnDescriptor* descr() const override { return this->descr_; }
 
+  virtual const void* dictionary() const override;
 };
 
 template <typename DType>
@@ -909,6 +910,11 @@ int64_t TypedColumnReaderImpl<DType>::MoveTo(int64_t move_to_pos) {
     int64_t current_pos = this->num_read_values_;
 //    lqf::validate_true(move_to_pos >= current_pos, "MoveTo cannot move backward");
     return Skip(move_to_pos - current_pos);
+}
+
+template <typename DType>
+const void * TypedColumnReaderImpl<DType>::dictionary() const {
+    return dynamic_cast<DictDecoder<DType>*>(this->current_decoder_)->dictionary();
 }
 
 // ----------------------------------------------------------------------

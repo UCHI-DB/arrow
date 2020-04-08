@@ -75,10 +75,11 @@ TEST(SmallSortTest, Sort) {
         buffer.push_back(next);
         (*rows4)[i][2] = next;
     }
-
-    auto sort = SmallSort([](DataRow *a, DataRow *b) {
+    function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
         return (*a)[2].asInt() < (*b)[2].asInt();
-    });
+    };
+
+    SmallSort sort(comparator);
 
     auto sorted = sort.sort(*table);
     auto sortedblock = (*sorted->blocks()->collect())[0];
@@ -89,6 +90,6 @@ TEST(SmallSortTest, Sort) {
     auto sortedrows = sortedblock->rows();
 
     for (int i = 0; i < 1000; ++i) {
-        EXPECT_EQ(buffer[i], (*sortedrows)[i][2].asInt());
+        EXPECT_EQ(buffer[i], (*sortedrows)[i][2].asInt()) << i;
     }
 }

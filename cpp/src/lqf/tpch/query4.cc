@@ -7,6 +7,9 @@
 #include <parquet/types.h>
 #include <lqf/mat.h>
 #include <lqf/join.h>
+#include <lqf/agg.h>
+#include <lqf/sort.h>
+#include <lqf/print.h>
 #include "tpchquery.h"
 
 namespace lqf {
@@ -35,35 +38,24 @@ namespace lqf {
             HashFilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY);
             auto existOrderTable = existJoin.join(*filteredOrderTable, *filteredLineItemTable);
 
+            function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
+                return row(Orders::ORDERPRIORITY).asInt();
+            };
 
-//            Agg agg = new TableAgg(new TableReducerSource() {
-//                @Override
-//                public int applyAsInt(DataRow dataRow) {
-//                    return dataRow.getRaw(Orders.ORDERPRIORITY);
-//                }
-//
-//                @Override
-//                public int tableSize() {
-//                    return 5;
-//                }
-//
-//                @Override
-//                public RowReducer apply(DataRow dataRow) {
-//                    FullDataRow header = new FullDataRow(new int[]{1, 0, 1});
-//                    header.setBinary(1, dataRow.getBinary(Orders.ORDERPRIORITY));
-//                    FieldsReducer fr = new FieldsReducer(header, new Count(0));
-//                    return fr;
-//                }
-//            });
-//            Table agged = agg.agg(existOrderTable);
-//
-//            MemSort sort = new MemSort(Comparator.comparing(row -> row.getBinary(1)));
-//            Table sorted = sort.sort(agged);
-//
-//            new Printer.DefaultPrinter(row -> {
-//                System.out.println(row.getBinary(1).toStringUsingUTF8() + "," + row.getInt(0));
-//            }).print(sorted);
+            HashDictAgg agg(vector<uint32_t>{2, 1}, {AGR(Orders::ORDERPRIORITY)}, []() {
+                return vector<AggField *>{new agg::Count()};
+            }, indexer, {pair<uint32_t, uint32_t>(0, Orders::ORDERPRIORITY)});
 
+            auto agged = agg.agg(*existOrderTable);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return (*a)[0].asByteArray() < (*b)[0].asByteArray();
+            };
+            SmallSort sort(comparator);
+            auto sorted = sort.sort(*agged);
+
+            auto printer = Printer::Make(PBEGIN PB(0) PI(1) PEND);
+            printer->print(*sorted);
         }
     }
 }
