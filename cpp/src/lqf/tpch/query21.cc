@@ -16,6 +16,72 @@
 namespace lqf {
     namespace tpch {
 
+        class ItemJoin : public Join {
+        protected:
+            unordered_set<int32_t> denied_;
+            unordered_map<int32_t, pair<int32_t, int32_t>> container_;
+            mutex map_lock_;
+            unordered_map<int32_t, mutex> order_locks_;
+
+        public:
+            shared_ptr<Table> join(Table &item2, Table &item1) {
+
+                shared_ptr<MemTable> output = MemTable::Make(vector<uint32_t>{1, 1});
+                uint32_t max_size = 0;
+                item1.blocks()->sequential()->foreach([this](const shared_ptr<Block> &block) {
+                    auto orderkeys = block->col(LineItem::ORDERKEY);
+                    auto suppkeys = block->col(LineItem::SUPPKEY);
+                    for (uint32_t i = 0; i < block->size(); ++i) {
+                        int orderkey = orderkeys->next().asInt();
+                        int suppkey = suppkeys->next().asInt();
+                        if (denied_.find(orderkey) == denied_.end()) {
+                            auto exist = container_.find(orderkey);
+                            if (exist != container_.end()) {
+                                if ((*exist).second.first == suppkey) {
+                                    (*exist).second.second++;
+                                } else {
+                                    denied_.insert(orderkey);
+                                    container_.erase(exist);
+                                }
+                            } else {
+                                container_[orderkey] = pair<int32_t, int32_t>(suppkey, 1);
+                            }
+                        }
+                    }
+                });
+                for (auto &item:container_) {
+                    max_size += item.second.second;
+                }
+
+                item2.blocks()->foreach([this, &output, &max_size](const shared_ptr<Block> &block) {
+                    auto output_block = output->allocate(max_size);
+                    auto write_rows = output_block->rows();
+                    uint32_t counter = 0;
+
+                    auto orderkeys = block->col(LineItem::ORDERKEY);
+                    auto suppkeys = block->col(LineItem::SUPPKEY);
+                    for (uint32_t i = 0; i < block->size(); ++i) {
+                        int orderkey = orderkeys->next().asInt();
+                        int suppkey = suppkeys->next().asInt();
+                        auto ite = container_.find(orderkey);
+                        if (ite != container_.end() && ite->second.first != suppkey) {
+                            int found = ite->second.first;
+                            int count = ite->second.second;
+                            map_lock_.lock();
+                            container_.erase(ite);
+                            map_lock_.unlock();
+                            for (int i = 0; i < count; ++i) {
+                                DataRow &row = (*write_rows)[counter++];
+                                row[0] = orderkey;
+                                row[1] = found;
+                            }
+                        }
+                    }
+                    output_block->resize(counter);
+                });
+            }
+        };
+
         ByteArray status("F");
 
         void executeQ21() {
@@ -29,93 +95,45 @@ namespace lqf {
 
 
             ColFilter orderFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERSTATUS,
-                                                                     bind(&ByteArrayDictEq::build,status)));
+                                                                     bind(&ByteArrayDictEq::build, status)));
             auto validorder = orderFilter.filter(*order);
 
             RowFilter linedateFilter([](DataRow &row) {
                 return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
             });
-            auto validLineitem = linedateFilter.filter(*lineitem);
+            auto l1 = linedateFilter.filter(*lineitem);
 
-            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY,Orders::ORDERKEY);
-            validLineitem = lineWithOrderJoin.join(*validLineitem, *validorder);
+            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY);
+            l1 = lineWithOrderJoin.join(*l1, *validorder);
 
             FilterMat mat;
-            validLineitem = mat.mat(*validLineitem);
+            auto matl1 = mat.mat(*l1);
 
+            ItemJoin itemExistJoin;
+            // ORDERKEY, SUPPKEY
+            l1 = itemExistJoin.join(*lineitem, *l1);
+
+            using namespace agg;
+            HashAgg countAgg(vector<uint32_t>{1, 1}, {AGI(1)}, []() { return vector<AggField *>{new Count()}; },
+                             COL_HASHER(1));
+            countAgg.useVertical();
+            auto agged = countAgg.agg(*l1);
 
             ColFilter supplierNationFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
                                                                           bind(&Int32DictEq::build, 3)));
             auto validSupplier = supplierNationFilter.filter(*supplier);
 
-            HashFilterJoin lineitemSupplierFilter(LineItem::SUPPKEY, Supplier::SUPPKEY);
-            auto validLineitem = lineitemSupplierFilter.join(*lineitem, *validSupplier);
+            HashJoin lineitemSupplierFilter(0, Supplier::SUPPKEY, new RowBuilder({JL(1), JRS(Supplier::NAME)}));
+            auto supplierWithCount = lineitemSupplierFilter.join(*agged, *validSupplier);
 
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SIGE(1) || (SIE(1) && SBLE(1));
+            };
+            TopN topn(100, comparator);
+            auto sorted = topn.sort(*supplierWithCount);
 
-
-            // TODO Which side is larger?
-            HashFilterJoin orderonItemFilter(Orders::ORDERKEY, LineItem::ORDERKEY);
-            validorder = orderonItemFilter.join(*validorder, *validLineitem);
-
-            HashFilterJoin itemOnOrderFilter(LineItem::ORDERKEY, Orders::ORDERKEY);
-            validLineitem = itemOnOrderFilter.join(validLineitem, validorder);
-
-            Table memLineitem = new MemMat().mat(validLineitem);
-
-            HashExistJoin existJoin(LineItem::ORDERKEY, 0,
-                                               (left, right)->left.getInt(LineItem.SUPPKEY) != right.getInt(1));
-            Table existLineitem = existJoin.join(lineitem, memLineitem);
-
-
-            HashJoin notExistJoin = new HashNotExistJoin(LineItem.ORDERKEY, 0, (left, right)->
-                    left.getInt(LineItem.SUPPKEY) != right.getInt(1) &&
-                                                                           left.getBinary(LineItem.RECEIPTDATE).toStringUsingUTF8()
-                                                                                   .compareTo(left.getBinary(
-                                                                                           LineItem.COMMITDATE).toStringUsingUTF8()) >
-                                                                           0
-            );
-            Table result = notExistJoin.join(lineitem, existLineitem);
-
-            Agg countAgg = new KeyAgg(new KeyReducerSource() {
-                @Override
-                public long applyAsLong(DataRow from) {
-                    return from.getInt(1);
-                }
-
-                @Override
-                public RowReducer apply(DataRow dataRow) {
-                    PrimitiveDataRow header = new PrimitiveDataRow(2);
-                    header.setInt(0, dataRow.getInt(1));
-                    return new FieldsReducer(header, new Count(1));
-                }
-            });
-            Table counted = countAgg.agg(result);
-
-            Reload supplierReload = new Reload();
-            supplierReload.getLoadingProperties().setLoadColumns(Supplier.SUPPKEY, Supplier.NAME);
-            validSupplier = supplierReload.reload(validSupplier);
-
-            Join withSupplierNameJoin = new HashJoin(new RowBuilder() {
-                @Override
-                public DataRow build(int key, DataRow left, DataRow right) {
-                    FullDataRow fd = new FullDataRow(new int[]{1, 0, 1});
-                    fd.setBinary(1, left.getBinary(Supplier.NAME));
-                    fd.setInt(0, right.getInt(1));
-                    return fd;
-                }
-            }, Supplier.SUPPKEY, 0);
-            result = withSupplierNameJoin.join(validSupplier, counted);
-
-            TopN topn = new TopN(100, Comparator.nullsLast(Comparator.< DataRow > comparingInt(row->- row.getInt(0))
-                    .thenComparing(row->row.getBinary(1).toStringUsingUTF8())));
-            Table sorted = topn.sort(result);
-
-            new Printer.DefaultPrinter(
-                    row->System.out.println(row.getBinary(1).toStringUsingUTF8() + "," + row.getInt(0)))
-                    .print(sorted);
-
-            System.out.println(System.currentTimeMillis() - startTime);
+            auto printer = Printer::Make(PBEGIN PI(0) PB(1) PEND);
+            printer->print(*sorted);
         }
-
     }
 }

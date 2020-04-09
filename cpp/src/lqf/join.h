@@ -16,7 +16,7 @@
 #define JRR(x) x | 0x50000
 
 #define COL_HASHER(x) [](DataRow& input) { return input[x].asInt(); }
-#define COL_HASHER(x, y) [](DataRow& input) { return (static_cast<int64_t>(input[x].asInt()) << 32) + input[y].asInt(); }
+#define COL_HASHER2(x, y) [](DataRow& input) { return (static_cast<int64_t>(input[x].asInt()) << 32) + input[y].asInt(); }
 
 namespace lqf {
     using namespace std;
@@ -124,6 +124,8 @@ namespace lqf {
 
             unique_ptr<MemDataRow> remove(int64_t key);
 
+            inline unordered_map<int64_t, unique_ptr<MemDataRow>> &content() { return hashmap_; }
+
             uint32_t size();
         };
 
@@ -219,15 +221,30 @@ namespace lqf {
     ///
     /// HashExistJoin returns matched records from the hashtable
     ///
-    class HashExistJoin : public HashJoin {
+    class HashExistJoin : public HashBasedJoin {
 
     public:
-        HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, RowBuilder *rowBuilder);
+        HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
+                      function<bool(DataRow & , DataRow & )> pred = nullptr);
 
     protected:
+        function<bool(DataRow & , DataRow & )> predicate_;
+
         void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
     };
 
+    class HashNotExistJoin : public HashBasedJoin {
+    public:
+        HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
+                         function<bool(DataRow & , DataRow & )> pred = nullptr);
+
+        shared_ptr<Table> join(Table &, Table &) override;
+
+    protected:
+        function<bool(DataRow & , DataRow & )> predicate_;
+
+        void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
+    };
 
     /**
      * HashVJoin is used to perform joining on vertical memory table.
@@ -304,6 +321,10 @@ namespace lqf {
         protected:
             shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
         };
+    }
+
+    namespace blockjoin {
+
     }
 }
 #endif //CHIDATA_LQF_JOIN_H

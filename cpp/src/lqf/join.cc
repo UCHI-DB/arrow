@@ -379,31 +379,93 @@ namespace lqf {
     }
 
     HashExistJoin::HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
-                                 RowBuilder *builder)
-            : HashJoin(leftKeyIndex, rightKeyIndex, builder) {}
+                                 JoinBuilder *builder, function<bool(DataRow &, DataRow &)> pred)
+            : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder), predicate_(pred) {}
 
     void HashExistJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
         auto resultblock = output->allocate(container_->size());
 
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         auto leftrows = leftBlock->rows();
-
         uint32_t counter = 0;
         auto writer = resultblock->rows();
-        for (uint32_t i = 0; i < leftBlock->size(); ++i) {
-            DataField &keyfield = leftkeys->next();
-            auto key = keyfield.asInt();
-            auto result = container_->get(key);
-            if (result) {
-                DataRow &row = (*leftrows)[leftkeys->pos()];
-                if (predicate_(row, *result)) {
-                    auto exist = container_->remove(key);
-                    (*writer)[counter++] = (*exist);
+
+        auto content = container_->content();
+
+        if (predicate_) {
+            for (uint32_t i = 0; i < leftBlock->size(); ++i) {
+                DataField &keyfield = leftkeys->next();
+                auto key = keyfield.asInt();
+                auto result = content.find(key);
+                if (result != content.end()) {
+                    DataRow &leftrow = (*leftrows)[leftkeys->pos()];
+                    if (predicate_(leftrow, *result->second)) {
+                        (*writer)[counter++] = (*result->second);
+                        content.erase(result);
+                    }
+                }
+            }
+        } else {
+            for (uint32_t i = 0; i < leftBlock->size(); ++i) {
+                DataField &keyfield = leftkeys->next();
+                auto key = keyfield.asInt();
+                auto result = container_->remove(key);
+                if (result) {
+                    (*writer)[counter++] = (*result);
                 }
             }
         }
-
         resultblock->resize(counter);
+    }
+
+    HashNotExistJoin::HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::JoinBuilder *rowBuilder,
+                                       function<bool(DataRow &, DataRow &)> pred) :
+            HashBasedJoin(leftKeyIndex, rightKeyIndex, rowBuilder), predicate_(pred) {}
+
+    shared_ptr<Table> HashNotExistJoin::join(Table &left, Table &right) {
+        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
+                bind(&JoinBuilder::snapshot, builder_.get(), std::placeholders::_1);
+        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, snapshoter);
+
+        auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
+
+        function<void(const shared_ptr<Block> &)> prober = bind(&HashNotExistJoin::probe, this, memTable.get(), _1);
+        left.blocks()->foreach(prober);
+
+        auto resultBlock = memTable->allocate(container_->size());
+        auto writeRows = resultBlock->rows();
+        for (auto &entry: container_->content()) {
+            writeRows->next() = *entry.second;
+        }
+
+        return memTable;
+    }
+
+    void HashNotExistJoin::probe(lqf::MemTable *output, const shared_ptr<Block> &leftBlock) {
+        auto leftkeys = leftBlock->col(leftKeyIndex_);
+        auto leftrows = leftBlock->rows();
+
+        auto content = container_->content();
+
+        if (predicate_) {
+            for (uint32_t i = 0; i < leftBlock->size(); ++i) {
+                DataField &keyfield = leftkeys->next();
+                auto key = keyfield.asInt();
+                auto result = content.find(key);
+                if (result != content.end()) {
+                    DataRow &leftrow = (*leftrows)[leftkeys->pos()];
+                    if (predicate_(leftrow, *result->second)) {
+                        content.erase(result);
+                    }
+                }
+            }
+        } else {
+            for (uint32_t i = 0; i < leftBlock->size(); ++i) {
+                DataField &keyfield = leftkeys->next();
+                auto key = keyfield.asInt();
+                auto result = container_->remove(key);
+            }
+        }
     }
 
     HashColumnJoin::HashColumnJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::ColumnBuilder *builder)

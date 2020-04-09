@@ -49,34 +49,29 @@ namespace lqf {
             }));
             auto filteredCust = avgFilter.filter(*validCust);
 
-            HashNotExistJoin
+            HashNotExistJoin notExistJoin(Orders::CUSTKEY, 0,
+                                          new RowBuilder({{JR(Customer::PHONE), JR(Customer::ACCTBAL)}}));
+            // PHONE, ACCTBAL
+            auto noorderCust = notExistJoin.join(*order, *filteredCust);
 
-            Join notExistJoin = new HashNotExistJoin(Orders.CUSTKEY, 0);
-            Table noorderCust = notExistJoin.join(order, bigCust);
+            using namespace agg;
 
-            Agg countSum = new KeyAgg(new KeyReducerSource() {
-                @Override
-                public long applyAsLong(DataRow from) {
-                    return Integer.parseInt(from.getBinary(2).toStringUsingUTF8());
-                }
+            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
+                ByteArray &val = input[0].asByteArray();
+                return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
+            };
+            HashAgg agg(vector<uint32_t>{2, 1, 1}, {AGB(0)},
+                        []() { return vector<AggField *>{new DoubleSum(1), new Count()}; }, hasher);
+            auto result = agg.agg(*noorderCust);
 
-                @Override
-                public RowReducer apply(DataRow dataRow) {
-                    FullDataRow fd = new FullDataRow(new int[]{1, 1, 1});
-                    fd.setBinary(2, dataRow.getBinary(2));
-                    return new FieldsReducer(fd, new DoubleSum(1, 1), new Count(0));
-                }
-            });
-            Table result = countSum.agg(noorderCust);
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SBLE(0);
+            };
+            SmallSort sorter(comparator);
+            result = sorter.sort(*result);
 
-            Sort sorter = new MemSort(Comparator.comparing(row->row.getBinary(2).toStringUsingUTF8()));
-            result = sorter.sort(result);
-
-            new Printer.DefaultPrinter(row->System.out.println(row.getBinary(2).toStringUsingUTF8()
-                                                               + "," + row.getInt(0) + "," + row.getDouble(1))).print(
-                    result);
-
-            System.out.println(System.currentTimeMillis() - startTime);
+            auto printer = Printer::Make(PBEGIN PB(0) PD(1) PI(2) PEND);
+            printer->print(*result);
         }
     }
 }

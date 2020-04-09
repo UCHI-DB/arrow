@@ -16,6 +16,7 @@
 #define SBLE(x) (*a)[x].asByteArray() < (*b)[x].asByteArray()
 #define SBE(x) (*a)[x].asByteArray() == (*b)[x].asByteArray()
 #define SILE(x) (*a)[x].asInt() < (*b)[x].asInt()
+#define SIGE(x) (*a)[x].asInt() > (*b)[x].asInt()
 #define SIE(x) (*a)[x].asInt() == (*b)[x].asInt()
 using namespace std;
 
