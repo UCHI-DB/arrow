@@ -239,7 +239,7 @@ namespace lqf {
 
         template<typename T, typename ACC>
         void DistinctCount<T, ACC>::dump() {
-            storage_ = values_.size();
+            storage_ = static_cast<int32_t>(values_.size());
         }
 
         Count::Count() : AggField(-1) {}

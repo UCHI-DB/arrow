@@ -116,7 +116,27 @@ namespace lqf {
         };
 
         void executeQ1();
-
+        void executeQ2();
+        void executeQ3();
+        void executeQ4();
+        void executeQ5();
+        void executeQ6();
+        void executeQ7();
+        void executeQ8();
+        void executeQ9();
+        void executeQ10();
+        void executeQ11();
+        void executeQ12();
+        void executeQ13();
+        void executeQ14();
+        void executeQ15();
+        void executeQ16();
+        void executeQ17();
+        void executeQ18();
+        void executeQ19();
+        void executeQ20();
+        void executeQ21();
+        void executeQ22();
     }
 
     namespace udf {

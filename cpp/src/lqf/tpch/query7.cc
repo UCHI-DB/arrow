@@ -14,13 +14,31 @@
 
 namespace lqf {
     namespace tpch {
-
-        void executeQ7() {
+        namespace q7 {
             string nation1("FRANCE");
             string nation2("GERMANY");
 
             ByteArray dateFrom("1995-01-01");
             ByteArray dateTo("1996-12-31");
+
+            class Q7ItemWithNationBuilder : public RowBuilder {
+            public:
+                Q7ItemWithNationBuilder() : RowBuilder(
+                        {JL(LineItem::ORDERKEY), JR(Supplier::NATIONKEY), JL(0), JL(LineItem::EXTENDEDPRICE)}, false,
+                        true) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
+                    target[0] = left[LineItem::ORDERKEY];
+                    target[1] = right[Supplier::NATIONKEY];
+                    target[2] = udf::date2year(left[LineItem::SHIPDATE].asByteArray());
+                    target[3] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
+                }
+            };
+        }
+
+        using namespace q7;
+
+        void executeQ7() {
 
             auto nationTable = ParquetTable::Open(Nation::path);
             vector<uint32_t> nation_col_size({1, 2});
@@ -77,19 +95,7 @@ namespace lqf {
                                                                               dateTo))});
             auto filteredLineitem = lineitemFilter.filter(*lineitemTable);
 
-            class Q7ItemWithNationBuilder : public RowBuilder {
-            public:
-                Q7ItemWithNationBuilder() : RowBuilder(
-                        {JL(LineItem::ORDERKEY), JR(Supplier::NATIONKEY), JL(0), JL(LineItem::EXTENDEDPRICE)}, false,
-                        true) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
-                    target[0] = left[LineItem::ORDERKEY];
-                    target[1] = right[Supplier::NATIONKEY];
-                    target[2] = udf::date2year(left[LineItem::SHIPDATE].asByteArray());
-                    target[3] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
-                }
-            };
             HashJoin itemWithNationJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new Q7ItemWithNationBuilder());
             auto itemWithNation = itemWithNationJoin.join(*filteredLineitem, *validSupplier);
 

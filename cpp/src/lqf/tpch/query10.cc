@@ -16,12 +16,25 @@
 namespace lqf {
     namespace tpch {
 
-        void executeQ10() {
+        namespace q10 {
             ByteArray dateFrom("1993-10-01");
             ByteArray dateTo("1994-02-01");
             ByteArray returnflag("R");
 
+            class RevBuilder : public RowBuilder {
+            public:
+                RevBuilder() : RowBuilder({JR(Orders::CUSTKEY), JL(0)}, false, true) {}
 
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) override {
+                    target[0] = right[0].asInt();
+                    target[1] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
+                }
+            };
+        }
+
+        using namespace q10;
+
+        void executeQ10() {
             auto customer = ParquetTable::Open(Customer::path,
                                                {Customer::CUSTKEY, Customer::ACCTBAL, Customer::NAME, Customer::ADDRESS,
                                                 Customer::PHONE});
@@ -41,15 +54,7 @@ namespace lqf {
                                                                          bind(&ByteArrayDictEq::build, returnflag))});
             auto validLineitem = lineitemFilter.filter(*lineitem);
 
-            class RevBuilder : public RowBuilder {
-            public:
-                RevBuilder() : RowBuilder({JR(Orders::CUSTKEY), JL(0)}, false, true) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) override {
-                    target[0] = right[0].asInt();
-                    target[1] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
-                }
-            };
             HashJoin orderItemFilter(LineItem::ORDERKEY, Orders::ORDERKEY, new RevBuilder());
             // CUSTKEY, REV
             validLineitem = orderItemFilter.join(*validLineitem, *validOrder);

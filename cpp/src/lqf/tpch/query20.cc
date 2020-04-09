@@ -16,8 +16,13 @@
 
 namespace lqf {
     namespace tpch {
-        ByteArray dateFrom("1994-01-01");
-        ByteArray dateTo("1995-01-01");
+        namespace q20 {
+            ByteArray dateFrom("1994-01-01");
+            ByteArray dateTo("1995-01-01");
+
+
+        }
+        using namespace q20;
 
         void executeQ20() {
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY, Supplier::NAME,
@@ -72,7 +77,7 @@ namespace lqf {
             using namespace agg;
             HashAgg lineitemQuanAgg(vector < uint32_t > {1, 1, 1}, {AGI(LineItem::PARTKEY), AGI(LineItem::SUPPKEY)},
                                     []() { return vector < AggField * > {new IntSum(LineItem::QUANTITY)}; },
-                                    COL_HASHER(LineItem::PARTKEY, LineItem::SUPPKEY));
+                                    COL_HASHER2(LineItem::PARTKEY, LineItem::SUPPKEY));
             // PARTKEY SUPPKEY SUM(QUANTITY)
             auto agglineitem = lineitemQuanAgg.agg(*validLineitem);
 

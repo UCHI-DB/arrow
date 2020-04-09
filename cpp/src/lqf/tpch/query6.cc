@@ -15,13 +15,25 @@
 
 namespace lqf {
     namespace tpch {
-
-        void executeQ6() {
+        namespace q6 {
             int quantity = 24;
             ByteArray dateFrom("1994-01-01");
             ByteArray dateTo("1995-01-01");
             double discountFrom = 0.04;
             double discountTo = 0.06;
+
+            class PriceField : public agg::Sum<double, agg::AsDouble> {
+            public:
+                PriceField() : agg::DoubleSum(0) {}
+
+                void reduce(DataRow &input) {
+                    *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * input[LineItem::DISCOUNT].asDouble();
+                }
+            };
+        }
+        using namespace q6;
+
+        void executeQ6() {
 
             auto lineitemTable = ParquetTable::Open(LineItem::path);
 
@@ -38,14 +50,7 @@ namespace lqf {
                              });
             auto filtered = filter.filter(*lineitemTable);
 
-            class PriceField : public agg::Sum<double, agg::AsDouble> {
-            public:
-                PriceField() : agg::DoubleSum(0) {}
 
-                void reduce(DataRow &input) {
-                    *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * input[LineItem::DISCOUNT].asDouble();
-                }
-            };
             SimpleAgg agg(vector<uint32_t>({1}), []() { return vector<AggField *>({new PriceField()}); });
             auto agged = agg.agg(*filtered);
 

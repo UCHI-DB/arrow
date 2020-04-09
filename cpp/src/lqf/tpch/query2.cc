@@ -14,13 +14,15 @@
 
 namespace lqf {
     namespace tpch {
-
-        using namespace sboost;
-
-        void executeQ2() {
+        namespace q2 {
             ByteArray region("EUROPE");
             int size = 15;
             const char *const type = "BRASS";
+        }
+        using namespace sboost;
+        using namespace q2;
+
+        void executeQ2() {
 
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
@@ -29,7 +31,7 @@ namespace lqf {
             auto regionTable = ParquetTable::Open(Region::path, {Region::REGIONKEY, Region::NAME});
             auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE});
 
-            ColFilter regionFilter({new SimplePredicate(Region::NAME, [&region](const DataField &field) {
+            ColFilter regionFilter({new SimplePredicate(Region::NAME, [](const DataField &field) {
                 return region == (field.asByteArray());
             })});
             auto filteredRegion = regionFilter.filter(*regionTable);
@@ -131,9 +133,4 @@ namespace lqf {
             });
         }
     }
-}
-
-//
-int main(int argc, char **argv) {
-    lqf::tpch::executeQ2();
 }

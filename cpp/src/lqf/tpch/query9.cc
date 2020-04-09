@@ -15,6 +15,37 @@
 
 namespace lqf {
     namespace tpch {
+        namespace q9 {
+            class ItemWithOrderBuilder : public RowBuilder {
+
+            public:
+                ItemWithOrderBuilder() : RowBuilder({JL(LineItem::PARTKEY), JL(LineItem::SUPPKEY),
+                                                     JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT),
+                                                     JL(LineItem::QUANTITY), JRS(Orders::ORDERDATE)}, false, true) {}
+
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
+                    target[0] = left[LineItem::PARTKEY].asInt();
+                    target[1] = left[LineItem::SUPPKEY].asInt();
+                    target[2] = left[LineItem::EXTENDEDPRICE].asDouble();
+                    target[3] = left[LineItem::DISCOUNT].asDouble();
+                    target[4] = left[LineItem::QUANTITY].asInt();
+                    target[5] = udf::date2year(right[0].asByteArray());
+                }
+            };
+
+            class ItemWithRevBuilder : public RowBuilder {
+            public :
+                ItemWithRevBuilder() : RowBuilder({JL(0), JL(5), JR(PartSupp::SUPPLYCOST)}, false, true) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
+                    target[0] = left[1].asInt();
+                    target[1] = left[5].asInt();
+                    target[2] = left[2].asDouble() * (1 - left[3].asDouble()) - right[0].asDouble() * target[4].asInt();
+                }
+            };
+        };
+        using namespace q9;
 
         void executeQ9() {
             auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::NAME});
@@ -37,37 +68,12 @@ namespace lqf {
             HashFilterJoin itemPartJoin(LineItem::PARTKEY, Part::PARTKEY);
             auto validLineitem = itemPartJoin.join(*lineitem, *validPart);
 
-            class ItemWithOrderBuilder : public RowBuilder {
 
-            public:
-                ItemWithOrderBuilder() : RowBuilder({JL(LineItem::PARTKEY), JL(LineItem::SUPPKEY),
-                                                     JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT),
-                                                     JL(LineItem::QUANTITY), JRS(Orders::ORDERDATE)}, false, true) {}
-
-
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
-                    target[0] = left[LineItem::PARTKEY].asInt();
-                    target[1] = left[LineItem::SUPPKEY].asInt();
-                    target[2] = left[LineItem::EXTENDEDPRICE].asDouble();
-                    target[3] = left[LineItem::DISCOUNT].asDouble();
-                    target[4] = left[LineItem::QUANTITY].asInt();
-                    target[5] = udf::date2year(right[0].asByteArray());
-                }
-            };
             HashJoin itemOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new ItemWithOrderBuilder());
             auto orderLineitem = itemOrderJoin.join(*validLineitem, *order);
 
             // SUPPKEY, ORDER_YEAR, REV
-            class ItemWithRevBuilder : public RowBuilder {
-            public :
-                ItemWithRevBuilder() : RowBuilder({JL(0), JL(5), JR(PartSupp::SUPPLYCOST)}, false, true) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
-                    target[0] = left[1].asInt();
-                    target[1] = left[5].asInt();
-                    target[2] = left[2].asDouble() * (1 - left[3].asDouble()) - right[0].asDouble() * target[4].asInt();
-                }
-            };
             using namespace powerjoin;
             function<uint64_t(DataRow &)> lineitem_key_maker = [](DataRow &row) {
                 return (static_cast<uint64_t>(row[LineItem::PARTKEY].asInt()) << 32) + row[LineItem::SUPPKEY].asInt();
@@ -91,12 +97,12 @@ namespace lqf {
             auto result = agg.agg(*itemWithNation);
 
             HashJoin withNationJoin(0, Nation::NATIONKEY,
-                                                   new RowBuilder({JL(1), JRS(Nation::NAME), JL(2)}, false, true));
+                                    new RowBuilder({JL(1), JRS(Nation::NAME), JL(2)}, false, true));
             // ORDERYEAR, NATION, REV
             result = withNationJoin.join(*result, *nation);
 
-            function<bool(DataRow*,DataRow*)> comp = [](DataRow* a, DataRow*b) {
-               return SBLE(1) || (SBE(1) && SILE(0));
+            function<bool(DataRow *, DataRow *)> comp = [](DataRow *a, DataRow *b) {
+                return SBLE(1) || (SBE(1) && SILE(0));
             };
             SmallSort sort(comp);
             result = sort.sort(*result);

@@ -167,7 +167,7 @@ namespace lqf {
 
         inline shared_ptr<Stream<VIEW>> sequential() {
             evaluator_->parallel_ = false;
-            return this;
+            return this->shared_from_this();
         }
 
         virtual bool isEmpty() = 0;

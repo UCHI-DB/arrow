@@ -18,6 +18,24 @@
 namespace lqf {
     namespace tpch {
 
+        namespace q13{
+            class CustCountBuilder : public RowBuilder {
+            public:
+                CustCountBuilder() : RowBuilder({JR(1)}, true) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
+                    target[0] = key;
+                    if (&right == &MemDataRow::EMPTY) {
+                        target[1] = 0;
+                    } else {
+                        target[1] = right[0];
+                    }
+                }
+            };
+        }
+
+        using namespace q13;
+
         void executeQ13() {
             auto customer = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
             auto order = ParquetTable::Open(Orders::path, {Orders::COMMENT, Orders::CUSTKEY});
@@ -38,19 +56,7 @@ namespace lqf {
             // CUSTKEY, COUNT
             auto orderCount = orderCustAgg.agg(*validOrder);
 
-            class CustCountBuilder : public RowBuilder {
-            public:
-                CustCountBuilder() : RowBuilder({JR(1)}, true) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
-                    target[0] = key;
-                    if (&right == &MemDataRow::EMPTY) {
-                        target[1] = 0;
-                    } else {
-                        target[1] = right[0];
-                    }
-                }
-            };
             HashJoin join(Customer::CUSTKEY, 0, new CustCountBuilder());
             join.useOuter();
 

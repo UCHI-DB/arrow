@@ -17,13 +17,27 @@
 namespace lqf {
     namespace tpch {
 
-        ByteArray brand1("Brand#12");
-        ByteArray brand2("Brand#23");
-        ByteArray brand3("Brand#34");
+        namespace q19 {
+            ByteArray brand1("Brand#12");
+            ByteArray brand2("Brand#23");
+            ByteArray brand3("Brand#34");
 
-        ByteArray shipmentInst("DELIVER IN PERSON");
-        ByteArray shipMode1("AIR");
-        ByteArray shipMode2("REG AIR");
+            ByteArray shipmentInst("DELIVER IN PERSON");
+            ByteArray shipMode1("AIR");
+            ByteArray shipMode2("REG AIR");
+
+            using namespace agg;
+
+            class PriceField : public DoubleSum {
+            public:
+                PriceField() : DoubleSum(LineItem::EXTENDEDPRICE) {}
+
+                void reduce(DataRow &row) override {
+                    *value_ += row[LineItem::EXTENDEDPRICE].asDouble() * (1 - row[LineItem::DISCOUNT].asDouble());
+                }
+            };
+        }
+        using namespace q19;
 
         void executeQ19() {
 
@@ -106,15 +120,7 @@ namespace lqf {
             FilterUnion funion;
             auto unioneditem = funion.execute({validLineitem1.get(), validLineitem2.get(), validLineitem3.get()});
 
-            using namespace agg;
-            class PriceField : public DoubleSum {
-            public:
-                PriceField() : DoubleSum(LineItem::EXTENDEDPRICE) {}
 
-                void reduce(DataRow &row) override {
-                    *value_ += row[LineItem::EXTENDEDPRICE].asDouble() * (1 - row[LineItem::DISCOUNT].asDouble());
-                }
-            };
             SimpleAgg sumagg({1}, []() { return vector<AggField *>{new PriceField()}; });
             auto result = sumagg.agg(*unioneditem);
 

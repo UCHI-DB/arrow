@@ -17,21 +17,21 @@
 namespace lqf {
     namespace tpch {
 
-        ByteArray brand("Brand#45");
-        const char *type = "MEDIUM POLISHED";
-        unordered_set<int32_t> size{49, 14, 23, 45, 19, 3, 36, 9};
+        using namespace sboost;
+        using namespace raw;
+        namespace q16 {
+            ByteArray brand("Brand#45");
+            const char *type = "MEDIUM POLISHED";
+            unordered_set<int32_t> size{49, 14, 23, 45, 19, 3, 36, 9};
 
+        }
+
+        using namespace q16;
         void executeQ16() {
-
-//            String supplierComment = "%Customer%Complaints%";
-
-
             auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::TYPE, Part::SIZE});
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::COMMENT});
             auto partsupp = ParquetTable::Open(PartSupp::path, {PartSupp::SUPPKEY});
 
-            using namespace sboost;
-            using namespace raw;
 
             function<unique_ptr<RawAccessor<ByteArrayType>>()> brandgen = bind(&ByteArrayDictEq::build, brand);
             function<unique_ptr<RawAccessor<ByteArrayType>>()> typegen = bind(&ByteArrayDictMultiEq::build,

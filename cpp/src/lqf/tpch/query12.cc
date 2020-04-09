@@ -15,13 +15,40 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace agg;
+        namespace q12 {
+            ByteArray highp1("1-URGENT");
+            ByteArray highp2("2-HIGH");
+            ByteArray dateFrom("1994-01-01");
+            ByteArray dateTo("1995-01-01");
+            ByteArray mode1("MAIL");
+            ByteArray mode2("SHIP");
 
-        ByteArray highp1("1-URGENT");
-        ByteArray highp2("2-HIGH");
-        ByteArray dateFrom("1994-01-01");
-        ByteArray dateTo("1995-01-01");
-        ByteArray mode1("MAIL");
-        ByteArray mode2("SHIP");
+            class OrderHighPriorityField : public IntSum {
+            public:
+                OrderHighPriorityField() : IntSum(0) {}
+
+                void reduce(DataRow &input) override {
+                    int32_t orderpriority = input[2].asInt();
+                    if (orderpriority == 0 || orderpriority == 1) {
+                        *value_ += input[1].asInt();
+                    }
+                }
+            };
+
+            class OrderLowPriorityField : public IntSum {
+            public:
+                OrderLowPriorityField() : IntSum(0) {}
+
+                void reduce(DataRow &input) override {
+                    int32_t orderpriority = input[2].asInt();
+                    if (!(orderpriority == 0 || orderpriority == 1)) {
+                        *value_ += input[1].asInt();
+                    }
+                }
+            };
+        }
+        using namespace q12;
 
         void executeQ12() {
 
@@ -63,28 +90,7 @@ namespace lqf {
             auto itemwithorder = join.join(*agglineitem, *order);
 
             using namespace agg;
-            class OrderHighPriorityField : public IntSum {
-            public:
-                OrderHighPriorityField() : IntSum(0) {}
 
-                void reduce(DataRow &input) override {
-                    int32_t orderpriority = input[2].asInt();
-                    if (orderpriority == 0 || orderpriority == 1) {
-                        *value_ += input[1].asInt();
-                    }
-                }
-            };
-            class OrderLowPriorityField : public IntSum {
-            public:
-                OrderLowPriorityField() : IntSum(0) {}
-
-                void reduce(DataRow &input) override {
-                    int32_t orderpriority = input[2].asInt();
-                    if (!(orderpriority == 0 || orderpriority == 1)) {
-                        *value_ += input[1].asInt();
-                    }
-                }
-            };
             HashAgg finalAgg(vector<uint32_t>{1, 1, 1}, {AGI(0)}, []() {
                 return vector<AggField *>{new OrderHighPriorityField(), new OrderLowPriorityField()};
             }, COL_HASHER(0));

@@ -14,12 +14,14 @@
 
 namespace lqf {
     namespace tpch {
-
-        using namespace lqf::sboost;
-
-        void executeQ4() {
+        namespace q4 {
             ByteArray dateFrom("1993-07-01");
             ByteArray dateTo("1993-10-01");
+        }
+        using namespace sboost;
+        using namespace q4;
+
+        void executeQ4() {
 
             auto orderTable = ParquetTable::Open(Orders::path);
             auto lineitemTable = ParquetTable::Open(LineItem::path);

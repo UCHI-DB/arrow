@@ -287,7 +287,7 @@ namespace lqf {
         class PowerHashJoin : public PowerHashBasedJoin {
         public:
             PowerHashJoin(function<int64_t(DataRow & )>, function<int64_t(DataRow & )>, RowBuilder *,
-                          function<bool(DataRow & , DataRow & )> pred);
+                          function<bool(DataRow & , DataRow & )> pred = nullptr);
 
         protected:
             RowBuilder *rowBuilder_;

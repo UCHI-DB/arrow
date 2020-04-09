@@ -16,10 +16,28 @@
 
 namespace lqf {
     namespace tpch {
+        namespace q14 {
 
-        ByteArray dateFrom("1995-09-01");
-        ByteArray dateTo("1995-10-01");
-        const char *prefix = "PROMO";
+            ByteArray dateFrom("1995-09-01");
+            ByteArray dateTo("1995-10-01");
+            const char *prefix = "PROMO";
+
+            class ItemBuilder : public RowBuilder {
+            public:
+                ItemBuilder() : RowBuilder({JL(LineItem::EXTENDEDPRICE)}, false) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
+                    target[0] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
+                    if (&right == &MemDataRow::EMPTY) {
+                        target[1] = 0;
+                    } else {
+                        target[1] = target[0].asDouble();
+                    }
+                }
+            };
+        }
+
+        using namespace q14;
 
         void executeQ14() {
 
@@ -42,19 +60,7 @@ namespace lqf {
                                                                                       dateFrom, dateTo))});
             auto validLineitem = lineitemShipdateFilter.filter(*lineitem);
 
-            class ItemBuilder : public RowBuilder {
-            public:
-                ItemBuilder() : RowBuilder({JL(LineItem::EXTENDEDPRICE)}, false) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
-                    target[0] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
-                    if (&right == &MemDataRow::EMPTY) {
-                        target[1] = 0;
-                    } else {
-                        target[1] = target[0].asDouble();
-                    }
-                }
-            };
             HashJoin join(LineItem::PARTKEY, Part::PARTKEY, new ItemBuilder());
             join.useOuter();
             auto lineitemWithPartType = join.join(*validLineitem, *validPart);

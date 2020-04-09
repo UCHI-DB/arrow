@@ -390,7 +390,7 @@ namespace lqf {
         uint32_t counter = 0;
         auto writer = resultblock->rows();
 
-        auto content = container_->content();
+        auto& content = container_->content();
 
         if (predicate_) {
             for (uint32_t i = 0; i < leftBlock->size(); ++i) {
@@ -445,7 +445,7 @@ namespace lqf {
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         auto leftrows = leftBlock->rows();
 
-        auto content = container_->content();
+        auto& content = container_->content();
 
         if (predicate_) {
             for (uint32_t i = 0; i < leftBlock->size(); ++i) {

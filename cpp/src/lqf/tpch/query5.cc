@@ -14,11 +14,25 @@
 
 namespace lqf {
     namespace tpch {
-
-        void executeQ5() {
+        namespace q5 {
             ByteArray dateFrom("1994-01-01");
             ByteArray dateTo("1995-01-01");
             ByteArray region("ASIA");
+
+            class ItemPriceRowBuilder : public RowBuilder {
+            public:
+                ItemPriceRowBuilder() : RowBuilder({}, false, true) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
+                    target[0] = left[LineItem::ORDERKEY];
+                    target[1] = right[Supplier::NATIONKEY];
+                    target[2] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
+                }
+            };
+        }
+        using namespace q5;
+
+        void executeQ5() {
 
             auto regionTable = ParquetTable::Open(Region::path, {Region::REGIONKEY, Region::NAME});
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::REGIONKEY, Nation::NAME, Nation::NATIONKEY});
@@ -60,16 +74,7 @@ namespace lqf {
                                                new ColumnBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)}));
             validOrder = orderOnCustomerJoin.join(*validOrder, *validCustomer);
 
-            class ItemPriceRowBuilder : public RowBuilder {
-            public:
-                ItemPriceRowBuilder() : RowBuilder({}, false, true) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
-                    target[0] = left[LineItem::ORDERKEY];
-                    target[1] = right[Supplier::NATIONKEY];
-                    target[2] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
-                }
-            };
             HashJoin itemOnSupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new ItemPriceRowBuilder());
             auto validLineitem = itemOnSupplierJoin.join(*lineitemTable, *validSupplier);
 

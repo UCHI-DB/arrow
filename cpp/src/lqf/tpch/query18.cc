@@ -15,9 +15,13 @@
 
 namespace lqf {
     namespace tpch {
+        namespace q18 {
 
-        void executeQ18() {
             int quantity = 300;
+        }
+
+        using namespace q18;
+        void executeQ18() {
 
             auto order = ParquetTable::Open(Orders::path,
                                             {Orders::ORDERKEY, Orders::ORDERDATE, Orders::TOTALPRICE, Orders::CUSTKEY});
@@ -30,7 +34,7 @@ namespace lqf {
                             COL_HASHER(LineItem::ORDERKEY));
             auto aggedlineitem = hashAgg.agg(*lineitem);
 
-            RowFilter filter([](DataRow &row) { return row[1].asInt() > 300; });
+            RowFilter filter([=](DataRow &row) { return row[1].asInt() > quantity; });
             // ORDERKEY, SUM_QUANTITY
             auto validOrders = filter.filter(*aggedlineitem);
 

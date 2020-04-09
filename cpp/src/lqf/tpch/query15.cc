@@ -15,10 +15,25 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace agg;
 
-        void executeQ15() {
+        namespace q15 {
+
             ByteArray dateFrom("1996-01-01");
             ByteArray dateTo("1996-04-01");
+
+            class PriceField : public DoubleSum {
+            public:
+                PriceField() : DoubleSum(0) {}
+
+                void reduce(DataRow &input) override {
+                    *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * (1 - input[LineItem::DISCOUNT].asDouble());
+                }
+            };
+        }
+        using namespace q15;
+
+        void executeQ15() {
 
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::SUPPKEY, LineItem::SHIPDATE, LineItem::EXTENDEDPRICE,
@@ -33,14 +48,7 @@ namespace lqf {
             auto filteredLineitem = lineitemDateFilter.filter(*lineitem);
 
             using namespace agg;
-            class PriceField : public DoubleSum {
-            public:
-                PriceField() : DoubleSum(0) {}
 
-                void reduce(DataRow &input) override {
-                    *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * (1 - input[LineItem::DISCOUNT].asDouble());
-                }
-            };
             HashAgg suppkeyAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::SUPPKEY)},
                                []() { return vector<AggField *>{new PriceField()}; },
                                COL_HASHER(LineItem::SUPPKEY));

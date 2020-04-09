@@ -16,7 +16,22 @@
 namespace lqf {
     namespace tpch {
 
-        unordered_set<string> phones{"31", "13", "23", "29", "30", "18", "17"};
+        namespace q22 {
+            unordered_set<string> phones{"31", "13", "23", "29", "30", "18", "17"};
+            using namespace agg;
+            class PositiveAvg : public DoubleAvg {
+            public:
+                PositiveAvg() : DoubleAvg(Customer::ACCTBAL) {}
+
+                void reduce(DataRow &row) override {
+                    if (row[Customer::ACCTBAL].asDouble() > 0) {
+                        DoubleAvg::reduce(row);
+                    }
+                }
+            };
+        }
+
+        using namespace q22;
 
         void executeQ22() {
 
@@ -29,17 +44,7 @@ namespace lqf {
             }));
             auto validCust = FilterMat().mat(*custFilter.filter(*customer));
 
-            using namespace agg;
-            class PositiveAvg : public DoubleAvg {
-            public:
-                PositiveAvg() : DoubleAvg(Customer::ACCTBAL) {}
 
-                void reduce(DataRow &row) override {
-                    if (row[Customer::ACCTBAL].asDouble() > 0) {
-                        DoubleAvg::reduce(row);
-                    }
-                }
-            };
             SimpleAgg avgagg(vector<uint32_t>{}, []() { return vector<AggField *>{new PositiveAvg()}; });
             auto avgCust = avgagg.agg(*validCust);
             double avg = (*(*avgCust->blocks()->collect())[0]).rows()->next()[0].asDouble();

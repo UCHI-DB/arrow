@@ -18,9 +18,13 @@ using namespace lqf::agg;
 
 namespace lqf {
     namespace tpch {
+        namespace q1 {
+            ByteArray dateFrom("1998-09-01");
+        }
+
+        using namespace q1;
 
         void executeQ1() {
-            auto dateFrom = ByteArray("1998-09-01");
             auto lineItemTable = ParquetTable::Open(LineItem::path,
                                                     {LineItem::SHIPDATE, LineItem::QUANTITY, LineItem::EXTENDEDPRICE,
                                                      LineItem::DISCOUNT, LineItem::TAX, LineItem::RETURNFLAG,

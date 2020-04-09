@@ -16,12 +16,41 @@
 namespace lqf {
     namespace tpch {
 
-        void executeQ8() {
+        namespace q8{
+
             ByteArray regionName("AMERICA");
             ByteArray dateFrom("1995-01-01");
             ByteArray dateTo("1996-12-31");
             ByteArray partType("ECONOMY ANODIZED STEEL");
             ByteArray nationName("GERMANY");
+
+            class OrderJoinBuilder : public RowBuilder {
+            public:
+                OrderJoinBuilder() : RowBuilder(
+                        {JL(LineItem::EXTENDEDPRICE), JL(LineItem::SUPPKEY), JL(LineItem::DISCOUNT),
+                         JRS(Orders::ORDERDATE)}, false, true) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int key) override {
+                    target[0] = udf::date2year(right[0].asByteArray());
+                    target[1] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
+                    target[2] = left[LineItem::SUPPKEY].asInt();
+                }
+            };
+
+            class NationFilterField : public agg::Sum<double, agg::AsDouble> {
+            protected:
+                int nationKey_;
+            public:
+                NationFilterField(int nationKey) : agg::DoubleSum(1), nationKey_(nationKey) {}
+
+                void reduce(DataRow &input) override {
+                    *value_ += (input[2].asInt() == nationKey_) ? input[1].asDouble() : 0;
+                }
+            };
+        }
+
+        using namespace q8;
+        void executeQ8() {
 
             auto region = ParquetTable::Open(Region::path, {Region::NAME, Region::REGIONKEY});
             auto nation = ParquetTable::Open(Nation::path, {Nation::REGIONKEY, Nation::NATIONKEY});
@@ -61,18 +90,7 @@ namespace lqf {
             HashFilterJoin lineitemOnPartFilter(LineItem::PARTKEY, Part::PARTKEY);
             auto validLineitem = lineitemOnPartFilter.join(*lineitem, *validPart);
 
-            class OrderJoinBuilder : public RowBuilder {
-            public:
-                OrderJoinBuilder() : RowBuilder(
-                        {JL(LineItem::EXTENDEDPRICE), JL(LineItem::SUPPKEY), JL(LineItem::DISCOUNT),
-                         JRS(Orders::ORDERDATE)}, false, true) {}
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) override {
-                    target[0] = udf::date2year(right[0].asByteArray());
-                    target[1] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
-                    target[2] = left[LineItem::SUPPKEY].asInt();
-                }
-            };
             HashJoin orderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new OrderJoinBuilder());
             auto itemWithOrder = orderJoin.join(*validLineitem, *validOrder);
 
@@ -88,16 +106,7 @@ namespace lqf {
                 return row[Nation::NAME].asByteArray() == nationName;
             }).find(*nation);
 
-            class NationFilterField : public agg::Sum<double, agg::AsDouble> {
-            protected:
-                int nationKey_;
-            public:
-                NationFilterField(int nationKey) : agg::DoubleSum(1), nationKey_(nationKey) {}
 
-                void reduce(DataRow &input) override {
-                    *value_ += (input[2].asInt() == nationKey_) ? input[1].asDouble() : 0;
-                }
-            };
             HashAgg agg(vector<uint32_t>({1, 1}), {AGI(0)},
                         [=]() {
                             return vector<AggField *>({new agg::DoubleSum(1), new NationFilterField(nationKey2)});

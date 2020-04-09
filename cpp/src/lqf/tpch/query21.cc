@@ -15,74 +15,79 @@
 
 namespace lqf {
     namespace tpch {
+        namespace q21 {
+            class ItemJoin : public Join {
+            protected:
+                unordered_set<int32_t> denied_;
+                unordered_map<int32_t, pair<int32_t, int32_t>> container_;
+                mutex map_lock_;
+                unordered_map<int32_t, mutex> order_locks_;
 
-        class ItemJoin : public Join {
-        protected:
-            unordered_set<int32_t> denied_;
-            unordered_map<int32_t, pair<int32_t, int32_t>> container_;
-            mutex map_lock_;
-            unordered_map<int32_t, mutex> order_locks_;
+            public:
+                shared_ptr<Table> join(Table &item2, Table &item1) {
 
-        public:
-            shared_ptr<Table> join(Table &item2, Table &item1) {
-
-                shared_ptr<MemTable> output = MemTable::Make(vector<uint32_t>{1, 1});
-                uint32_t max_size = 0;
-                item1.blocks()->sequential()->foreach([this](const shared_ptr<Block> &block) {
-                    auto orderkeys = block->col(LineItem::ORDERKEY);
-                    auto suppkeys = block->col(LineItem::SUPPKEY);
-                    for (uint32_t i = 0; i < block->size(); ++i) {
-                        int orderkey = orderkeys->next().asInt();
-                        int suppkey = suppkeys->next().asInt();
-                        if (denied_.find(orderkey) == denied_.end()) {
-                            auto exist = container_.find(orderkey);
-                            if (exist != container_.end()) {
-                                if ((*exist).second.first == suppkey) {
-                                    (*exist).second.second++;
+                    shared_ptr<MemTable> output = MemTable::Make(vector<uint32_t>{1, 1});
+                    uint32_t max_size = 0;
+                    item1.blocks()->sequential()->foreach([this](const shared_ptr<Block> &block) {
+                        auto orderkeys = block->col(LineItem::ORDERKEY);
+                        auto suppkeys = block->col(LineItem::SUPPKEY);
+                        for (uint32_t i = 0; i < block->size(); ++i) {
+                            int orderkey = orderkeys->next().asInt();
+                            int suppkey = suppkeys->next().asInt();
+                            if (denied_.find(orderkey) == denied_.end()) {
+                                auto exist = container_.find(orderkey);
+                                if (exist != container_.end()) {
+                                    if ((*exist).second.first == suppkey) {
+                                        (*exist).second.second++;
+                                    } else {
+                                        denied_.insert(orderkey);
+                                        container_.erase(exist);
+                                    }
                                 } else {
-                                    denied_.insert(orderkey);
-                                    container_.erase(exist);
+                                    container_[orderkey] = pair<int32_t, int32_t>(suppkey, 1);
                                 }
-                            } else {
-                                container_[orderkey] = pair<int32_t, int32_t>(suppkey, 1);
                             }
                         }
+                    });
+                    for (auto &item:container_) {
+                        max_size += item.second.second;
                     }
-                });
-                for (auto &item:container_) {
-                    max_size += item.second.second;
+
+                    item2.blocks()->foreach([this, &output, &max_size](const shared_ptr<Block> &block) {
+                        auto output_block = output->allocate(max_size);
+                        auto write_rows = output_block->rows();
+                        uint32_t counter = 0;
+
+                        auto orderkeys = block->col(LineItem::ORDERKEY);
+                        auto suppkeys = block->col(LineItem::SUPPKEY);
+                        for (uint32_t i = 0; i < block->size(); ++i) {
+                            int orderkey = orderkeys->next().asInt();
+                            int suppkey = suppkeys->next().asInt();
+                            auto ite = container_.find(orderkey);
+                            if (ite != container_.end() && ite->second.first != suppkey) {
+                                int found = ite->second.first;
+                                int count = ite->second.second;
+                                map_lock_.lock();
+                                container_.erase(ite);
+                                map_lock_.unlock();
+                                for (int i = 0; i < count; ++i) {
+                                    DataRow &row = (*write_rows)[counter++];
+                                    row[0] = orderkey;
+                                    row[1] = found;
+                                }
+                            }
+                        }
+                        output_block->resize(counter);
+                    });
+
+                    return output;
                 }
+            };
 
-                item2.blocks()->foreach([this, &output, &max_size](const shared_ptr<Block> &block) {
-                    auto output_block = output->allocate(max_size);
-                    auto write_rows = output_block->rows();
-                    uint32_t counter = 0;
+            ByteArray status("F");
 
-                    auto orderkeys = block->col(LineItem::ORDERKEY);
-                    auto suppkeys = block->col(LineItem::SUPPKEY);
-                    for (uint32_t i = 0; i < block->size(); ++i) {
-                        int orderkey = orderkeys->next().asInt();
-                        int suppkey = suppkeys->next().asInt();
-                        auto ite = container_.find(orderkey);
-                        if (ite != container_.end() && ite->second.first != suppkey) {
-                            int found = ite->second.first;
-                            int count = ite->second.second;
-                            map_lock_.lock();
-                            container_.erase(ite);
-                            map_lock_.unlock();
-                            for (int i = 0; i < count; ++i) {
-                                DataRow &row = (*write_rows)[counter++];
-                                row[0] = orderkey;
-                                row[1] = found;
-                            }
-                        }
-                    }
-                    output_block->resize(counter);
-                });
-            }
-        };
-
-        ByteArray status("F");
+        }
+        using namespace q21;
 
         void executeQ21() {
             auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS});

@@ -16,9 +16,24 @@
 namespace lqf {
     namespace tpch {
 
-        void executeQ17() {
+        using namespace agg;
+        namespace q17 {
             ByteArray brand("Brand#23");
             ByteArray container("MED BOX");
+
+            class YearSumField : public DoubleSum {
+            public:
+                YearSumField() : DoubleSum(0) {}
+
+                void dump() override {
+                    *value_ /= 7;
+                }
+            };
+        }
+
+        using namespace q17;
+
+        void executeQ17() {
 
             auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::CONTAINER, Part::PARTKEY});
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::PARTKEY});
@@ -46,14 +61,7 @@ namespace lqf {
                                  });
             auto result = withAvgJoin.join(*validlineitem, *aggedlineitem);
 
-            class YearSumField : public DoubleSum {
-            public:
-                YearSumField() : DoubleSum(0) {}
 
-                void dump() override {
-                    *value_ /= 7;
-                }
-            };
             SimpleAgg sumagg(vector<uint32_t>({1}), []() { return vector<AggField *>{new YearSumField()}; });
             result = sumagg.agg(*result);
 

@@ -13,13 +13,15 @@
 
 namespace lqf {
     namespace tpch {
-
-        using namespace lqf::sboost;
-        using namespace lqf::agg;
-
-        void executeQ3() {
+        namespace q3 {
             ByteArray segment("HOUSEHOLD");
             ByteArray date("1995-03-15");
+        }
+        using namespace sboost;
+        using namespace agg;
+        using namespace q3;
+
+        void executeQ3() {
 
             auto customerTable = ParquetTable::Open(Customer::path);
             auto orderTable = ParquetTable::Open(Orders::path);

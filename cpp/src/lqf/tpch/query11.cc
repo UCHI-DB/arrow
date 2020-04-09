@@ -16,9 +16,22 @@
 namespace lqf {
     namespace tpch {
 
-        void executeQ11() {
+        namespace q11 {
+
             ByteArray nationChosen("GERMANY");
             double fraction = 0.0001;
+
+            class CostField : public agg::DoubleSum {
+            public:
+                CostField() : agg::DoubleSum(0) {}
+
+                void reduce(DataRow &row) {
+                    *value_ += row[PartSupp::AVAILQTY].asDouble() * row[PartSupp::SUPPLYCOST].asDouble();
+                }
+            };
+        }
+using namespace q11;
+        void executeQ11() {
 
             auto nation = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY});
@@ -36,14 +49,7 @@ namespace lqf {
             HashFilterJoin validPsJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto validps = FilterMat().mat(*validPsJoin.join(*partsupp, *validSupplier));
 
-            class CostField : public agg::DoubleSum {
-            public:
-                CostField() : agg::DoubleSum(0) {}
 
-                void reduce(DataRow &row) {
-                    *value_ += row[PartSupp::AVAILQTY].asDouble() * row[PartSupp::SUPPLYCOST].asDouble();
-                }
-            };
             function<vector<AggField *>()> agg_fields = []() { return vector<AggField *>{new CostField()}; };
             SimpleAgg totalAgg(vector<uint32_t>({1}), agg_fields);
             auto total = totalAgg.agg(*validps);
