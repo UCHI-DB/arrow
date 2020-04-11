@@ -21,7 +21,7 @@
 namespace lqf {
     using namespace std;
 
-    static function<bool(DataRow & , DataRow & )> TRUE = [](DataRow &a, DataRow &b) { return true; };
+    static function<bool(DataRow &, DataRow &)> TRUE = [](DataRow &a, DataRow &b) { return true; };
 
     namespace join {
 
@@ -37,9 +37,12 @@ namespace lqf {
             vector<uint32_t> right_col_size_;
 
             vector<pair<uint8_t, uint8_t>> left_inst_;
-            vector<pair<uint8_t, uint8_t>> right_inst_;
             vector<pair<uint8_t, uint8_t>> left_raw_;
-            vector<pair<uint8_t, uint8_t>> right_raw_;
+
+            vector<pair<uint8_t, uint8_t>> right_read_inst_;
+            vector<pair<uint8_t, uint8_t>> right_read_raw_;
+
+            vector<pair<uint8_t, uint8_t>> right_write_inst_;
 
             void init(initializer_list<int32_t>);
 
@@ -76,7 +79,7 @@ namespace lqf {
 
             inline const vector<pair<uint8_t, uint8_t>> &leftInst() { return left_inst_; }
 
-            inline const vector<pair<uint8_t, uint8_t>> &rightInst() { return right_inst_; }
+            inline const vector<pair<uint8_t, uint8_t>> &rightInst() { return right_write_inst_; }
         };
 
     }
@@ -109,7 +112,7 @@ namespace lqf {
             bool test(int64_t) override;
         };
 
-        class HashContainer {
+        class HashContainer : public IntPredicate {
         private:
             unordered_map<int64_t, unique_ptr<MemDataRow>> hashmap_;
             int64_t min_ = INT64_MAX;
@@ -119,6 +122,8 @@ namespace lqf {
             HashContainer();
 
             void add(int64_t key, unique_ptr<MemDataRow> dataRow);
+
+            bool test(int64_t) override;
 
             MemDataRow *get(int64_t key);
 
@@ -131,31 +136,26 @@ namespace lqf {
 
         class HashMemBlock : public MemBlock {
         private:
-            unique_ptr<HashContainer> container_;
-            unique_ptr<IntPredicate> predicate_;
+            shared_ptr<IntPredicate> content_;
         public:
-            HashMemBlock(unique_ptr<HashContainer> container);
+            HashMemBlock(shared_ptr<IntPredicate> predicate);
 
-            HashMemBlock(unique_ptr<IntPredicate> predicate);
-
-            unique_ptr<HashContainer> container();
-
-            unique_ptr<IntPredicate> predicate();
+            shared_ptr<IntPredicate> content();
         };
 
         class HashBuilder {
         public:
-            static unique_ptr<IntPredicate> buildHashPredicate(Table &input, uint32_t);
+            static shared_ptr<IntPredicate> buildHashPredicate(Table &input, uint32_t);
 
-            static unique_ptr<IntPredicate> buildHashPredicate(Table &input, function<int64_t(DataRow & )>);
+            static shared_ptr<IntPredicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 
-            static unique_ptr<IntPredicate> buildBitmapPredicate(Table &input, uint32_t);
+            static shared_ptr<IntPredicate> buildBitmapPredicate(Table &input, uint32_t);
 
-            static unique_ptr<HashContainer>
-            buildContainer(Table &input, uint32_t, function<unique_ptr<MemDataRow>(DataRow & )>);
+            static shared_ptr<HashContainer>
+            buildContainer(Table &input, uint32_t, function<unique_ptr<MemDataRow>(DataRow &)>);
 
-            static unique_ptr<HashContainer>
-            buildContainer(Table &input, function<int64_t(DataRow & )>, function<unique_ptr<MemDataRow>(DataRow & )>);
+            static shared_ptr<HashContainer>
+            buildContainer(Table &input, function<int64_t(DataRow &)>, function<unique_ptr<MemDataRow>(DataRow &)>);
 
         };
 
@@ -174,7 +174,7 @@ namespace lqf {
         uint32_t leftKeyIndex_;
         uint32_t rightKeyIndex_;
         unique_ptr<JoinBuilder> builder_;
-        unique_ptr<HashContainer> container_;
+        shared_ptr<HashContainer> container_;
         bool outer_ = false;
     public:
         HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
@@ -192,11 +192,11 @@ namespace lqf {
     class HashJoin : public HashBasedJoin {
     public:
         HashJoin(uint32_t, uint32_t, RowBuilder *,
-                 function<bool(DataRow & , DataRow & )> pred = nullptr);
+                 function<bool(DataRow &, DataRow &)> pred = nullptr);
 
     protected:
         RowBuilder *rowBuilder_;
-        function<bool(DataRow & , DataRow & )> predicate_;
+        function<bool(DataRow &, DataRow &)> predicate_;
 
         void probe(MemTable *, const shared_ptr<Block> &) override;
     };
@@ -205,7 +205,7 @@ namespace lqf {
     protected:
         uint32_t leftKeyIndex_;
         uint32_t rightKeyIndex_;
-        unique_ptr<IntPredicate> predicate_;
+        shared_ptr<IntPredicate> predicate_;
         bool anti_ = false;
     public:
         HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex);
@@ -225,10 +225,10 @@ namespace lqf {
 
     public:
         HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
-                      function<bool(DataRow & , DataRow & )> pred = nullptr);
+                      function<bool(DataRow &, DataRow &)> pred = nullptr);
 
     protected:
-        function<bool(DataRow & , DataRow & )> predicate_;
+        function<bool(DataRow &, DataRow &)> predicate_;
 
         void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
     };
@@ -236,12 +236,12 @@ namespace lqf {
     class HashNotExistJoin : public HashBasedJoin {
     public:
         HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
-                         function<bool(DataRow & , DataRow & )> pred = nullptr);
+                         function<bool(DataRow &, DataRow &)> pred = nullptr);
 
         shared_ptr<Table> join(Table &, Table &) override;
 
     protected:
-        function<bool(DataRow & , DataRow & )> predicate_;
+        function<bool(DataRow &, DataRow &)> predicate_;
 
         void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
     };
@@ -266,15 +266,15 @@ namespace lqf {
 
         class PowerHashBasedJoin : public Join {
         protected:
-            function<int64_t(DataRow & )> left_key_maker_;
-            function<int64_t(DataRow & )> right_key_maker_;
+            function<int64_t(DataRow &)> left_key_maker_;
+            function<int64_t(DataRow &)> right_key_maker_;
             unique_ptr<JoinBuilder> builder_;
-            unique_ptr<HashContainer> container_;
-            function<bool(DataRow & , DataRow & )> predicate_;
+            shared_ptr<HashContainer> container_;
+            function<bool(DataRow &, DataRow &)> predicate_;
             bool outer_ = false;
         public:
-            PowerHashBasedJoin(function<int64_t(DataRow & )>, function<int64_t(DataRow & )>,
-                               JoinBuilder *, function<bool(DataRow & , DataRow & )> pred = nullptr);
+            PowerHashBasedJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>,
+                               JoinBuilder *, function<bool(DataRow &, DataRow &)> pred = nullptr);
 
             virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
@@ -286,8 +286,8 @@ namespace lqf {
 
         class PowerHashJoin : public PowerHashBasedJoin {
         public:
-            PowerHashJoin(function<int64_t(DataRow & )>, function<int64_t(DataRow & )>, RowBuilder *,
-                          function<bool(DataRow & , DataRow & )> pred = nullptr);
+            PowerHashJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>, RowBuilder *,
+                          function<bool(DataRow &, DataRow &)> pred = nullptr);
 
         protected:
             RowBuilder *rowBuilder_;
@@ -297,7 +297,7 @@ namespace lqf {
 
         class PowerHashColumnJoin : public PowerHashBasedJoin {
         public:
-            PowerHashColumnJoin(function<int64_t(DataRow & )>, function<int64_t(DataRow & )>, ColumnBuilder *);
+            PowerHashColumnJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>, ColumnBuilder *);
 
         protected:
             ColumnBuilder *columnBuilder_;
@@ -307,12 +307,12 @@ namespace lqf {
 
         class PowerHashFilterJoin : public Join {
         protected:
-            function<int64_t(DataRow & )> left_key_maker_;
-            function<int64_t(DataRow & )> right_key_maker_;
-            unique_ptr<IntPredicate> predicate_;
+            function<int64_t(DataRow &)> left_key_maker_;
+            function<int64_t(DataRow &)> right_key_maker_;
+            shared_ptr<IntPredicate> predicate_;
             bool anti_ = false;
         public:
-            PowerHashFilterJoin(function<int64_t(DataRow & )>, function<int64_t(DataRow & )>);
+            PowerHashFilterJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>);
 
             virtual shared_ptr<Table> join(Table &left, Table &right) override;
 

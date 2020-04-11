@@ -57,6 +57,7 @@ set(LQF_SRCS
         mat.cc
         util.cc
         union.cc
+        dict.cc
         )
 
 add_arrow_lib(lqf

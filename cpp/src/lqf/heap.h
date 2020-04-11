@@ -25,9 +25,7 @@ namespace lqf {
                 : size_(size), data_(), creator_(creator), comparator_(comp) {
         }
 
-        ~Heap() {
-            // TODO Dispose elements
-        }
+        ~Heap() { }// TODO Dispose elements
 
         vector<ELEM_PNT> &content() {
             return data_;
@@ -39,7 +37,7 @@ namespace lqf {
                 *latest = *element;
                 data_.push_back(latest);
             } else if (comparator_(element, data_[0])) {
-                (*data_[0]) = *element;
+                *(data_[0]) = *element;
                 adjust(0);
             }
         }

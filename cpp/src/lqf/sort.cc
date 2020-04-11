@@ -15,14 +15,11 @@ namespace lqf {
 
     shared_ptr<Table> TopN::sort(Table &table) {
         auto resultTable = MemTable::Make(table.colSize());
-        auto tablePointer = resultTable.get();
-
-
-        rowMaker_ = [tablePointer]() { return new MemDataRow(tablePointer->colOffset()); };
 
         vector<DataRow *> collector;
 
-        function<void(const shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, &collector, _1);
+        function<void(const shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, &collector, resultTable.get(),
+                                                              _1);
         table.blocks()->foreach(proc);
 
         /// Make a final sort and fetch the top n
@@ -34,19 +31,17 @@ namespace lqf {
         auto resultRows = resultBlock->rows();
         for (uint32_t i = 0; i < n_; ++i) {
             (*resultRows)[i] = *(collector[i]);
-        }
-        // Clean up
-        for (auto &row:collector) {
-            delete row;
+            delete collector[i];
         }
 
         return resultTable;
     }
 
-    void TopN::sortBlock(vector<DataRow *> *collector, const shared_ptr<Block> &input) {
-        Heap<DataRow *> heap(n_, rowMaker_, comparator_);
+    void TopN::sortBlock(vector<DataRow *> *collector, MemTable *dest, const shared_ptr<Block> &input) {
+        Heap<DataRow *> heap(n_, [=]() { return new MemDataRow(dest->colOffset()); }, comparator_);
         auto rows = input->rows();
-        for (uint32_t i = 0; i < input->size(); ++i) {
+        auto block_size = input->size();
+        for (uint32_t i = 0; i < block_size; ++i) {
             DataRow &row = rows->next();
             heap.add(&row);
         }
@@ -59,11 +54,7 @@ namespace lqf {
         collector_lock_.unlock();
     }
 
-    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp) : comparator_(comp), snapshoter_(nullptr) {}
-
-    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp,
-                         function<unique_ptr<MemDataRow>(DataRow &)> snapshot)
-            : comparator_(comp), snapshoter_(snapshot) {}
+    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp) : comparator_(comp) {}
 
     shared_ptr<Table> SmallSort::sort(Table &table) {
         const vector<uint32_t> &col_size = table.colSize();
@@ -73,25 +64,15 @@ namespace lqf {
             col_offset.push_back(i + col_offset.back());
         }
 
-        vector<MemDataRow*> sortingRows;
-        if (snapshoter_) {
-            table.blocks()->foreach([&sortingRows, this](const shared_ptr<Block> &block) {
-                auto inputRows = block->rows();
-                for (uint32_t i = 0; i < block->size(); ++i) {
-                    unique_ptr<MemDataRow> copy = snapshoter_(inputRows->next());
-                    sortingRows.push_back(copy.release());
-                }
-            });
-        } else {
-            table.blocks()->foreach([&sortingRows, &col_offset](const shared_ptr<Block> &block) {
-                auto inputRows = block->rows();
-                for (uint32_t i = 0; i < block->size(); ++i) {
-                    MemDataRow *copy = new MemDataRow(col_offset);
-                    *copy = inputRows->next();
-                    sortingRows.push_back(copy);
-                }
-            });
-        }
+        vector<DataRow *> sortingRows;
+
+        table.blocks()->foreach([&sortingRows](const shared_ptr<Block> &block) {
+            auto inputRows = block->rows();
+            uint32_t block_size = block->size();
+            for (uint32_t i = 0; i < block_size; ++i) {
+                sortingRows.push_back(inputRows->next().snapshot().release());
+            }
+        });
 
         std::sort(sortingRows.begin(), sortingRows.end(), comparator_);
 
@@ -99,7 +80,8 @@ namespace lqf {
         auto resultBlock = resultTable->allocate(sortingRows.size());
         auto resultRows = resultBlock->rows();
 
-        for (uint32_t i = 0; i < sortingRows.size(); ++i) {
+        auto num_rows = sortingRows.size();
+        for (uint32_t i = 0; i < num_rows; ++i) {
             (*resultRows)[i] = *sortingRows[i];
             delete sortingRows[i];
         }

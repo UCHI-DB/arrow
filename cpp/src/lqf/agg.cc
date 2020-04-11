@@ -33,7 +33,8 @@ namespace lqf {
     }
 
     void AggReducer::merge(AggReducer &reducer) {
-        for (uint32_t i = 0; i < fields_.size(); ++i) {
+        auto field_size = fields_.size();
+        for (uint32_t i = 0; i < field_size; ++i) {
             this->fields_[i]->merge(*reducer.fields_[i]);
         }
     }
@@ -293,7 +294,8 @@ namespace lqf {
         template
         class Avg<double, AsDouble>;
 
-        template class DistinctCount<int32_t, AsInt>;
+        template
+        class DistinctCount<int32_t, AsInt>;
     }
 
     HashCore::HashCore(function<uint64_t(DataRow &)> hasher,
@@ -467,7 +469,8 @@ namespace lqf {
     }
 
     void TableCore::reduce(TableCore &another) {
-        for (uint32_t i = 0; i < container_.size(); ++i) {
+        auto container_size = container_.size();
+        for (uint32_t i = 0; i < container_size; ++i) {
             if (container_[i]) {
                 container_[i]->merge(*(another.container_[i]));
             } else {

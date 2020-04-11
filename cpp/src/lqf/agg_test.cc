@@ -54,19 +54,19 @@ TEST(AggFieldTest, Min) {
         row[0] = (i % 20) - 40;
         min1.reduce(row);
     }
-    EXPECT_EQ(-21, min1.storage_.asInt());
+    EXPECT_EQ(-40, min1.storage_.asInt());
 
-    DoubleMax min2(0);
+    DoubleMin min2(0);
     min2.storage_ = storage[1].data();
     min2.init();
     for (int i = 0; i < 50; ++i) {
-        row[0] = i % 30 - 40;
+        row[0] = i % 30 - 30;
         min2.reduce(row);
     }
-    EXPECT_EQ(-11, min2.storage_.asInt());
+    EXPECT_EQ(-30, min2.storage_.asInt());
 
     min1.merge(min2);
-    EXPECT_EQ(-21, min1.storage_.asInt());
+    EXPECT_EQ(-40, min1.storage_.asInt());
 }
 
 TEST(HashAggTest, Agg) {

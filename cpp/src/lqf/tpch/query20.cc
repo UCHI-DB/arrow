@@ -95,13 +95,8 @@ namespace lqf {
                 return SBLE(0);
             };
             vector <uint32_t> snapshot{0, 2, 4};
-            function < unique_ptr<MemDataRow>(DataRow & ) > snapshoter = [&snapshot](DataRow &input) {
-                MemDataRow *mdr = new MemDataRow(snapshot);
-                (*mdr)[0] = input[Supplier::NAME].asByteArray();
-                (*mdr)[1] = input[Supplier::ADDRESS].asByteArray();
-                return unique_ptr<MemDataRow>(mdr);
-            };
-            SmallSort sort(comparator, snapshoter);
+
+            SmallSort sort(comparator);
             supplierResult = sort.sort(*supplierResult);
 
             auto printer = Printer::Make(PBEGIN PB(0) PB(1) PEND);

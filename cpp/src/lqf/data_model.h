@@ -13,6 +13,7 @@
 #include <parquet/column_page.h>
 #include "stream.h"
 #include "bitmap.h"
+#include "dict.h"
 
 namespace lqf {
 
@@ -88,6 +89,8 @@ namespace lqf {
             return nullptr;
         }
 
+        // Create a snapshot of current row
+        virtual unique_ptr<DataRow> snapshot() = 0;
     };
 
     class MemDataRow : public DataRow {
@@ -105,6 +108,8 @@ namespace lqf {
         DataField &operator[](uint64_t i) override;
 
         void operator=(DataRow &row) override;
+
+        unique_ptr<DataRow> snapshot() override;
 
         MemDataRow &operator=(MemDataRow &row);
 
@@ -235,44 +240,6 @@ namespace lqf {
     };
 
     template<typename DTYPE>
-    class Dictionary {
-    private:
-        using T = typename DTYPE::c_type;
-        // This page need to be cached. Otherwise when it is released, byte array data may be lost.
-        bool managed_ = true;
-        shared_ptr<DictionaryPage> page_;
-        T *buffer_;
-        uint32_t size_;
-    public:
-        Dictionary();
-
-        Dictionary(shared_ptr<DictionaryPage> data);
-
-        Dictionary(T *buffer, uint32_t size);
-
-        virtual ~Dictionary();
-
-        int32_t lookup(const T &key);
-
-        unique_ptr<vector<uint32_t>> list(function<bool(const T &)>);
-
-        Dictionary<DTYPE> &operator=(Dictionary<DTYPE> &&other) {
-            this->buffer_ = other.buffer_;
-            other.buffer_ = nullptr;
-            this->size_ = other.size_;
-            return *this;
-        }
-
-        inline uint32_t size() {
-            return size_;
-        }
-    };
-
-    using Int32Dictionary = Dictionary<Int32Type>;
-    using DoubleDictionary = Dictionary<DoubleType>;
-    using ByteArrayDictionary = Dictionary<ByteArrayType>;
-
-    template<typename DTYPE>
     class RawAccessor {
     protected:
 
@@ -317,8 +284,6 @@ namespace lqf {
         shared_ptr<RowGroupReader> rowGroup_;
         uint32_t index_;
         uint64_t columns_;
-
-        vector<void *> dictionaries_;
     public:
         ParquetBlock(ParquetTable *, shared_ptr<RowGroupReader>, uint32_t, uint64_t);
 
@@ -401,6 +366,8 @@ namespace lqf {
 
         static shared_ptr<ParquetTable> Open(const string &filename, std::initializer_list<uint32_t> columns);
 
+        template<typename DTYPE>
+        unique_ptr<Dictionary<DTYPE>> LoadDictionary(int column);
     protected:
         shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
 

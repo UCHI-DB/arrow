@@ -7,5 +7,5 @@
 
 int main() {
 
-    lqf::tpch::executeQ2();
+    lqf::tpch::executeQ3();
 }

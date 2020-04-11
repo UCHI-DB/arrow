@@ -87,6 +87,12 @@ namespace lqf {
 
     MemDataRow::~MemDataRow() {}
 
+    unique_ptr<DataRow> MemDataRow::snapshot() {
+        MemDataRow *mdr = new MemDataRow(offset_);
+        *mdr = *this;
+        return unique_ptr<DataRow>(mdr);
+    }
+
     DataField &MemDataRow::operator[](uint64_t i) {
         view_ = data_.data() + offset_[i];
         assert(i + 1 < offset_.size());
@@ -95,8 +101,15 @@ namespace lqf {
     }
 
     void MemDataRow::operator=(DataRow &row) {
-        memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.raw()),
-               sizeof(uint64_t) * data_.size());
+        if (row.raw()) {
+            memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.raw()),
+                   sizeof(uint64_t) * data_.size());
+        } else {
+            auto offset_size = offset_.size();
+            for (uint32_t i = 0; i < offset_size - 1; ++i) {
+                (*this)[i] = row[i];
+            }
+        }
     }
 
     MemDataRow &MemDataRow::operator=(MemDataRow &row) {
@@ -150,6 +163,12 @@ namespace lqf {
         void moveto(uint64_t index) { index_ = index; }
 
         void next() { ++index_; }
+
+        unique_ptr<DataRow> snapshot() override {
+            MemDataRowView *snapshot = new MemDataRowView(data_, row_size_, col_offset_);
+            snapshot->index_ = index_;
+            return unique_ptr<DataRow>(snapshot);
+        }
 
         DataField &operator[](uint64_t i) override {
             assert(index_ < data_.size() / row_size_);
@@ -310,12 +329,16 @@ namespace lqf {
 
     class MemvDataRowView : public DataRow {
     private:
-        unique_ptr<vector<unique_ptr<ColumnIterator>>> cols_;
+        vector<unique_ptr<vector<uint64_t>>> *cols_;
+        const vector<uint32_t> &col_size_;
         uint64_t index_;
+        DataField view_;
+
         friend MemvDataRowIterator;
     public:
-        MemvDataRowView(vector<unique_ptr<ColumnIterator>> *cols)
-                : cols_(unique_ptr<vector<unique_ptr<ColumnIterator>>>(cols)), index_(-1) {}
+        MemvDataRowView(vector<unique_ptr<vector<uint64_t>>> *cols, const vector<uint32_t> &col_sizes)
+                : cols_(cols), col_size_(col_sizes), index_(-1) {
+        }
 
         virtual ~MemvDataRowView() {}
 
@@ -328,14 +351,22 @@ namespace lqf {
         }
 
         DataField &operator[](uint64_t i) override {
-            return (*(*cols_)[i])[index_];
+            view_.size_ = col_size_[i];
+            view_ = (*cols_)[i]->data() + view_.size_ * index_;
+            return view_;
         }
 
         void operator=(DataRow &row) override {
             uint32_t num_cols = cols_->size();
             for (uint32_t i = 0; i < num_cols; ++i) {
-                (*(*cols_)[i])[index_] = row[i];
+                (*this)[i] = row[i];
             }
+        }
+
+        unique_ptr<DataRow> snapshot() override {
+            MemvDataRowView *view = new MemvDataRowView(cols_, col_size_);
+            view->index_ = index_;
+            return unique_ptr<DataRow>(view);
         }
     };
 
@@ -343,8 +374,8 @@ namespace lqf {
     private:
         MemvDataRowView reference_;
     public:
-        MemvDataRowIterator(vector<unique_ptr<ColumnIterator>> *cols)
-                : reference_(cols) {}
+        MemvDataRowIterator(vector<unique_ptr<vector<uint64_t>>> *cols, const vector<uint32_t> &col_sizes)
+                : reference_(cols, col_sizes) {}
 
         DataRow &operator[](uint64_t idx) override {
             reference_.moveto(idx);
@@ -366,10 +397,11 @@ namespace lqf {
 
     unique_ptr<DataRowIterator> MemvBlock::rows() {
         auto cols = new vector<unique_ptr<ColumnIterator>>();
-        for (auto i = 0u; i < col_size_.size(); ++i) {
+        auto col_size = col_size_.size();
+        for (auto i = 0u; i < col_size; ++i) {
             cols->push_back(col(i));
         }
-        return unique_ptr<DataRowIterator>(new MemvDataRowIterator(cols));
+        return unique_ptr<DataRowIterator>(new MemvDataRowIterator(&content_, col_size_));
     }
 
     unique_ptr<ColumnIterator> MemvBlock::col(uint32_t col_index) {
@@ -463,67 +495,6 @@ namespace lqf {
         return this->shared_from_this();
     }
 
-    using namespace parquet;
-
-    template<typename DTYPE>
-    Dictionary<DTYPE>::Dictionary() {
-
-    }
-
-    template<typename DTYPE>
-    Dictionary<DTYPE>::Dictionary(shared_ptr<DictionaryPage> dpage) {
-        this->page_ = dpage;
-        auto decoder = parquet::MakeTypedDecoder<DTYPE>(Encoding::PLAIN, nullptr);
-        size_ = dpage->num_values();
-        decoder->SetData(size_, dpage->data(), dpage->size());
-        buffer_ = (T *) malloc(sizeof(T) * size_);
-        decoder->Decode(buffer_, size_);
-    }
-
-    template<typename DTYPE>
-    Dictionary<DTYPE>::Dictionary(T *buffer, uint32_t size) {
-        this->size_ = size;
-        this->buffer_ = buffer;
-        this->managed_ = false;
-    }
-
-    template<typename DTYPE>
-    Dictionary<DTYPE>::~Dictionary() {
-        if (managed_ && nullptr != buffer_)
-            free(buffer_);
-    }
-
-    template<typename DTYPE>
-    int32_t Dictionary<DTYPE>::lookup(const T &key) {
-        uint32_t low = 0;
-        uint32_t high = size_;
-
-        while (low <= high) {
-            uint32_t mid = (low + high) >> 1;
-            T midVal = buffer_[mid];
-
-            if (midVal < key)
-                low = mid + 1;
-            else if (midVal > key)
-                high = mid - 1;
-            else
-                return mid; // key found
-        }
-        return -(low + 1);  // key not found.
-    }
-
-    template<typename DTYPE>
-    unique_ptr<vector<uint32_t>> Dictionary<DTYPE>::list(function<bool(const T &)> pred) {
-        unique_ptr<vector<uint32_t>> result = unique_ptr<vector<uint32_t>>(new vector<uint32_t>());
-        for (uint32_t i = 0; i < size_; ++i) {
-            if (pred(buffer_[i])) {
-                result->push_back(i);
-            }
-        }
-        return result;
-    }
-
-
     ParquetBlock::ParquetBlock(ParquetTable *owner, shared_ptr<RowGroupReader> rowGroup, uint32_t index,
                                uint64_t columns) : Block(index), owner_(owner), rowGroup_(rowGroup), index_(index),
                                                    columns_(columns) {}
@@ -554,6 +525,10 @@ namespace lqf {
 
         virtual DataField &operator()(uint64_t colindex) override {
             return (*(columns_[colindex]))(index_);
+        }
+
+        unique_ptr<DataRow> snapshot() override {
+            return nullptr;
         }
     };
 
@@ -763,6 +738,13 @@ namespace lqf {
         return make_shared<ParquetBlock>(this, rowGroup, block_idx, columns_);
     }
 
+    template<typename DTYPE>
+    unique_ptr<Dictionary<DTYPE>> ParquetTable::LoadDictionary(int column) {
+        auto dictpage = static_pointer_cast<DictionaryPage>(
+                fileReader_->RowGroup(0)->GetColumnPageReader(column)->NextPage());
+        return unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictpage));
+    }
+
     MaskedTable::MaskedTable(ParquetTable *inner, unordered_map<uint32_t, shared_ptr<Bitmap>> &masks)
             : inner_(inner) {
         masks_ = vector<shared_ptr<Bitmap>>(masks.size());
@@ -846,14 +828,6 @@ namespace lqf {
 /**
  * Initialize the templates
  */
-    template
-    class Dictionary<Int32Type>;
-
-    template
-    class Dictionary<DoubleType>;
-
-    template
-    class Dictionary<ByteArrayType>;
 
     template
     class RawAccessor<Int32Type>;
@@ -872,4 +846,10 @@ namespace lqf {
 
     template shared_ptr<Bitmap>
     ParquetBlock::raw<ByteArrayType>(uint32_t col_index, RawAccessor<ByteArrayType> *accessor);
+
+    template unique_ptr<Dictionary<Int32Type>> ParquetTable::LoadDictionary<Int32Type>(int index);
+
+    template unique_ptr<Dictionary<DoubleType>> ParquetTable::LoadDictionary<DoubleType>(int index);
+
+    template unique_ptr<Dictionary<ByteArrayType>> ParquetTable::LoadDictionary<ByteArrayType>(int index);
 }

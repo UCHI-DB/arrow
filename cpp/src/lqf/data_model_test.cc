@@ -577,6 +577,10 @@ TEST_F(ParquetBlockTest, RawAndDict) {
     EXPECT_EQ(29, accessor->dict_value_);
 }
 
+TEST(ParquetTableTest, LoadDictionary) {
+
+}
+
 TEST(MaskedTableTest, Create) {
     auto ptable = ParquetTable::Open("lineitem", 0x7);
 

@@ -26,10 +26,13 @@ namespace lqf {
 
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
-            auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY});
-            auto nationTable = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::REGIONKEY});
+            auto supplierTable = ParquetTable::Open(Supplier::path,
+                                                    {Supplier::SUPPKEY, Supplier::NATIONKEY, Supplier::NAME,
+                                                     Supplier::ADDRESS, Supplier::COMMENT, Supplier::PHONE,
+                                                     Supplier::ACCTBAL});
+            auto nationTable = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME, Nation::REGIONKEY});
             auto regionTable = ParquetTable::Open(Region::path, {Region::REGIONKEY, Region::NAME});
-            auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE});
+            auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE, Part::SIZE, Part::MFGR});
 
             ColFilter regionFilter({new SimplePredicate(Region::NAME, [](const DataField &field) {
                 return region == (field.asByteArray());
@@ -39,15 +42,16 @@ namespace lqf {
             HashFilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
-            MemMat nationMat(3, MLB MI(0, 0)
-                MB(2, 1) MLE);
+            vector<uint32_t> hash_offset{0, 2};
+            HashMat nationMat(Nation::NATIONKEY, [&hash_offset](DataRow &datarow) {
+                auto row = new MemDataRow(hash_offset);
+                (*row)[0] = datarow[Nation::NAME];
+                return unique_ptr<MemDataRow>(row);
+            });
             auto memNationTable = nationMat.mat(*filteredNation);
 
             HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
-
-//            auto printer = Printer::Make(PBEGIN PI(Supplier::SUPPKEY) PEND);
-//            printer->print(*supplierTable);
 
             function<bool(const ByteArray &)> typePred = [=](const ByteArray &input) {
                 return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), type, 5);
@@ -82,11 +86,10 @@ namespace lqf {
             }, hasher);
             psAgg.useVertical();
             psAgg.useRecording();
-
-            // 0: PARTKEY 1: SUPPLYCOST 2: SUPPKEY
+            // PARTKEY SUPPKEY SUPPLYCOST
             auto psMinCostTable = psAgg.agg(*filteredPs);
 
-            HashColumnJoin ps2partJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(2), JRS(Part::MFGR)}));
+            HashColumnJoin ps2partJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(1), JRS(Part::MFGR)}));
             // 0 PARTKEY 1 SUPPKEY 2 P_MFGR
             auto pswithPartTable = ps2partJoin.join(*psMinCostTable, *matPart);
 
@@ -97,7 +100,7 @@ namespace lqf {
             auto psWithBothTable = ps2suppJoin.join(*pswithPartTable, *matSupplier);
 
             HashColumnJoin psWithNationJoin(2, 0, new ColumnBuilder(
-                    {JL(0), JL(1), JLS(3), JLS(4), JLS(5), JLS(6), JLS(7), JRS(1)}));
+                    {JL(0), JL(1), JLS(3), JLS(4), JLS(5), JLS(6), JLS(7), JRS(0)}));
             // 0 PARTKEY 1 ACCTBAL 2 SNAME 3 ADDRESS 4 PHONE 5 COMMENT 6 MFGR 7 NATIONNAME
             auto alljoined = psWithNationJoin.join(*psWithBothTable, *memNationTable);
 
@@ -105,31 +108,21 @@ namespace lqf {
             TopN top(100, [](DataRow *a, DataRow *b) {
                 return SDGE(1) || (SDE(1) && SBLE(7)) || (SDE(1) && SBE(7) && SBLE(2)) ||
                        (SDE(1) && SBE(7) && SBE(2) && SILE(0));
-            });
-//            TopN sort = new TopN(100,
-//                                 Comparator.nullsLast(Comparator.< DataRow > comparingDouble(row->- row.getDouble(3))
-//                                         .thenComparing(row->row.getBinary(6).toStringUsingUTF8())
-//                                         .thenComparing(row->row.getBinary(5).toStringUsingUTF8())
-//                                         .thenComparingInt(row->row.getInt(0))));
+            });;
             auto result = top.sort(*alljoined);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PB(8) PEND);
-            printer->
-                    print(*result);
+            auto printer = Printer::Make(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PEND);
+            printer->print(*result);
         }
 
 
         void executeQ2Debug() {
-            char buffer[100];
-            auto regionTable = ParquetTable::Open(Region::path, 3);
-            regionTable->blocks()->foreach([&buffer](const shared_ptr<Block> &block) {
-                auto col = (*block).col(1);
-                for (int i = 0; i < 5; ++i) {
-                    auto ba = (*col)[i].asByteArray();
-                    memcpy((void *) buffer, ba.ptr, ba.len);
-                    buffer[ba.len] = 0;
-                    cout << buffer << endl;
-                }
+            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::ADDRESS});
+            supplier->blocks()->foreach([](const shared_ptr<Block> &block) {
+                auto rows = block->rows();
+
+                for (uint32_t i = 0; i < block->size(); ++i)
+                    cout << i << "," << (*rows)[i][Supplier::ADDRESS].asByteArray() << endl;
             });
         }
     }

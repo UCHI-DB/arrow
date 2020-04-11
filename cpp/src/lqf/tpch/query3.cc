@@ -13,19 +13,30 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace agg;
         namespace q3 {
             ByteArray segment("HOUSEHOLD");
             ByteArray date("1995-03-15");
+
+            class PriceField : public DoubleSum {
+            public:
+                PriceField() : DoubleSum(0) {}
+
+                void reduce(DataRow &dataRow) {
+                    *value_ += dataRow[1].asDouble() * (1 - dataRow[2].asDouble());
+                }
+            };
         }
         using namespace sboost;
-        using namespace agg;
         using namespace q3;
 
         void executeQ3() {
 
-            auto customerTable = ParquetTable::Open(Customer::path);
-            auto orderTable = ParquetTable::Open(Orders::path);
-            auto lineItemTable = ParquetTable::Open(LineItem::path);
+            auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
+            auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERKEY, Orders::ORDERDATE,
+                                                                Orders::SHIPPRIORITY});
+            auto lineItemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::ORDERKEY, LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
 
             ColFilter custFilter(
                     {new SboostPredicate<ByteArrayType>(Customer::MKTSEGMENT, bind(&ByteArrayDictEq::build, segment))});
@@ -45,23 +56,15 @@ namespace lqf {
             auto filteredLineItemTable = lineItemFilter.filter(*lineItemTable);
 
             HashJoin orderItemJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new RowBuilder(
-                    {JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT), JRS(Orders::ORDERDATE),
-                     JRS(Orders::SHIPPRIORITY)}, true));
-
+                    {JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT), JRR(Orders::ORDERDATE),
+                     JRR(Orders::SHIPPRIORITY)}, true));
+            // ORDERKEY EXTENDEDPRICE DISCOUNT ORDERDATE SHIPPRIORITY
             auto orderItemTable = orderItemJoin.join(*filteredLineItemTable, *filteredOrderTable);
 
-            class Field : public DoubleSum {
-            public:
-                Field() : DoubleSum(0) {}
-
-                void reduce(DataRow &dataRow) {
-                    *value_ += dataRow[1].asDouble() * (1 - dataRow[2].asDouble());
-                }
-            };
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
                 int orderkey = data[0].asInt();
-                int shipdate = data(3).asInt();
-                int priority = data(4).asInt();
+                int shipdate = data[3].asInt();
+                int priority = data[4].asInt();
                 uint64_t key = 0;
                 key += static_cast<uint64_t>(orderkey) << 32;
                 key += shipdate << 5;
@@ -69,20 +72,20 @@ namespace lqf {
                 return key;
             };
             function<vector<AggField *>()> aggFields = []() {
-                return vector<AggField *>{new Field()};
+                return vector<AggField *>{new PriceField()};
             };
-            HashAgg orderItemAgg(vector<uint32_t>{1, 2, 2}, {AGI(0), AGB(3), AGB(4)}, aggFields, hasher);
+            HashAgg orderItemAgg(vector<uint32_t>{1, 1, 1, 1}, {AGI(0), AGI(3), AGI(4)}, aggFields, hasher);
 //            orderItemAgg.useVertical();
-
             auto result = orderItemAgg.agg(*orderItemTable);
 
+
             auto comparator = [](DataRow *a, DataRow *b) {
-                return SDGE(1) || (SDE(1) && SBLE(2));
+                return SDGE(3) || (SDE(3) && SILE(2));
             };
             TopN sort(10, comparator);
             result = sort.sort(*result);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PB(1) PB(2) PD(3) PEND);
+            auto printer = Printer::Make(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
             printer->print(*result);
         }
     }

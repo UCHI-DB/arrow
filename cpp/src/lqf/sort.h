@@ -29,12 +29,8 @@ namespace lqf {
     class SmallSort {
     private:
         function<bool(DataRow *, DataRow *)> comparator_;
-
-        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter_;
     public:
         SmallSort(function<bool(DataRow *, DataRow *)>);
-
-        SmallSort(function<bool(DataRow *, DataRow *)>, function<unique_ptr<MemDataRow>(DataRow &)>);
 
         shared_ptr<Table> sort(Table &);
     };
@@ -44,14 +40,13 @@ namespace lqf {
         uint32_t n_;
         mutex collector_lock_;
         function<bool(DataRow *, DataRow *)> comparator_;
-        function<DataRow *()> rowMaker_;
     public:
         TopN(uint32_t, function<bool(DataRow *, DataRow *)>);
 
         shared_ptr<Table> sort(Table &);
 
     protected:
-        void sortBlock(vector<DataRow *> *, const shared_ptr<Block> &input);
+        void sortBlock(vector<DataRow *> *, MemTable *, const shared_ptr<Block> &input);
     };
 }
 #endif //ARROW_SORT_H

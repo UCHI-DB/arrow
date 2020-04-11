@@ -2109,6 +2109,7 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
     if (!decoder_.GetVlqInt(&total_values_)) {
         ParquetException::EofException();
     }
+    values_read_ = 0;
 
     // The last value of previous block
     if (!decoder_.GetZigZagVlqInt(&last_value_)) ParquetException::EofException();
@@ -2117,6 +2118,7 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
 
     block_buffer_->data()[0]= last_value_;
     num_buffered_ = 1;
+    values_read_+=1;
     ReadBlock();
   }
 
@@ -2170,9 +2172,10 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
 
     int32_t* buffer = block_buffer_->data();
     int buffer_start = num_buffered_;
-    for(int i = 0 ; i < num_mini_blocks_ && num_buffered_ < (uint64_t)num_values_;++i) {
+    for(int i = 0 ; i < num_mini_blocks_ && values_read_ < total_values_;++i) {
         decoder_.GetBatch(bit_width_data[i], buffer + num_buffered_, values_per_mini_block_);
         num_buffered_ += values_per_mini_block_;
+        values_read_+=values_per_mini_block_;
     }
 
     // Speed up Delta computation using Sboost
@@ -2184,9 +2187,6 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
         result = _mm256_add_epi32(result, _mm256_set1_epi32(last_value_));
         _mm256_storeu_si256((__m256i*)position,result);
         last_value_ = *(position + 7);
-    }
-    if(last_value_ > 18000) {
-        num_buffer_read_ = 0;
     }
 //    last_value_ = buffer[num_buffered_-1];
     num_buffer_read_ = 0;
@@ -2224,6 +2224,8 @@ class DeltaBitPackDecoder : public DecoderImpl, virtual public TypedDecoder<DTyp
   MemoryPool* pool_;
   arrow::BitUtil::BitReader decoder_;
   int32_t total_values_;
+  int32_t values_read_;
+
   int32_t block_size_;
   int32_t num_mini_blocks_;
   uint64_t values_per_mini_block_;

@@ -14,7 +14,8 @@ namespace lqf {
 
     void Printer::printBlock(const shared_ptr<Block> &block) {
         auto rows = block->rows();
-        for (uint32_t i = 0; i < block->size(); ++i) {
+        auto block_size = block->size();
+        for (uint32_t i = 0; i < block_size; ++i) {
             linePrinter_(rows->next());
         }
         sum_ += block->size();

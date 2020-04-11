@@ -85,7 +85,7 @@ TEST(ColumnBuilderTest, Create) {
 
     EXPECT_EQ(vector<uint32_t>({1, 1}), cb.rightColSize());
     vector<pair<uint8_t, uint8_t>> vleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1})});
-    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(2, 2), pair<uint8_t, uint8_t>({0, 3})});
+    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3})});
     EXPECT_EQ(vleft, cb.leftInst());
     EXPECT_EQ(vright, cb.rightInst());
 }
@@ -99,8 +99,8 @@ TEST(ColumnBuilderTest, CreateWithString) {
     EXPECT_EQ(vector<uint32_t>({1, 1, 2}), cb.rightColSize());
     vector<pair<uint8_t, uint8_t>> vleft(
             {pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1}), pair<uint8_t, uint8_t>(3, 4)});
-    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(2, 2), pair<uint8_t, uint8_t>({0, 3}),
-                                           pair<uint8_t, uint8_t>(3, 5)});
+    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3}),
+                                           pair<uint8_t, uint8_t>(2, 5)});
     EXPECT_EQ(vleft, cb.leftInst());
     EXPECT_EQ(vright, cb.rightInst());
 }

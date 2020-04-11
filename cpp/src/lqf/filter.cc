@@ -88,7 +88,8 @@ namespace lqf {
         auto result = make_shared<SimpleBitmap>(input.size());
         auto rit = input.rows();
 
-        for (uint32_t i = 0; i < input.size(); ++i) {
+        auto block_size = input.size();
+        for (uint32_t i = 0; i < block_size; ++i) {
             if (predicate_((*rit).next())) {
                 result->put(i);
             }
@@ -378,6 +379,15 @@ namespace lqf {
 
         template
         class DictLess<ByteArrayType>;
+
+        template
+        class DictGreater<Int32Type>;
+
+        template
+        class DictGreater<DoubleType>;
+
+        template
+        class DictGreater<ByteArrayType>;
 
         template
         class DictBetween<Int32Type>;
