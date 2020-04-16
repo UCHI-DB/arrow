@@ -15,9 +15,9 @@ where
   and c_nationkey = s_nationkey
   and s_nationkey = n_nationkey
   and n_regionkey = r_regionkey
-  and r_name = '[REGION]'
-  and o_orderdate >= date '[DATE]'
-  and o_orderdate < date '[DATE]' + interval '1' year
+  and r_name = 'ASIA'
+  and o_orderdate >= '1994-01-01'
+  and o_orderdate < '1995-01-01'
 group by
     n_name
 order by

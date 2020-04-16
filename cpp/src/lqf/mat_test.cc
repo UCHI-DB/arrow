@@ -14,7 +14,7 @@ using namespace lqf;
 //        MI(1, 1)
 //        MD(5, 2) MLE);
 //
-//    auto parquetTable = ParquetTable::Open("lineitem", 0x27);
+//    auto parquetTable = ParquetTable::Open("testres/lineitem", 0x27);
 //    auto matted = mat.mat(*parquetTable);
 //    auto content = matted->blocks()->collect();
 //
@@ -36,7 +36,7 @@ using namespace lqf;
 
 TEST(FilterMatTest, Mat) {
 
-    auto ptable = ParquetTable::Open("lineitem", 0x7);
+    auto ptable = ParquetTable::Open("testres/lineitem", 0x7);
 
     function<bool(const DataField &)> pred = [](const DataField &field) {
         return field.asInt() % 10 == 0;

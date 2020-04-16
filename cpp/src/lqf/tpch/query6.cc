@@ -15,6 +15,8 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace sboost;
+        using namespace agg;
         namespace q6 {
             int quantity = 24;
             ByteArray dateFrom("1994-01-01");
@@ -22,9 +24,9 @@ namespace lqf {
             double discountFrom = 0.04;
             double discountTo = 0.06;
 
-            class PriceField : public agg::Sum<double, agg::AsDouble> {
+            class PriceField : public DoubleSum {
             public:
-                PriceField() : agg::DoubleSum(0) {}
+                PriceField() : DoubleSum(0) {}
 
                 void reduce(DataRow &input) {
                     *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * input[LineItem::DISCOUNT].asDouble();
@@ -35,10 +37,9 @@ namespace lqf {
 
         void executeQ6() {
 
-            auto lineitemTable = ParquetTable::Open(LineItem::path);
-
-
-            using namespace sboost;
+            auto lineitemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::SHIPDATE, LineItem::DISCOUNT, LineItem::QUANTITY,
+                                                     LineItem::EXTENDEDPRICE});
             ColFilter filter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
                                                                  bind(&ByteArrayDictRangele::build, dateFrom,
                                                                       dateTo)),
@@ -50,12 +51,11 @@ namespace lqf {
                              });
             auto filtered = filter.filter(*lineitemTable);
 
-
             SimpleAgg agg(vector<uint32_t>({1}), []() { return vector<AggField *>({new PriceField()}); });
             auto agged = agg.agg(*filtered);
 
-            auto printer = Printer::Make(PBEGIN PD(0) PEND);
-            printer->print(*agged);
+            Printer printer(PBEGIN PD(0) PEND);
+            printer.print(*agged);
         }
     }
 }

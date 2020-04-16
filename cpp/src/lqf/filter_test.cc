@@ -15,7 +15,7 @@ protected:
     shared_ptr<RowGroupReader> rowGroup_;
 public:
     virtual void SetUp() override {
-        fileReader_ = ParquetFileReader::OpenFile("lineitem");
+        fileReader_ = ParquetFileReader::OpenFile("testres/lineitem");
         rowGroup_ = fileReader_->RowGroup(0);
         return;
     }
@@ -53,7 +53,7 @@ TEST(RowFilterTest, Filter) {
 using namespace lqf;
 
 TEST_F(ColFilterTest, FilterOnSimpleCol) {
-    auto ptable = ParquetTable::Open("lineitem", 7);
+    auto ptable = ParquetTable::Open("testres/lineitem", 7);
     initializer_list<ColPredicate *> list = {
             new SimplePredicate(0, [](const DataField &field) { return field.asInt() % 10 == 0; })};
     auto filter = make_shared<ColFilter>(list);
@@ -61,7 +61,7 @@ TEST_F(ColFilterTest, FilterOnSimpleCol) {
     auto filtered = filter->filter(*ptable);
     auto filteredblocks = filtered->blocks()->collect();
 
-    auto table2 = ParquetTable::Open("lineitem", 7);
+    auto table2 = ParquetTable::Open("testres/lineitem", 7);
     auto rawblocks = table2->blocks()->collect();
 
     EXPECT_EQ(filteredblocks->size(), rawblocks->size());
@@ -92,7 +92,7 @@ TEST_F(ColFilterTest, FilterOnSimpleCol) {
 using namespace lqf::sboost;
 
 TEST_F(ColFilterTest, FilterSboost) {
-    auto ptable = ParquetTable::Open("lineitem", (1 << 14) - 1);
+    auto ptable = ParquetTable::Open("testres/lineitem", (1 << 14) - 1);
 
     function<bool(const ByteArray &)> pred = [](const ByteArray &input) {
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
@@ -121,7 +121,7 @@ TEST_F(ColFilterTest, FilterSboost) {
 }
 
 TEST_F(ColFilterTest, FilterMultiSboost) {
-    auto ptable = ParquetTable::Open("lineitem", (1 << 14) - 1);
+    auto ptable = ParquetTable::Open("testres/lineitem", (1 << 14) - 1);
 
     function<bool(const ByteArray &)> sbstPred = [](const ByteArray &input) {
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);

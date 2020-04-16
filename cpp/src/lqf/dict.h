@@ -23,6 +23,7 @@ namespace lqf {
 
         uint32_t size_;
 
+        void *generic_buffer_;
     public:
         inline uint32_t size() {
             return size_;
@@ -40,9 +41,11 @@ namespace lqf {
 
         Dictionary(shared_ptr<DictionaryPage> data);
 
+        Dictionary(void* buffer);
+
         virtual ~Dictionary();
 
-        const T &translate(int32_t key);
+        const T &operator[](int32_t key);
 
         int32_t lookup(const T &key);
 

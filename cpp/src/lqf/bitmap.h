@@ -85,7 +85,7 @@ namespace lqf {
 
         virtual shared_ptr<Bitmap> operator|(Bitmap &x1) = 0;
 
-        virtual shared_ptr<Bitmap> operator~()=0;
+        virtual shared_ptr<Bitmap> operator~() = 0;
 
         virtual uint64_t cardinality() = 0;
 

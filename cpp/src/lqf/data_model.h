@@ -134,7 +134,7 @@ namespace lqf {
 
         virtual uint64_t pos() = 0;
 
-        virtual void translate(DataField &, uint32_t, uint32_t) = 0;
+        virtual const uint8_t *dict(uint32_t idx) { return nullptr; }
     };
 
     class ColumnIterator {
@@ -146,8 +146,6 @@ namespace lqf {
         virtual DataField &operator()(uint64_t idx) {
             return (*this)[idx];
         }
-
-        virtual void translate(DataField &, uint32_t) = 0;
 
         virtual uint64_t pos() = 0;
     };
@@ -208,7 +206,6 @@ namespace lqf {
         unique_ptr<DataRowIterator> rows() override;
 
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
-
     };
 
     class MemvBlock : public Block {
@@ -228,8 +225,6 @@ namespace lqf {
 
         void resize(uint32_t newsize) override;
 
-        inline vector<uint64_t> &content();
-
         unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 
         unique_ptr<DataRowIterator> rows() override;
@@ -237,6 +232,25 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
 
         void merge(MemvBlock &, const vector<pair<uint8_t, uint8_t>> &);
+    };
+
+    class MemListBlock : public Block {
+    private:
+        vector<DataRow *> content_;
+    public:
+        MemListBlock();
+
+        virtual ~MemListBlock();
+
+        uint64_t size() override;
+
+        inline vector<DataRow *> &content() { return content_; }
+
+        unique_ptr<ColumnIterator> col(uint32_t) override;
+
+        unique_ptr<DataRowIterator> rows() override;
+
+        shared_ptr<Block> mask(shared_ptr<Bitmap>) override;
     };
 
     template<typename DTYPE>
@@ -368,6 +382,7 @@ namespace lqf {
 
         template<typename DTYPE>
         unique_ptr<Dictionary<DTYPE>> LoadDictionary(int column);
+
     protected:
         shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
 
@@ -393,6 +408,7 @@ namespace lqf {
 
     class TableView : public Table {
         vector<uint32_t> col_size_;
+        Table *root_;
         shared_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
         TableView(const vector<uint32_t> &, shared_ptr<Stream<shared_ptr<Block>>>);
@@ -400,6 +416,8 @@ namespace lqf {
         shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         const vector<uint32_t> &colSize() override;
+
+        inline Table *root() { return root_; }
     };
 
     class MemTable : public Table {

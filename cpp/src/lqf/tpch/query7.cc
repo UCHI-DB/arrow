@@ -14,6 +14,8 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace sboost;
+        using namespace agg;
         namespace q7 {
             string nation1("FRANCE");
             string nation2("GERMANY");
@@ -29,7 +31,7 @@ namespace lqf {
 
                 void build(DataRow &target, DataRow &left, DataRow &right, int key) {
                     target[0] = left[LineItem::ORDERKEY];
-                    target[1] = right[Supplier::NATIONKEY];
+                    target[1] = right[0];
                     target[2] = udf::date2year(left[LineItem::SHIPDATE].asByteArray());
                     target[3] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
                 }
@@ -40,20 +42,14 @@ namespace lqf {
 
         void executeQ7() {
 
-            auto nationTable = ParquetTable::Open(Nation::path);
-            vector<uint32_t> nation_col_size({1, 2});
-            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_size](DataRow &dr) {
-                auto row = new MemDataRow(nation_col_size);
+            auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
+            vector<uint32_t> nation_col_offset({0, 2});
+            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_offset](DataRow &dr) {
+                auto row = new MemDataRow(nation_col_offset);
                 (*row)[0] = dr[Nation::NAME].asByteArray();
                 return unique_ptr<MemDataRow>(row);
             };
             auto matNation = HashMat(Nation::NATIONKEY, snapshot).mat(*nationTable);
-
-            auto customerTable = ParquetTable::Open(Customer::path);
-            auto supplierTable = ParquetTable::Open(Supplier::path);
-            auto orderTable = ParquetTable::Open(Orders::path);
-            auto lineitemTable = ParquetTable::Open(LineItem::path);
-
             unordered_map<string, int32_t> nation_mapping;
             nationTable->blocks()->foreach([&nation_mapping](const shared_ptr<Block> &block) {
                 auto rows = block->rows();
@@ -69,11 +65,15 @@ namespace lqf {
             int nationKey1 = nation_mapping[nation1];
             int nationKey2 = nation_mapping[nation2];
 
-            using namespace sboost;
+            auto customerTable = ParquetTable::Open(Customer::path, {Customer::NATIONKEY, Customer::CUSTKEY});
+            auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY});
+            auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERKEY});
+            auto lineitemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::SHIPDATE,
+                                                     LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
 
             function<bool(int32_t)> nation_key_pred = [=](int32_t key) {
-                return key == nationKey1 ||
-                       key == nationKey2;
+                return key == nationKey1 || key == nationKey2;
             };
             ColFilter validCustomerFilter({new SboostPredicate<Int32Type>(Customer::NATIONKEY,
                                                                           bind(&Int32DictMultiEq::build,
@@ -87,7 +87,8 @@ namespace lqf {
 
 
             HashJoin orderWithNationJoin(Orders::CUSTKEY, Customer::CUSTKEY,
-                                         new RowBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)}, true));
+                                         new RowBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)}));
+            // ORDERKEY, NATIONKEY
             auto orderWithNation = orderWithNationJoin.join(*orderTable, *validCustomer);
 
             ColFilter lineitemFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
@@ -97,11 +98,12 @@ namespace lqf {
 
 
             HashJoin itemWithNationJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new Q7ItemWithNationBuilder());
+            // ORDERKEY, NATIONKEY, YEAR, PRICE
             auto itemWithNation = itemWithNationJoin.join(*filteredLineitem, *validSupplier);
 
-            HashJoin itemWithOrderJoin(0, 0, new RowBuilder({JL(1), JR(1), JL(2), JL(3)}, true),
+            HashJoin itemWithOrderJoin(0, 0, new RowBuilder({JL(1), JR(1), JL(2), JL(3)}),
                                        [](DataRow &left, DataRow &right) {
-                                           return left[1].asInt() != right[1].asInt();
+                                           return left[1].asInt() != right[0].asInt();
                                        });
             // Customer::NATIONKEY, Supplier::NATIONKEY, YEAR, PRICE
             auto joined = itemWithOrderJoin.join(*itemWithNation, *orderWithNation);
@@ -110,14 +112,14 @@ namespace lqf {
                 return (input[0].asInt() << 16) + (input[1].asInt() << 11) + input[2].asInt();
             };
             HashAgg agg(vector<uint32_t>({1, 1, 1, 1}), {AGI(0), AGI(1), AGI(2)},
-                        []() { return vector<AggField *>({new agg::DoubleSum(3)}); }, indexer);
+                        []() { return vector<AggField *>({new DoubleSum(3)}); }, indexer);
             agg.useVertical();
             auto agged = agg.agg(*joined);
 
             HashColumnJoin joinNation1(0, 0, new ColumnBuilder({JRS(1), JL(1), JL(2), JL(3)}));
             agged = joinNation1.join(*agged, *matNation);
 
-            HashColumnJoin joinNation2(0, 0, new ColumnBuilder({JLS(0), JRS(1), JL(2), JL(3)}));
+            HashColumnJoin joinNation2(1, 0, new ColumnBuilder({JLS(0), JRS(1), JL(2), JL(3)}));
             agged = joinNation2.join(*agged, *matNation);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -126,8 +128,8 @@ namespace lqf {
             SmallSort sort(comparator);
             auto sorted = sort.sort(*agged);
 
-            auto printer = Printer::Make(PBEGIN PB(0) PB(1) PI(2) PD(3) PEND);
-            printer->print(*sorted);
+            Printer printer(PBEGIN PB(0) PB(1) PI(2) PD(3) PEND);
+            printer.print(*sorted);
         }
     }
 }

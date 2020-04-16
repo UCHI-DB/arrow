@@ -15,12 +15,15 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace agg;
+        using namespace sboost;
         namespace q18 {
 
             int quantity = 300;
         }
 
         using namespace q18;
+
         void executeQ18() {
 
             auto order = ParquetTable::Open(Orders::path,
@@ -28,37 +31,35 @@ namespace lqf {
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::ORDERKEY, LineItem::QUANTITY});
             auto customer = ParquetTable::Open(Customer::path, {Customer::NAME, Customer::CUSTKEY});
 
-            using namespace agg;
             HashAgg hashAgg(vector<uint32_t>{1, 1}, {AGI(LineItem::ORDERKEY)},
                             []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; },
                             COL_HASHER(LineItem::ORDERKEY));
-            auto aggedlineitem = hashAgg.agg(*lineitem);
-
-            RowFilter filter([=](DataRow &row) { return row[1].asInt() > quantity; });
+            hashAgg.setPredicate([=](DataRow &row) { return row[1].asInt() > quantity; });
             // ORDERKEY, SUM_QUANTITY
-            auto validOrders = filter.filter(*aggedlineitem);
+            auto validLineitem = hashAgg.agg(*lineitem);
 
             HashJoin withOrderJoin(Orders::ORDERKEY, 0,
                                    new RowBuilder(
                                            {JL(Orders::CUSTKEY), JLS(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)},
                                            true, true));
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY
-            auto result = withOrderJoin.join(*order, *validOrders);
+            auto withOrder = withOrderJoin.join(*order, *validLineitem);
 
             HashColumnJoin withCustomerJoin(1, Customer::CUSTKEY,
                                             new ColumnBuilder(
-                                                    {JL(0), JL(1), JL(2), JL(3), JL(4), JRS(Customer::NAME)}));
+                                                    {JL(0), JL(1), JLS(2), JL(3), JL(4), JRS(Customer::NAME)}));
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY,CUSTNAME
-            result = withCustomerJoin.join(*result, *customer);
+            auto withCustomer = withCustomerJoin.join(*withOrder, *customer);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SDLE(3) || (SDE(3) && SBLE(2));
+                return SDGE(3) || (SDE(3) && SBLE(2));
             };
             TopN topn(100, comparator);
-            result = topn.sort(*result);
+            SmallSort sort(comparator);
+            auto sorted = sort.sort(*withCustomer);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PI(1) PB(2) PD(3) PI(4) PB(5) PEND);
-            printer->print(*result);
+            Printer printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND);
+            printer.print(*sorted);
         }
     }
 }

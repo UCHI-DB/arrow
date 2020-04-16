@@ -17,6 +17,7 @@ namespace lqf {
     namespace tpch {
 
         using namespace agg;
+        using namespace sboost;
         namespace q17 {
             ByteArray brand("Brand#23");
             ByteArray container("MED BOX");
@@ -36,9 +37,9 @@ namespace lqf {
         void executeQ17() {
 
             auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::CONTAINER, Part::PARTKEY});
-            auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::PARTKEY});
+            auto lineitem = ParquetTable::Open(LineItem::path,
+                                               {LineItem::PARTKEY, LineItem::QUANTITY, LineItem::EXTENDEDPRICE});
 
-            using namespace sboost;
             ColFilter partFilter({new SboostPredicate<ByteArrayType>(Part::BRAND,
                                                                      bind(&ByteArrayDictEq::build, brand)),
                                   new SboostPredicate<ByteArrayType>(Part::CONTAINER,
@@ -48,16 +49,15 @@ namespace lqf {
             HashFilterJoin lineitemFilter(LineItem::PARTKEY, Part::PARTKEY);
             auto validlineitem = FilterMat().mat(*lineitemFilter.join(*lineitem, *validPart));
 
-            using namespace agg;
             HashAgg avgquantity(vector<uint32_t>({1, 1}), {AGI(LineItem::PARTKEY)},
                                 []() { return vector<AggField *>{new IntAvg(LineItem::QUANTITY)}; },
                                 COL_HASHER(LineItem::PARTKEY));
             // PARTKEY, AVG_QTY
             auto aggedlineitem = avgquantity.agg(*validlineitem);
 
-            HashJoin withAvgJoin(LineItem::PARTKEY, 0, new RowBuilder({JL(LineItem::EXTENDEDPRICE)}),
+            HashJoin withAvgJoin(LineItem::PARTKEY, 0, new RowBuilder({JL(LineItem::EXTENDEDPRICE), JR(1),}),
                                  [](DataRow &left, DataRow &right) {
-                                     return left[LineItem::QUANTITY].asInt() < 0.2 * right[1].asDouble();
+                                     return left[LineItem::QUANTITY].asInt() < 0.2 * right[0].asDouble();
                                  });
             auto result = withAvgJoin.join(*validlineitem, *aggedlineitem);
 
@@ -65,8 +65,8 @@ namespace lqf {
             SimpleAgg sumagg(vector<uint32_t>({1}), []() { return vector<AggField *>{new YearSumField()}; });
             result = sumagg.agg(*result);
 
-            auto printer = Printer::Make(PBEGIN PD(0) PEND);
-            printer->print(*result);
+            Printer printer(PBEGIN PD(0) PEND);
+            printer.print(*result);
         }
     }
 }

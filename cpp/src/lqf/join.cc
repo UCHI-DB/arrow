@@ -328,9 +328,10 @@ namespace lqf {
                 for (uint32_t i = 0; i < left_block_size; ++i) {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
+                    DataRow &leftrow = (*leftrows)[leftkeys->pos()];
                     auto result = container_->get(leftval);
-                    DataRow &row = result ? (*leftrows)[leftkeys->pos()] : MemDataRow::EMPTY;
-                    rowBuilder_->build((*writer)[counter++], row, *result, leftval);
+                    DataRow &right = result ? *result : MemDataRow::EMPTY;
+                    rowBuilder_->build((*writer)[counter++], leftrow, right, leftval);
                 }
             } else {
                 for (uint32_t i = 0; i < left_block_size; ++i) {

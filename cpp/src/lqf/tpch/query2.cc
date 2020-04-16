@@ -111,8 +111,8 @@ namespace lqf {
             });;
             auto result = top.sort(*alljoined);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PEND);
-            printer->print(*result);
+            Printer printer(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PEND);
+            printer.print(*result);
         }
 
 

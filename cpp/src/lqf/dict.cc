@@ -31,7 +31,7 @@ namespace lqf {
     }
 
     template<typename DTYPE>
-    const typename DTYPE::c_type &Dictionary<DTYPE>::translate(int32_t key) {
+    const typename DTYPE::c_type &Dictionary<DTYPE>::operator[](int32_t key) {
         return buffer_[key];
     }
 

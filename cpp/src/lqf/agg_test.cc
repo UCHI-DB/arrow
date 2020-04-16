@@ -248,9 +248,9 @@ TEST(HashDictAggTest, Agg) {
             };
     HashDictAgg agg(col_size, {AGR(14)}, []() {
         return vector<AggField *>({new DoubleSum(5), new Count()});
-    }, hasher, {{14, 0}});
+    }, hasher, {{0, 14}});
 
-    auto table = ParquetTable::Open("lineitem", (1 << 15) - 1);
+    auto table = ParquetTable::Open("testres/lineitem", (1 << 15) - 1);
 
     auto aggtable = agg.agg(*table);
     auto agged = aggtable->blocks()->collect();

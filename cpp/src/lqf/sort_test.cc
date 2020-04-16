@@ -11,15 +11,36 @@ TEST(TopNTest, Sort) {
     srand(time(NULL));
 
     auto table = MemTable::Make(4);
-    auto block = table->allocate(1000);
+    auto block1 = table->allocate(100);
+    auto block2 = table->allocate(200);
+    auto block3 = table->allocate(300);
+    auto block4 = table->allocate(400);
 
     vector<int> buffer;
 
-    auto rows = block->rows();
-    for (int i = 0; i < 1000; i++) {
+    auto rows1 = block1->rows();
+    for (int i = 0; i < 100; i++) {
         int next = rand();
         buffer.push_back(next);
-        (*rows)[i][0] = next;
+        (*rows1)[i][0] = next;
+    }
+    auto rows2 = block2->rows();
+    for (int i = 0; i < 200; i++) {
+        int next = rand();
+        buffer.push_back(next);
+        (*rows2)[i][0] = next;
+    }
+    auto rows3 = block3->rows();
+    for (int i = 0; i < 300; i++) {
+        int next = rand();
+        buffer.push_back(next);
+        (*rows3)[i][0] = next;
+    }
+    auto rows4 = block4->rows();
+    for (int i = 0; i < 400; i++) {
+        int next = rand();
+        buffer.push_back(next);
+        (*rows4)[i][0] = next;
     }
 
     TopN top10(10, [](DataRow *a, DataRow *b) {

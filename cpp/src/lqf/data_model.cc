@@ -17,7 +17,7 @@ namespace lqf {
     ostream &operator<<(ostream &os, MemDataRow &dt) {
         uint64_t *raw = dt.raw();
         auto offsets = dt.offset();
-        auto limit = offsets.size() - 1;
+        auto limit = dt.offset().size() - 1;
         for (uint32_t i = 0; i < limit; ++i) {
             auto size = offsets[i + 1] - offsets[i];
             if (size == 1) {
@@ -42,7 +42,7 @@ namespace lqf {
 
     mt19937 Block::rand_ = mt19937(time(NULL));
 
-    const array<vector<uint32_t>, 10> OFFSETS = {
+    const array<vector<uint32_t>, 11> OFFSETS = {
             vector<uint32_t>({0}),
             {0, 1},
             {0, 1, 2},
@@ -52,10 +52,11 @@ namespace lqf {
             {0, 1, 2, 3, 4, 5, 6},
             {0, 1, 2, 3, 4, 5, 6, 7},
             {0, 1, 2, 3, 4, 5, 6, 7, 8},
-            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+            {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
     };
 
-    const array<vector<uint32_t>, 10> SIZES = {
+    const array<vector<uint32_t>, 11> SIZES = {
             vector<uint32_t>({}),
             vector<uint32_t>({1}),
             vector<uint32_t>({1, 1}),
@@ -65,7 +66,8 @@ namespace lqf {
             vector<uint32_t>({1, 1, 1, 1, 1, 1}),
             vector<uint32_t>({1, 1, 1, 1, 1, 1, 1}),
             vector<uint32_t>({1, 1, 1, 1, 1, 1, 1, 1}),
-            vector<uint32_t>({1, 1, 1, 1, 1, 1, 1, 1, 1})
+            vector<uint32_t>({1, 1, 1, 1, 1, 1, 1, 1, 1}),
+            vector<uint32_t>({1, 1, 1, 1, 1, 1, 1, 1, 1, 1})
     };
 
     const vector<uint32_t> &colOffset(uint32_t num_fields) {
@@ -208,8 +210,6 @@ namespace lqf {
         uint64_t pos() override {
             return reference_.index_;
         }
-
-        void translate(DataField &target, uint32_t col_index, uint32_t key) override {}
     };
 
     class MemColumnIterator : public ColumnIterator {
@@ -240,8 +240,6 @@ namespace lqf {
         uint64_t pos() override {
             return row_index_;
         }
-
-        void translate(DataField &, uint32_t) override {}
     };
 
     unique_ptr<DataRowIterator> MemBlock::rows() {
@@ -254,20 +252,21 @@ namespace lqf {
     }
 
     shared_ptr<Block> MemBlock::mask(shared_ptr<Bitmap> mask) {
-        auto newBlock = make_shared<MemBlock>(mask->cardinality(), row_size_, col_offset_);
-        auto ite = mask->iterator();
-
-        auto newData = newBlock->content_.data();
-        auto oldData = content_.data();
-
-        auto newCounter = 0;
-        while (ite->hasNext()) {
-            auto next = ite->next();
-            memcpy((void *) (newData + (newCounter++) * row_size_),
-                   (void *) (oldData + next * row_size_),
-                   sizeof(uint64_t) * row_size_);
-        }
-        return newBlock;
+//        auto newBlock = make_shared<MemBlock>(mask->cardinality(), row_size_, col_offset_);
+//        auto ite = mask->iterator();
+//
+//        auto newData = newBlock->content_.data();
+//        auto oldData = content_.data();
+//
+//        auto newCounter = 0;
+//        while (ite->hasNext()) {
+//            auto next = ite->next();
+//            memcpy((void *) (newData + (newCounter++) * row_size_),
+//                   (void *) (oldData + next * row_size_),
+//                   sizeof(uint64_t) * row_size_);
+//        }
+//        return newBlock;
+        return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
     MemvBlock::MemvBlock(uint32_t size, const vector<uint32_t> &col_size) : size_(size), col_size_(col_size) {
@@ -321,8 +320,6 @@ namespace lqf {
         uint64_t pos() override {
             return row_index_;
         }
-
-        void translate(DataField &, uint32_t) override {}
     };
 
     class MemvDataRowIterator;
@@ -390,8 +387,6 @@ namespace lqf {
         uint64_t pos() override {
             return reference_.index_;
         }
-
-        void translate(DataField &, uint32_t, uint32_t) override {}
     };
 
 
@@ -410,7 +405,7 @@ namespace lqf {
 
     shared_ptr<Block> MemvBlock::mask(shared_ptr<Bitmap> mask) {
         // Does not support
-        return nullptr;
+        return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
     void MemvBlock::merge(MemvBlock &another, const vector<pair<uint8_t, uint8_t>> &merge_inst) {
@@ -420,6 +415,76 @@ namespace lqf {
         }
         // The old memblock is discarded
         another.content_.clear();
+    }
+
+    MemListBlock::MemListBlock() {}
+
+    MemListBlock::~MemListBlock() {
+        for (auto &item: content_) {
+            delete item;
+        }
+    }
+
+    uint64_t MemListBlock::size() {
+        return content_.size();
+    }
+
+    class MemListColumnIterator : public ColumnIterator {
+    protected:
+        vector<DataRow *> &ref_;
+        uint32_t col_index_;
+        uint32_t index_;
+    public:
+        MemListColumnIterator(vector<DataRow *> &ref, uint32_t col_index)
+                : ref_(ref), col_index_(col_index), index_(-1) {}
+
+        DataField &next() override {
+            index_++;
+            return (*ref_[index_])[col_index_];
+        }
+
+        uint64_t pos() override {
+            return index_;
+        }
+
+        DataField &operator[](uint64_t index) override {
+            index_ = index;
+            return (*ref_[index_])[col_index_];
+        }
+    };
+
+    unique_ptr<ColumnIterator> MemListBlock::col(uint32_t col_index) {
+        return unique_ptr<ColumnIterator>(new MemListColumnIterator(content_, col_index));
+    }
+
+    class MemListRowIterator : public DataRowIterator {
+    protected:
+        vector<DataRow *> &ref_;
+        uint32_t index_;
+    public:
+        MemListRowIterator(vector<DataRow *> &ref) : ref_(ref), index_(-1) {}
+
+        DataRow &next() override {
+            index_++;
+            return *(ref_[index_]);
+        }
+
+        uint64_t pos() override {
+            return index_;
+        }
+
+        DataRow &operator[](uint64_t index) override {
+            index_ = index;
+            return *(ref_[index_]);
+        }
+    };
+
+    unique_ptr<DataRowIterator> MemListBlock::rows() {
+        return unique_ptr<DataRowIterator>(new MemListRowIterator(content_));
+    }
+
+    shared_ptr<Block> MemListBlock::mask(shared_ptr<Bitmap> mask) {
+        return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
     MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)
@@ -432,7 +497,7 @@ namespace lqf {
     }
 
     uint64_t MaskedBlock::limit() {
-        return inner_->size();
+        return inner_->limit();
     }
 
     class MaskedColumnIterator : public ColumnIterator {
@@ -454,8 +519,6 @@ namespace lqf {
         uint64_t pos() override {
             return inner_->pos();
         }
-
-        void translate(DataField &, uint32_t) override {}
     };
 
     unique_ptr<ColumnIterator> MaskedBlock::col(uint32_t col_index) {
@@ -482,8 +545,6 @@ namespace lqf {
         uint64_t pos() override {
             return inner_->pos();
         }
-
-        void translate(DataField &, uint32_t, uint32_t) override {}
     };
 
     unique_ptr<DataRowIterator> MaskedBlock::rows() {
@@ -491,7 +552,9 @@ namespace lqf {
     }
 
     shared_ptr<Block> MaskedBlock::mask(shared_ptr<Bitmap> mask) {
-        this->mask_ = (*this->mask_) & *mask;
+        /// This sequence makes sure that we do not change the original mask, which may be shared by
+        /// other instances of MaskedBlock
+        this->mask_ = (*mask) & (*this->mask_);
         return this->shared_from_this();
     }
 
@@ -511,88 +574,6 @@ namespace lqf {
 
     class ParquetRowIterator;
 
-    class ParquetRowView : public DataRow {
-    protected:
-        vector<unique_ptr<ColumnIterator>> &columns_;
-        uint64_t index_;
-        friend ParquetRowIterator;
-    public:
-        ParquetRowView(vector<unique_ptr<ColumnIterator>> &cols) : columns_(cols), index_(-1) {}
-
-        virtual DataField &operator[](uint64_t colindex) override {
-            return (*(columns_[colindex]))[index_];
-        }
-
-        virtual DataField &operator()(uint64_t colindex) override {
-            return (*(columns_[colindex]))(index_);
-        }
-
-        unique_ptr<DataRow> snapshot() override {
-            return nullptr;
-        }
-    };
-
-    template<typename DTYPE>
-    shared_ptr<Bitmap> ParquetBlock::raw(uint32_t col_index, RawAccessor<DTYPE> *accessor) {
-        accessor->init(this->size());
-        auto pageReader = rowGroup_->GetColumnPageReader(col_index);
-        shared_ptr<Page> page = pageReader->NextPage();
-
-        if (page->type() == PageType::DICTIONARY_PAGE) {
-            Dictionary<DTYPE> dict(static_pointer_cast<DictionaryPage>(page));
-            accessor->dict(dict);
-        } else {
-            accessor->data((DataPage *) page.get());
-        }
-        while ((page = pageReader->NextPage())) {
-            accessor->data((DataPage *) page.get());
-        }
-        return accessor->result();
-    }
-
-    class ParquetColumnIterator;
-
-    class ParquetRowIterator : public DataRowIterator {
-    private:
-        vector<unique_ptr<ColumnIterator>> columns_;
-        ParquetRowView view_;
-    public:
-        ParquetRowIterator(ParquetBlock &block, uint64_t colindices)
-                : columns_(64 - __builtin_clzl(colindices)), view_(columns_) {
-            Bitset bitset(colindices);
-            while (bitset.hasNext()) {
-                auto index = bitset.next();
-                columns_[index] = (block.col(index));
-            }
-        }
-
-        virtual ~ParquetRowIterator() {
-            columns_.clear();
-        }
-
-        virtual DataRow &operator[](uint64_t index) override {
-            view_.index_ = index;
-            return view_;
-        }
-
-        virtual DataRow &next() override {
-            view_.index_++;
-            return view_;
-        }
-
-        uint64_t pos() override {
-            return view_.index_;
-        }
-
-        void translate(DataField &target, uint32_t col_index, uint32_t key) override {
-            columns_[col_index]->translate(target, key);
-        }
-    };
-
-    unique_ptr<DataRowIterator> ParquetBlock::rows() {
-        return unique_ptr<DataRowIterator>(new ParquetRowIterator(*this, columns_));
-    }
-
 #define COL_BUF_SIZE 8
     const int8_t WIDTH[8] = {1, sizeof(int32_t), sizeof(int64_t), 0, sizeof(float), sizeof(double), sizeof(ByteArray),
                              0};
@@ -603,7 +584,7 @@ namespace lqf {
         shared_ptr<ColumnReader> columnReader_;
         DataField dataField_;
         DataField rawField_;
-        int64_t read_counter_;
+        int64_t buffer_size_;
         int64_t pos_;
         int64_t bufpos_;
         uint8_t width_;
@@ -611,7 +592,7 @@ namespace lqf {
     public:
         ParquetColumnIterator(shared_ptr<ColumnReader> colReader)
                 : columnReader_(colReader), dataField_(), rawField_(),
-                  read_counter_(0), pos_(-1), bufpos_(-8) {
+                  buffer_size_(0), pos_(-1), bufpos_(-8) {
             buffer_ = (uint8_t *) malloc(sizeof(ByteArray) * COL_BUF_SIZE);
             width_ = WIDTH[columnReader_->type()];
             dataField_.size_ = SIZE[columnReader_->type()];
@@ -644,36 +625,115 @@ namespace lqf {
             return pos_;
         }
 
-        void translate(DataField &target, uint32_t key) override {
-            const uint8_t *dict = (const uint8_t *) columnReader_->dictionary();
-            target = (dict + key * width_);
+        const uint8_t *dict() {
+            return (const uint8_t *) columnReader_->dictionary();
         }
-
 
     protected:
         inline uint64_t *loadBuffer(uint64_t idx) {
-            if ((int64_t) idx < bufpos_ + COL_BUF_SIZE) {
+            if ((int64_t) idx < bufpos_ + buffer_size_) {
                 return (uint64_t *) (buffer_ + width_ * (idx - bufpos_));
             } else {
                 columnReader_->MoveTo(idx);
-                columnReader_->ReadBatch(COL_BUF_SIZE, nullptr, nullptr, buffer_, &read_counter_);
+                columnReader_->ReadBatch(COL_BUF_SIZE, nullptr, nullptr, buffer_, &buffer_size_);
                 bufpos_ = idx;
                 return (uint64_t *) buffer_;
             }
         }
 
         inline uint64_t *loadBufferRaw(uint64_t idx) {
-            if ((int64_t) idx < bufpos_ + COL_BUF_SIZE) {
+            if ((int64_t) idx < bufpos_ + buffer_size_) {
                 return (uint64_t *) (buffer_ + sizeof(int32_t) * (idx - bufpos_));
             } else {
                 columnReader_->MoveTo(idx);
-                columnReader_->ReadBatchRaw(COL_BUF_SIZE, reinterpret_cast<uint32_t *>(buffer_), &read_counter_);
+                columnReader_->ReadBatchRaw(COL_BUF_SIZE, reinterpret_cast<uint32_t *>(buffer_), &buffer_size_);
                 bufpos_ = idx;
 
                 return (uint64_t *) buffer_;
             }
         }
     };
+
+    class ParquetRowView : public DataRow {
+    protected:
+        vector<unique_ptr<ParquetColumnIterator>> &columns_;
+        uint64_t index_;
+        friend ParquetRowIterator;
+    public:
+        ParquetRowView(vector<unique_ptr<ParquetColumnIterator>> &cols) : columns_(cols), index_(-1) {}
+
+        virtual DataField &operator[](uint64_t colindex) override {
+            return (*(columns_[colindex]))[index_];
+        }
+
+        virtual DataField &operator()(uint64_t colindex) override {
+            return (*(columns_[colindex]))(index_);
+        }
+
+        unique_ptr<DataRow> snapshot() override {
+            return nullptr;
+        }
+    };
+
+    template<typename DTYPE>
+    shared_ptr<Bitmap> ParquetBlock::raw(uint32_t col_index, RawAccessor<DTYPE> *accessor) {
+        accessor->init(this->size());
+        auto pageReader = rowGroup_->GetColumnPageReader(col_index);
+        shared_ptr<Page> page = pageReader->NextPage();
+
+        if (page->type() == PageType::DICTIONARY_PAGE) {
+            Dictionary<DTYPE> dict(static_pointer_cast<DictionaryPage>(page));
+            accessor->dict(dict);
+        } else {
+            accessor->data((DataPage *) page.get());
+        }
+        while ((page = pageReader->NextPage())) {
+            accessor->data((DataPage *) page.get());
+        }
+        return accessor->result();
+    }
+
+    class ParquetRowIterator : public DataRowIterator {
+    private:
+        vector<unique_ptr<ParquetColumnIterator>> columns_;
+        ParquetRowView view_;
+    public:
+        ParquetRowIterator(ParquetBlock &block, uint64_t colindices)
+                : columns_(64 - __builtin_clzl(colindices)), view_(columns_) {
+            Bitset bitset(colindices);
+            while (bitset.hasNext()) {
+                auto index = bitset.next();
+                columns_[index] = unique_ptr<ParquetColumnIterator>(
+                        (ParquetColumnIterator *) (block.col(index).release()));
+            }
+        }
+
+        virtual ~ParquetRowIterator() {
+            columns_.clear();
+        }
+
+        virtual DataRow &operator[](uint64_t index) override {
+            view_.index_ = index;
+            return view_;
+        }
+
+        virtual DataRow &next() override {
+            view_.index_++;
+            return view_;
+        }
+
+        uint64_t pos() override {
+            return view_.index_;
+        }
+
+        const uint8_t *dict(uint32_t idx) override {
+            return columns_[idx]->dict();
+        }
+    };
+
+    unique_ptr<DataRowIterator> ParquetBlock::rows() {
+        return unique_ptr<DataRowIterator>(new ParquetRowIterator(*this, columns_));
+    }
 
     unique_ptr<ColumnIterator> ParquetBlock::col(uint32_t col_index) {
         return unique_ptr<ColumnIterator>(new ParquetColumnIterator(rowGroup_->Column(col_index)));

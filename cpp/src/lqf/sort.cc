@@ -10,16 +10,58 @@ using namespace std::placeholders;
 
 namespace lqf {
 
-    TopN::TopN(uint32_t n, function<bool(DataRow *, DataRow *)> comp)
-            : n_(n), comparator_(comp) {}
+    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp, bool vertical)
+            : comparator_(comp), vertical_(vertical) {}
+
+    shared_ptr<Table> SmallSort::sort(Table &table) {
+        auto output = MemTable::Make(table.colSize(), false);
+
+        auto block = make_shared<MemListBlock>();
+        auto container = &block->content();
+        table.blocks()->foreach([container](const shared_ptr<Block> &block) {
+            auto rows = block->rows();
+            auto block_size = block->size();
+            for (uint32_t i = 0; i < block_size; ++i) {
+                container->push_back(rows->next().snapshot().release());
+            }
+        });
+        std::sort(container->begin(), container->end(), comparator_);
+        output->append(block);
+        return output;
+    }
+
+    SnapshotSort::SnapshotSort(const vector<uint32_t> col_size,
+                               function<bool(DataRow *, DataRow *)> comp,
+                               function<unique_ptr<MemDataRow>(DataRow &)> snapshoter, bool vertical)
+            : col_size_(col_size), comparator_(comp), snapshoter_(snapshoter), vertical_(vertical) {}
+
+    shared_ptr<Table> SnapshotSort::sort(Table &input) {
+        auto memblock = make_shared<MemListBlock>();
+        auto row_cache = &(memblock->content());
+        input.blocks()->sequential()->foreach([this, row_cache](const shared_ptr<Block> &block) {
+            auto block_size = block->size();
+            auto rows = block->rows();
+            for (uint32_t i = 0; i < block_size; ++i) {
+                row_cache->push_back(snapshoter_(rows->next()).release());
+            }
+        });
+
+        std::sort(row_cache->begin(), row_cache->end(), comparator_);
+        auto resultTable = MemTable::Make(col_size_, vertical_);
+        resultTable->append(memblock);
+        return resultTable;
+    }
+
+    TopN::TopN(uint32_t n, function<bool(DataRow *, DataRow *)> comp, bool vertical)
+            : n_(n), comparator_(comp), vertical_(vertical) {}
 
     shared_ptr<Table> TopN::sort(Table &table) {
-        auto resultTable = MemTable::Make(table.colSize());
+        auto resultTable = MemTable::Make(table.colSize(), vertical_);
 
         vector<DataRow *> collector;
 
-        function<void(const shared_ptr<Block> &)> proc = bind(&TopN::sortBlock, this, &collector, resultTable.get(),
-                                                              _1);
+        function<void(const shared_ptr<Block> &)> proc =
+                bind(&TopN::sortBlock, this, &collector, resultTable.get(), _1);
         table.blocks()->foreach(proc);
 
         /// Make a final sort and fetch the top n
@@ -27,9 +69,11 @@ namespace lqf {
             std::sort(collector.begin(), collector.end(), comparator_);
         }
 
-        auto resultBlock = resultTable->allocate(n_);
+        auto result_size = std::min(n_, static_cast<uint32_t>(collector.size()));
+        auto resultBlock = resultTable->allocate(result_size);
         auto resultRows = resultBlock->rows();
-        for (uint32_t i = 0; i < n_; ++i) {
+
+        for (uint32_t i = 0; i < result_size; ++i) {
             (*resultRows)[i] = *(collector[i]);
             delete collector[i];
         }
@@ -54,37 +98,5 @@ namespace lqf {
         collector_lock_.unlock();
     }
 
-    SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp) : comparator_(comp) {}
 
-    shared_ptr<Table> SmallSort::sort(Table &table) {
-        const vector<uint32_t> &col_size = table.colSize();
-        vector<uint32_t> col_offset;
-        col_offset.push_back(0);
-        for (auto &i:col_size) {
-            col_offset.push_back(i + col_offset.back());
-        }
-
-        vector<DataRow *> sortingRows;
-
-        table.blocks()->foreach([&sortingRows](const shared_ptr<Block> &block) {
-            auto inputRows = block->rows();
-            uint32_t block_size = block->size();
-            for (uint32_t i = 0; i < block_size; ++i) {
-                sortingRows.push_back(inputRows->next().snapshot().release());
-            }
-        });
-
-        std::sort(sortingRows.begin(), sortingRows.end(), comparator_);
-
-        auto resultTable = MemTable::Make(table.colSize());
-        auto resultBlock = resultTable->allocate(sortingRows.size());
-        auto resultRows = resultBlock->rows();
-
-        auto num_rows = sortingRows.size();
-        for (uint32_t i = 0; i < num_rows; ++i) {
-            (*resultRows)[i] = *sortingRows[i];
-            delete sortingRows[i];
-        }
-        return resultTable;
-    }
 }

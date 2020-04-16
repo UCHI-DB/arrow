@@ -17,6 +17,8 @@
 namespace lqf {
     namespace tpch {
 
+        using namespace agg;
+        using namespace sboost;
         namespace q19 {
             ByteArray brand1("Brand#12");
             ByteArray brand2("Brand#23");
@@ -26,7 +28,6 @@ namespace lqf {
             ByteArray shipMode1("AIR");
             ByteArray shipMode2("REG AIR");
 
-            using namespace agg;
 
             class PriceField : public DoubleSum {
             public:
@@ -40,12 +41,11 @@ namespace lqf {
         using namespace q19;
 
         void executeQ19() {
-
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::PARTKEY, LineItem::QUANTITY,
-                                                                LineItem::SHIPMODE, LineItem::SHIPINSTRUCT});
+                                                                LineItem::SHIPMODE, LineItem::SHIPINSTRUCT,
+                                                                LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
             auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::BRAND, Part::CONTAINER, Part::SIZE});
 
-            using namespace sboost;
             ColFilter lineitemBaseFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPINSTRUCT,
                                                                              bind(&ByteArrayDictEq::build,
                                                                                   shipmentInst)),
@@ -55,7 +55,27 @@ namespace lqf {
                                                                                       return val == shipMode1 ||
                                                                                              val == shipMode2;
                                                                                   }))});
-            auto lineitemBase = FilterMat().mat(*lineitemBaseFilter.filter(*lineitem));
+
+            ColFilter lineitemFilter1({new SboostPredicate<Int32Type>(LineItem::QUANTITY,
+                                                                      bind(&Int32DictBetween::build, 1,
+                                                                           11))});
+            auto qtyLineitem1 = lineitemFilter1.filter(*lineitem);
+
+            ColFilter lineitemFilter2({new SboostPredicate<Int32Type>(LineItem::QUANTITY,
+                                                                      bind(&Int32DictBetween::build, 10, 20))});
+            auto qtyLineitem2 = lineitemFilter2.filter(*lineitem);
+
+            ColFilter lineitemFilter3({new SboostPredicate<Int32Type>(LineItem::QUANTITY,
+                                                                      bind(&Int32DictBetween::build, 20, 30))});
+            auto qtyLineitem3 = lineitemFilter3.filter(*lineitem);
+
+            FilterMat fmat;
+            auto lineitemBase = fmat.mat(*lineitemBaseFilter.filter(*lineitem));
+
+            FilterAnd fand;
+            auto validLineitem1 = fand.execute({qtyLineitem1.get(), lineitemBase.get()});
+            auto validLineitem2 = fand.execute({qtyLineitem2.get(), lineitemBase.get()});
+            auto validLineitem3 = fand.execute({qtyLineitem3.get(), lineitemBase.get()});
 
             ColFilter partFilter1(
                     {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand1)),
@@ -93,39 +113,24 @@ namespace lqf {
                                                                               }))});
             auto validPart3 = partFilter3.filter(*part);
 
-
-            ColFilter lineitemFilter1({new SboostPredicate<Int32Type>(LineItem::QUANTITY,
-                                                                      bind(&Int32DictBetween::build, 1,
-                                                                           11))});
-            auto validLineitem1 = lineitemFilter1.filter(*lineitemBase);
-
-            ColFilter lineitemFilter2({new SboostPredicate<Int32Type>(LineItem::QUANTITY,
-                                                                      bind(&Int32DictBetween::build, 10, 20))});
-            auto validLineitem2 = lineitemFilter2.filter(*lineitemBase);
-
-            ColFilter lineitemFilter3({new SboostPredicate<Int32Type>(LineItem::QUANTITY,
-                                                                      bind(&Int32DictBetween::build, 20, 30))});
-            auto validLineitem3 = lineitemFilter3.filter(*lineitemBase);
-
-
             HashFilterJoin itemOnPartJoin1(LineItem::PARTKEY, Part::PARTKEY);
-            validLineitem1 = itemOnPartJoin1.join(*validLineitem1, *validPart1);
+            auto itemWithPart1 = itemOnPartJoin1.join(*validLineitem1, *validPart1);
 
             HashFilterJoin itemOnPartJoin2(LineItem::PARTKEY, Part::PARTKEY);
-            validLineitem2 = itemOnPartJoin2.join(*validLineitem2, *validPart2);
+            auto itemWithPart2 = itemOnPartJoin2.join(*validLineitem2, *validPart2);
 
             HashFilterJoin itemOnPartJoin3(LineItem::PARTKEY, Part::PARTKEY);
-            validLineitem3 = itemOnPartJoin3.join(*validLineitem3, *validPart3);
+            auto itemWithPart3 = itemOnPartJoin3.join(*validLineitem3, *validPart3);
 
             FilterUnion funion;
-            auto unioneditem = funion.execute({validLineitem1.get(), validLineitem2.get(), validLineitem3.get()});
+            auto unioneditem = funion.execute({itemWithPart1.get(), itemWithPart2.get(), itemWithPart3.get()});
 
 
             SimpleAgg sumagg({1}, []() { return vector<AggField *>{new PriceField()}; });
             auto result = sumagg.agg(*unioneditem);
 
-            auto printer = Printer::Make(PBEGIN PD(0) PEND);
-            printer->print(*result);
+            Printer printer(PBEGIN PD(0) PEND);
+            printer.print(*result);
         }
     }
 }

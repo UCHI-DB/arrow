@@ -15,13 +15,14 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace agg;
+        using namespace sboost;
         namespace q21 {
             class ItemJoin : public Join {
             protected:
                 unordered_set<int32_t> denied_;
                 unordered_map<int32_t, pair<int32_t, int32_t>> container_;
                 mutex map_lock_;
-                unordered_map<int32_t, mutex> order_locks_;
 
             public:
                 shared_ptr<Table> join(Table &item2, Table &item1) {
@@ -70,7 +71,7 @@ namespace lqf {
                                 map_lock_.lock();
                                 container_.erase(ite);
                                 map_lock_.unlock();
-                                for (int i = 0; i < count; ++i) {
+                                for (int j = 0; j < count; ++j) {
                                     DataRow &row = (*write_rows)[counter++];
                                     row[0] = orderkey;
                                     row[1] = found;
@@ -79,7 +80,6 @@ namespace lqf {
                         }
                         output_block->resize(counter);
                     });
-
                     return output;
                 }
             };
@@ -96,49 +96,45 @@ namespace lqf {
                                                 LineItem::COMMITDATE});
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY});
 
-            using namespace sboost;
-
 
             ColFilter orderFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERSTATUS,
                                                                      bind(&ByteArrayDictEq::build, status)));
             auto validorder = orderFilter.filter(*order);
 
+            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY);
+            auto l1withorder = lineWithOrderJoin.join(*lineitem, *validorder);
+
             RowFilter linedateFilter([](DataRow &row) {
                 return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
             });
-            auto l1 = linedateFilter.filter(*lineitem);
-
-            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY);
-            l1 = lineWithOrderJoin.join(*l1, *validorder);
-
-            FilterMat mat;
-            auto matl1 = mat.mat(*l1);
+            auto l1 = linedateFilter.filter(*l1withorder);
 
             ItemJoin itemExistJoin;
             // ORDERKEY, SUPPKEY
-            l1 = itemExistJoin.join(*lineitem, *l1);
+            auto ordersuppkey = itemExistJoin.join(*lineitem, *l1);
 
-            using namespace agg;
             HashAgg countAgg(vector<uint32_t>{1, 1}, {AGI(1)}, []() { return vector<AggField *>{new Count()}; },
                              COL_HASHER(1));
             countAgg.useVertical();
-            auto agged = countAgg.agg(*l1);
+            // SUPPKEY, COUNT
+            auto agged = countAgg.agg(*ordersuppkey);
 
             ColFilter supplierNationFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
                                                                           bind(&Int32DictEq::build, 3)));
             auto validSupplier = supplierNationFilter.filter(*supplier);
 
             HashJoin lineitemSupplierFilter(0, Supplier::SUPPKEY, new RowBuilder({JL(1), JRS(Supplier::NAME)}));
+            // COUNT SUPPNAME
             auto supplierWithCount = lineitemSupplierFilter.join(*agged, *validSupplier);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SIGE(1) || (SIE(1) && SBLE(1));
+                return SIGE(0) || (SIE(0) && SBLE(1));
             };
             TopN topn(100, comparator);
             auto sorted = topn.sort(*supplierWithCount);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PB(1) PEND);
-            printer->print(*sorted);
+            Printer printer(PBEGIN PI(0) PB(1) PEND);
+            printer.print(*sorted);
         }
     }
 }

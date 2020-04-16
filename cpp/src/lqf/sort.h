@@ -22,15 +22,30 @@ using namespace std;
 
 namespace lqf {
 
+
     /**
-     * This sort will copy data twice, once from block to memory buffer, once from memory buffer to sorted buffer.
-     * Therefore, it is not supposed to be used on large amount of data.
+     *
      */
     class SmallSort {
-    private:
+    protected:
         function<bool(DataRow *, DataRow *)> comparator_;
+        bool vertical_ = false;
+
     public:
-        SmallSort(function<bool(DataRow *, DataRow *)>);
+        SmallSort(function<bool(DataRow *, DataRow *)>, bool vertical = false);
+
+        shared_ptr<Table> sort(Table &);
+    };
+
+    class SnapshotSort {
+    protected:
+        vector<uint32_t> col_size_;
+        function<bool(DataRow *, DataRow *)> comparator_;
+        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter_;
+        bool vertical_;
+    public:
+        SnapshotSort(const vector<uint32_t>, function<bool(DataRow *, DataRow *)>,
+                     function<unique_ptr<MemDataRow>(DataRow &)>,bool vertical = false);
 
         shared_ptr<Table> sort(Table &);
     };
@@ -40,8 +55,9 @@ namespace lqf {
         uint32_t n_;
         mutex collector_lock_;
         function<bool(DataRow *, DataRow *)> comparator_;
+        bool vertical_ = false;
     public:
-        TopN(uint32_t, function<bool(DataRow *, DataRow *)>);
+        TopN(uint32_t, function<bool(DataRow *, DataRow *)>, bool vertical = false);
 
         shared_ptr<Table> sort(Table &);
 

@@ -185,8 +185,8 @@ TEST(MemBlockTest, RowCopy) {
 }
 
 TEST(MemBlockTest, Mask) {
-    MemBlock mb(100, 5);
-    auto roww = mb.rows();
+    shared_ptr<MemBlock> mbp = make_shared<MemBlock>(100, 5);
+    auto roww = mbp->rows();
     for (int i = 0; i < 100; ++i) {
         (*roww)[i][0] = i;
     }
@@ -194,14 +194,14 @@ TEST(MemBlockTest, Mask) {
     bitmap->put(4);
     bitmap->put(20);
     bitmap->put(95);
-    auto masked = mb.mask(bitmap);
+    auto masked = mbp->mask(bitmap);
 
     EXPECT_EQ(3, masked->size());
     auto rows = masked->rows();
 
-    EXPECT_EQ(4, (*rows)[0][0].asInt());
-    EXPECT_EQ(20, (*rows)[1][0].asInt());
-    EXPECT_EQ(95, (*rows)[2][0].asInt());
+    EXPECT_EQ(4, rows->next()[0].asInt());
+    EXPECT_EQ(20, rows->next()[0].asInt());
+    EXPECT_EQ(95, rows->next()[0].asInt());
 }
 
 TEST(MemvBlockTest, Column) {
@@ -357,7 +357,7 @@ protected:
     shared_ptr<RowGroupReader> rowGroup_;
 public:
     virtual void SetUp() override {
-        fileReader_ = ParquetFileReader::OpenFile("lineitem");
+        fileReader_ = ParquetFileReader::OpenFile("testres/lineitem");
         rowGroup_ = fileReader_->RowGroup(0);
         return;
     }
@@ -578,11 +578,23 @@ TEST_F(ParquetBlockTest, RawAndDict) {
 }
 
 TEST(ParquetTableTest, LoadDictionary) {
+    auto ptable = ParquetTable::Open("testres/lineitem", (1 << 15) - 1);
+    auto dictionary = ptable->LoadDictionary<parquet::ByteArrayType>(8);
 
+    EXPECT_EQ(dictionary->size(), 3);
+    EXPECT_EQ((*dictionary)[0], ByteArray("A"));
+    EXPECT_EQ((*dictionary)[1], ByteArray("N"));
+    EXPECT_EQ((*dictionary)[2], ByteArray("R"));
+
+    auto dictionary2 = ptable->LoadDictionary<parquet::ByteArrayType>(9);
+
+    EXPECT_EQ(dictionary2->size(), 2);
+    EXPECT_EQ((*dictionary2)[0], ByteArray("F"));
+    EXPECT_EQ((*dictionary2)[1], ByteArray("O"));
 }
 
 TEST(MaskedTableTest, Create) {
-    auto ptable = ParquetTable::Open("lineitem", 0x7);
+    auto ptable = ParquetTable::Open("testres/lineitem", 0x7);
 
     unordered_map<uint32_t, shared_ptr<Bitmap>> masks;
     masks[0] = make_shared<SimpleBitmap>(1000);
@@ -613,7 +625,7 @@ TEST(MemTableTest, Create) {
 }
 
 TEST(TableViewTest, Create) {
-    auto parquetTable = ParquetTable::Open("lineitem");
+    auto parquetTable = ParquetTable::Open("testres/lineitem");
     auto blocks = parquetTable->blocks();
     TableView tableView(parquetTable->colSize(), blocks);
 

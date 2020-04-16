@@ -16,6 +16,8 @@
 
 namespace lqf {
     namespace tpch {
+        using namespace agg;
+        using namespace sboost;
         namespace q14 {
 
             ByteArray dateFrom("1995-09-01");
@@ -24,7 +26,7 @@ namespace lqf {
 
             class ItemBuilder : public RowBuilder {
             public:
-                ItemBuilder() : RowBuilder({JL(LineItem::EXTENDEDPRICE)}, false) {}
+                ItemBuilder() : RowBuilder({JL(LineItem::EXTENDEDPRICE), JL(LineItem::EXTENDEDPRICE)}, false) {}
 
                 void build(DataRow &target, DataRow &left, DataRow &right, int key) {
                     target[0] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
@@ -46,7 +48,6 @@ namespace lqf {
                                                 LineItem::DISCOUNT});
             auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE});
 
-            using namespace sboost;
             function<bool(const ByteArray &)> filter = [](const ByteArray &val) {
                 const char *begin = (const char *) val.ptr;
                 return lqf::util::strnstr(begin, prefix, val.len) == begin;
@@ -60,18 +61,16 @@ namespace lqf {
                                                                                       dateFrom, dateTo))});
             auto validLineitem = lineitemShipdateFilter.filter(*lineitem);
 
-
             HashJoin join(LineItem::PARTKEY, Part::PARTKEY, new ItemBuilder());
             join.useOuter();
             auto lineitemWithPartType = join.join(*validLineitem, *validPart);
 
-            using namespace agg;
-            SimpleAgg simpleAgg(vector<uint32_t>(1, 1),
+            SimpleAgg simpleAgg(vector<uint32_t>{1, 1},
                                 []() { return vector<AggField *>{new DoubleSum(0), new DoubleSum(1)}; });
             auto result = simpleAgg.agg(*lineitemWithPartType);
 
-            auto printer = Printer::Make(PBEGIN PD(0) PD(1) PEND);
-            printer->print(*result);
+            Printer printer(PBEGIN PD(0) PD(1) PEND);
+            printer.print(*result);
         }
 
     }

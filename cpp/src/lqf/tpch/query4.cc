@@ -23,14 +23,15 @@ namespace lqf {
 
         void executeQ4() {
 
-            auto orderTable = ParquetTable::Open(Orders::path);
-            auto lineitemTable = ParquetTable::Open(LineItem::path);
+            auto orderTable = ParquetTable::Open(Orders::path,
+                                                 {Orders::ORDERDATE, Orders::ORDERKEY, Orders::ORDERPRIORITY});
+            auto lineitemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::ORDERKEY, LineItem::RECEIPTDATE, LineItem::COMMITDATE});
 
             ColFilter orderFilter(
                     {new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
                                                         bind(&ByteArrayDictRangele::build, dateFrom, dateTo))});
-            FilterMat filterMat;
-            auto filteredOrderTable = filterMat.mat(*orderFilter.filter(*orderTable));
+            auto filteredOrderTable = orderFilter.filter(*orderTable);
 
             RowFilter lineItemFilter([](DataRow &datarow) {
                 return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
@@ -44,20 +45,22 @@ namespace lqf {
                 return row(Orders::ORDERPRIORITY).asInt();
             };
 
-            HashDictAgg agg(vector<uint32_t>{2, 1}, {AGR(Orders::ORDERPRIORITY)}, []() {
+            HashAgg agg(vector<uint32_t>{1, 1}, {AGR(Orders::ORDERPRIORITY)}, []() {
                 return vector<AggField *>{new agg::Count()};
-            }, indexer, {pair<uint32_t, uint32_t>(0, Orders::ORDERPRIORITY)});
+            }, indexer);
 
             auto agged = agg.agg(*existOrderTable);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return (*a)[0].asByteArray() < (*b)[0].asByteArray();
+                return (*a)[0].asInt() < (*b)[0].asInt();
             };
             SmallSort sort(comparator);
             auto sorted = sort.sort(*agged);
 
-            auto printer = Printer::Make(PBEGIN PB(0) PI(1) PEND);
-            printer->print(*sorted);
+            auto opdict = orderTable->LoadDictionary<ByteArrayType>(Orders::ORDERPRIORITY);
+            auto opdictp = opdict.get();
+            Printer printer(PBEGIN PDICT(opdictp, 0) PI(1) PEND);
+            printer.print(*sorted);
         }
     }
 }

@@ -16,6 +16,7 @@
 namespace lqf {
     namespace tpch {
         using namespace agg;
+        using namespace sboost;
 
         namespace q15 {
 
@@ -41,13 +42,11 @@ namespace lqf {
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NAME, Supplier::ADDRESS,
                                                                 Supplier::PHONE});
 
-            using namespace sboost;
             ColFilter lineitemDateFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
                                                                              bind(&ByteArrayDictRangele::build,
                                                                                   dateFrom, dateTo))});
             auto filteredLineitem = lineitemDateFilter.filter(*lineitem);
 
-            using namespace agg;
 
             HashAgg suppkeyAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::SUPPKEY)},
                                []() { return vector<AggField *>{new PriceField()}; },
@@ -55,8 +54,8 @@ namespace lqf {
             // SUPPKEY, REVENUE
             auto revenueView = suppkeyAgg.agg(*filteredLineitem);
 
-            HashAgg maxAgg(vector<uint32_t>{1, 1}, {},
-                           []() { return vector<AggField *>{new DoubleRecordingMax(1, 0)}; }, COL_HASHER(0));
+            SimpleAgg maxAgg(vector<uint32_t>{1, 1},
+                             []() { return vector<AggField *>{new DoubleRecordingMax(1, 0)}; });
             maxAgg.useRecording();
             // SUPPKEY, REV
             auto maxRevenue = maxAgg.agg(*revenueView);
@@ -65,8 +64,11 @@ namespace lqf {
                                                                 JLS(Supplier::PHONE), JR(1)}, true, false));
             auto supplierWithRev = join.join(*supplier, *maxRevenue);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PB(1) PB(2) PB(3) PD(4) PEND);
-            printer->print(*supplierWithRev);
+            SmallSort sort([](DataRow *a, DataRow *b) { return SILE(0); });
+            auto sorted = sort.sort(*supplierWithRev);
+
+            Printer printer(PBEGIN PI(0) PB(1) PB(2) PB(3) PD(4) PEND);
+            printer.print(*sorted);
         }
     }
 }

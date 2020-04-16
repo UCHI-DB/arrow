@@ -16,7 +16,9 @@
 namespace lqf {
     namespace tpch {
 
-        namespace q8{
+        using namespace agg;
+        using namespace sboost;
+        namespace q8 {
 
             ByteArray regionName("AMERICA");
             ByteArray dateFrom("1995-01-01");
@@ -37,11 +39,11 @@ namespace lqf {
                 }
             };
 
-            class NationFilterField : public agg::Sum<double, agg::AsDouble> {
+            class NationFilterField : public DoubleSum {
             protected:
                 int nationKey_;
             public:
-                NationFilterField(int nationKey) : agg::DoubleSum(1), nationKey_(nationKey) {}
+                NationFilterField(int nationKey) : DoubleSum(1), nationKey_(nationKey) {}
 
                 void reduce(DataRow &input) override {
                     *value_ += (input[2].asInt() == nationKey_) ? input[1].asDouble() : 0;
@@ -50,12 +52,13 @@ namespace lqf {
         }
 
         using namespace q8;
+
         void executeQ8() {
 
             auto region = ParquetTable::Open(Region::path, {Region::NAME, Region::REGIONKEY});
-            auto nation = ParquetTable::Open(Nation::path, {Nation::REGIONKEY, Nation::NATIONKEY});
+            auto nation = ParquetTable::Open(Nation::path, {Nation::REGIONKEY, Nation::NAME, Nation::NATIONKEY});
             auto customer = ParquetTable::Open(Customer::path, {Customer::NATIONKEY, Customer::CUSTKEY});
-            auto order = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERDATE});
+            auto order = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERDATE, Orders::ORDERKEY});
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::ORDERKEY, LineItem::PARTKEY, LineItem::DISCOUNT,
                                                 LineItem::EXTENDEDPRICE, LineItem::SUPPKEY});
@@ -74,7 +77,6 @@ namespace lqf {
             HashFilterJoin customerFilter(Customer::NATIONKEY, Nation::NATIONKEY);
             auto validCust = customerFilter.join(*customer, *validNation);
 
-            using namespace sboost;
             ColFilter orderDateFilter({new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
                                                                           bind(&ByteArrayDictBetween::build, dateFrom,
                                                                                dateTo))});
@@ -92,25 +94,21 @@ namespace lqf {
 
 
             HashJoin orderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new OrderJoinBuilder());
+            // YEAR PRICE SUPPKEY
             auto itemWithOrder = orderJoin.join(*validLineitem, *validOrder);
 
             HashColumnJoin itemWithSupplierJoin(2, Supplier::SUPPKEY,
                                                 new ColumnBuilder({JL(0), JL(1), JR(Supplier::NATIONKEY)}));
+            // YEAR PRICE NATIONKEY
             auto result = itemWithSupplierJoin.join(*itemWithOrder, *supplier);
-
-            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
-                return input[0].asInt();
-            };
 
             int nationKey2 = KeyFinder(Nation::NATIONKEY, [=](DataRow &row) {
                 return row[Nation::NAME].asByteArray() == nationName;
             }).find(*nation);
-
-
-            HashAgg agg(vector<uint32_t>({1, 1}), {AGI(0)},
+            HashAgg agg(vector<uint32_t>({1, 1, 1}), {AGI(0)},
                         [=]() {
                             return vector<AggField *>({new agg::DoubleSum(1), new NationFilterField(nationKey2)});
-                        }, hasher);
+                        }, COL_HASHER(0));
             result = agg.agg(*result);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -119,8 +117,25 @@ namespace lqf {
             SmallSort sort(comparator);
             auto sorted = sort.sort(*result);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PD(1) PD(2) PEND);
-            printer->print(*sorted);
+            Printer printer(PBEGIN PI(0) PD(1) PD(2) PEND);
+            printer.print(*sorted);
+        }
+
+        void executeQ8Debug() {
+            auto order = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERDATE, Orders::ORDERKEY});
+
+            ColFilter orderDateFilter({new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
+                                                                          bind(&ByteArrayDictBetween::build, dateFrom,
+                                                                               dateTo))});
+            ColFilter orderDateSimpleFilter(new SimplePredicate(Orders::ORDERDATE, [](const DataField &field) {
+                auto val = field.asByteArray();
+                return (val < dateTo && val > dateFrom) || val == dateTo || val == dateFrom;
+            }));
+            auto validOrder = orderDateFilter.filter(*order);
+
+            Printer printer(PBEGIN PI(Orders::ORDERKEY) PB(Orders::ORDERDATE) PEND);
+//            printer.print(*order);
+            printer.print(*validOrder);
         }
     }
 }

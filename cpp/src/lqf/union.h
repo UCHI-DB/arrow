@@ -15,5 +15,12 @@ namespace lqf {
 
         shared_ptr<Table> execute(initializer_list<Table *>);
     };
+
+    class FilterAnd {
+    public:
+        FilterAnd();
+
+        shared_ptr<Table> execute(initializer_list<Table*>);
+    };
 }
 #endif //ARROW_UNION_H

@@ -59,7 +59,6 @@ namespace lqf {
 
             HashJoin join(Customer::CUSTKEY, 0, new CustCountBuilder());
             join.useOuter();
-
             // CUSTKEY, COUNT
             auto custCount = join.join(*customer, *orderCount);
 
@@ -69,16 +68,14 @@ namespace lqf {
             auto result = countAgg.agg(*custCount);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SILE(1) || (SIE(1) && SILE(0));
+                return SIGE(1) || (SIE(1) && SIGE(0));
             };
 
             SmallSort sort(comparator);
+            auto sorted = sort.sort(*result);
 
-            result = sort.sort(*result);
-
-            auto printer = Printer::Make(PBEGIN PI(0) PI(1) PEND);
-            printer->
-                    print(*result);
+            Printer printer(PBEGIN PI(0) PI(1) PEND);
+            printer.print(*sorted);
         }
     }
 }

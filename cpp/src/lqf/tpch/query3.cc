@@ -78,15 +78,19 @@ namespace lqf {
 //            orderItemAgg.useVertical();
             auto result = orderItemAgg.agg(*orderItemTable);
 
-
             auto comparator = [](DataRow *a, DataRow *b) {
                 return SDGE(3) || (SDE(3) && SILE(2));
             };
             TopN sort(10, comparator);
             result = sort.sort(*result);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
-            printer->print(*result);
+            auto orderdateDict = orderTable->LoadDictionary<ByteArrayType>(Orders::ORDERDATE);
+            auto shippriorityDict = orderTable->LoadDictionary<ByteArrayType>(Orders::SHIPPRIORITY);
+            auto oddictp = orderdateDict.get();
+            auto spdictp = shippriorityDict.get();
+            Printer printer(PBEGIN PI(0) PDICT(oddictp, 1) PDICT(spdictp,2) PD(3) PEND);
+
+            printer.print(*result);
         }
     }
 }

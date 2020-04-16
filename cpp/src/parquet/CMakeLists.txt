@@ -339,6 +339,10 @@ add_parquet_test(arrow-test
         arrow/arrow_schema_test.cc
         test_util.cc)
 
+add_parquet_test(skip-test
+        SOURCES
+        column_reader_skip_test.cc)
+
 if (PARQUET_REQUIRE_ENCRYPTION)
     add_parquet_test(encryption-test
             SOURCES

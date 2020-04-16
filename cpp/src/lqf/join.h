@@ -59,7 +59,7 @@ namespace lqf {
 
             inline vector<uint32_t> &rightColOffset() { return right_col_offsets_; }
 
-            unique_ptr<MemDataRow> snapshot(DataRow &);
+            virtual unique_ptr<MemDataRow> snapshot(DataRow &);
         };
 
         class RowBuilder : public JoinBuilder {

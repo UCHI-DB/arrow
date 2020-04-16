@@ -20,25 +20,6 @@ namespace lqf {
     namespace tpch {
         namespace q1 {
             ByteArray dateFrom("1998-09-01");
-        }
-
-        using namespace q1;
-
-        void executeQ1() {
-            auto lineItemTable = ParquetTable::Open(LineItem::path,
-                                                    {LineItem::SHIPDATE, LineItem::QUANTITY, LineItem::EXTENDEDPRICE,
-                                                     LineItem::DISCOUNT, LineItem::TAX, LineItem::RETURNFLAG,
-                                                     LineItem::LINESTATUS});
-
-
-            // Use SBoost Filter
-            ColFilter colFilter(
-                    {new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))});
-            auto filtered = colFilter.filter(*lineItemTable);
-
-            function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
-                return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
-            };
 
             class Field3 : public DoubleSum {
             public:
@@ -61,6 +42,27 @@ namespace lqf {
                 }
             };
 
+        }
+
+        using namespace q1;
+
+        void executeQ1() {
+            auto lineItemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::SHIPDATE, LineItem::QUANTITY, LineItem::EXTENDEDPRICE,
+                                                     LineItem::DISCOUNT, LineItem::TAX, LineItem::RETURNFLAG,
+                                                     LineItem::LINESTATUS});
+
+
+            // Use SBoost Filter
+            ColFilter colFilter(
+                    {new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))});
+            auto filtered = colFilter.filter(*lineItemTable);
+
+            function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
+                return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
+            };
+
+
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{
                         new IntSum(LineItem::QUANTITY),
@@ -82,7 +84,7 @@ namespace lqf {
             SmallSort sort(SORTER2(0, 1));
             auto sorted = sort.sort(*agged);
 
-            auto printer = Printer::Make(PBEGIN PI(0)
+            Printer printer(PBEGIN PI(0)
                     PI(1)
                     PI(2)
                     PD(3)
@@ -93,7 +95,7 @@ namespace lqf {
                     PD(8)
                     PI(9)
             PEND);
-            printer->print(*sorted);
+            printer.print(*sorted);
         }
     }
 }

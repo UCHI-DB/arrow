@@ -16,6 +16,11 @@
 
 namespace lqf {
     namespace tpch {
+
+        using namespace sboost;
+        using namespace powerjoin;
+        using namespace agg;
+
         namespace q20 {
             ByteArray dateFrom("1994-01-01");
             ByteArray dateTo("1995-01-01");
@@ -31,12 +36,14 @@ namespace lqf {
                                                {LineItem::QUANTITY, LineItem::PARTKEY, LineItem::SUPPKEY,
                                                 LineItem::SHIPDATE});
             auto part = ParquetTable::Open(Part::path, {Part::NAME, Part::PARTKEY});
-            auto partsupp = ParquetTable::Open(PartSupp::path, {PartSupp::PARTKEY, PartSupp::SUPPKEY});
+            auto partsupp = ParquetTable::Open(PartSupp::path,
+                                               {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::AVAILQTY});
 
-            using namespace sboost;
+            FilterMat fmat;
+
             ColFilter suppFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
                                                                 bind(&Int32DictEq::build, 3)));
-            auto validSupplier = FilterMat().mat(*suppFilter.filter(*supplier));
+            auto validSupplier = fmat.mat(*suppFilter.filter(*supplier));
 
             ColFilter partFilter(
                     new SimplePredicate(Part::NAME, [](const DataField &field) {
@@ -50,57 +57,60 @@ namespace lqf {
             auto validps = partfilterPs.join(*partsupp, *validpart);
 
             HashFilterJoin suppFilterPs(PartSupp::SUPPKEY, Supplier::SUPPKEY);
-            validps = suppFilterPs.join(*validps, *validSupplier);
+            auto validpsWithSupp = suppFilterPs.join(*validps, *validSupplier);
+            auto matPs = fmat.mat(*validpsWithSupp);
 
-            function < int64_t(DataRow & ) > key_ext = [](DataRow &input) {
+            function<int64_t(DataRow &)> key_ext = [](DataRow &input) {
                 return (static_cast<int64_t>(input[0].asInt()) << 32) +
                        input[1].asInt();
             };
-
-            FilterMat psMat;
-            validps = psMat.mat(*validps);
 
             ColFilter lineitemFilter(new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
                                                                         bind(ByteArrayDictRangele::build, dateFrom,
                                                                              dateTo)));
             auto validLineitem = lineitemFilter.filter(*lineitem);
 
-            using namespace powerjoin;
-            function < int64_t(DataRow & ) > key_ext_1 = [](DataRow &input) {
+            function<int64_t(DataRow &)> key_ext_1 = [](DataRow &input) {
                 return (static_cast<int64_t>(input[LineItem::PARTKEY].asInt()) << 32) +
                        input[LineItem::SUPPKEY].asInt();
             };
 
             PowerHashFilterJoin psFilterItem(key_ext_1, key_ext);
-            validLineitem = psFilterItem.join(*validLineitem, *validps);
+            auto lineitemWithPs = psFilterItem.join(*validLineitem, *matPs);
 
-            using namespace agg;
-            HashAgg lineitemQuanAgg(vector < uint32_t > {1, 1, 1}, {AGI(LineItem::PARTKEY), AGI(LineItem::SUPPKEY)},
-                                    []() { return vector < AggField * > {new IntSum(LineItem::QUANTITY)}; },
+            HashAgg lineitemQuanAgg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::PARTKEY), AGI(LineItem::SUPPKEY)},
+                                    []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; },
                                     COL_HASHER2(LineItem::PARTKEY, LineItem::SUPPKEY));
             // PARTKEY SUPPKEY SUM(QUANTITY)
-            auto agglineitem = lineitemQuanAgg.agg(*validLineitem);
+            auto agglineitem = lineitemQuanAgg.agg(*lineitemWithPs);
 
-            PowerHashJoin psFilterItem2(key_ext, key_ext, new RowBuilder({JL(1)}, false),
+            PowerHashJoin psFilterItem2(key_ext, key_ext, new RowBuilder({JL(1), JR(2)}, false),
                                         [](DataRow &left, DataRow &right) {
-                                            return left[2].asInt() > right[2].asInt() * 0.5;
+                                            return left[PartSupp::AVAILQTY].asInt() > right[0].asInt() * 0.5;
                                         });
             // SUPPKEY
-            auto suppkeys = psFilterItem2.join(*validps, *agglineitem);
+            auto suppkeys = psFilterItem2.join(*matPs, *agglineitem);
 
-            HashFilterJoin finalFilter(0, 0);
+            HashFilterJoin finalFilter(Supplier::SUPPKEY, 0);
             auto supplierResult = finalFilter.join(*validSupplier, *suppkeys);
 
-            function<bool(DataRow * , DataRow * )> comparator = [](DataRow *a, DataRow *b) {
+            vector<uint32_t> col_size{2, 2};
+            vector<uint32_t> col_offset{0, 2, 4};
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SBLE(0);
             };
-            vector <uint32_t> snapshot{0, 2, 4};
+            function<unique_ptr<MemDataRow>(DataRow &)> snapshoter = [&col_offset](DataRow &a) {
+                MemDataRow *row = new MemDataRow(col_offset);
+                (*row)[0] = a[Supplier::NAME].asByteArray();
+                (*row)[1] = a[Supplier::ADDRESS].asByteArray();
+                return unique_ptr<MemDataRow>(row);
+            };
+            SnapshotSort sort(col_size, comparator, snapshoter);
+            auto sorted = sort.sort(*supplierResult);
 
-            SmallSort sort(comparator);
-            supplierResult = sort.sort(*supplierResult);
-
-            auto printer = Printer::Make(PBEGIN PB(0) PB(1) PEND);
-            printer->print(*supplierResult);
+            Printer printer(PBEGIN PB(0) PB(1) PEND);
+            printer.print(*sorted);
         }
     }
 }

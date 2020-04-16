@@ -371,15 +371,13 @@ namespace lqf {
                                function<unique_ptr<AggReducer>(DataRow &)> headerInit)
             : HashCore(hasher, headerInit) {}
 
-    void HashDictCore::translate(vector<pair<uint32_t, uint32_t>> &need_trans,
-                                 function<void(DataField &, uint32_t, uint32_t)> translator) {
+    void HashDictCore::translate(vector<pair<uint32_t, const uint8_t *>> &need_trans) {
         for (auto &reducer: container_) {
             auto &storage = reducer.second->storage();
             for (auto &field_pair: need_trans) {
-                DataField &field = storage[field_pair.second];
-                int32_t key = storage[field_pair.second].asInt();
-                translator(field, field_pair.first, key);
-                continue;
+                DataField &field = storage[field_pair.first];
+                int32_t key = field.asInt();
+                field = field_pair.second + key * (field.size_ << 3);
             }
             // Need a new key, temporarily just merge everything together
             stringstream keymaker;
@@ -441,6 +439,32 @@ namespace lqf {
             block->resize(counter);
     }
 
+    template<typename CORE>
+    DictAgg<CORE>::DictAgg(const vector<uint32_t> &col_size, initializer_list<pair<uint32_t, uint32_t>> need_trans)
+            : Agg<CORE>(col_size), need_trans_(need_trans) {}
+
+    using namespace std::placeholders;
+
+    template<typename CORE>
+    unique_ptr<CORE> DictAgg<CORE>::processBlock(const shared_ptr<Block> &block) {
+        auto rows = block->rows();
+        auto core = this->makeCore();
+        uint64_t blockSize = block->size();
+
+        for (uint32_t i = 0; i < blockSize; ++i) {
+            core->consume(rows->next());
+        }
+
+        vector<pair<uint32_t, const uint8_t *>> dicts;
+        for (auto &nt_pair: need_trans_) {
+            dicts.push_back(pair<uint32_t, const uint8_t *>(nt_pair.first, rows->dict(nt_pair.second)));
+        }
+
+        core->translate(dicts);
+
+        return core;
+    }
+
     HashDictAgg::HashDictAgg(const vector<uint32_t> &col_size, const initializer_list<int32_t> &header_fields,
                              function<vector<AggField *>()> agg_fields,
                              function<uint64_t(DataRow &)> hasher,
@@ -491,25 +515,27 @@ namespace lqf {
         uint32_t counter = 0;
         uint32_t remain = size;
         for (auto &item: container_) {
-            uint32_t item_size = item->size();
-            if (__builtin_expect(item_size > remain, 0)) {
-                remain += size;
-                size *= 2;
-                block->resize(size);
-            }
-
-            uint32_t written = 0;
-            for (uint32_t i = 0; i < item_size; ++i) {
-                item->dump(buffer);
-                if (__builtin_expect(!pred || pred(buffer), 1)) {
-                    DataRow &nextrow = wit->next();
-                    // Copy data
-                    nextrow = buffer;
-                    ++written;
+            if (item) {
+                uint32_t item_size = item->size();
+                if (__builtin_expect(item_size > remain, 0)) {
+                    remain += size;
+                    size *= 2;
+                    block->resize(size);
                 }
+
+                uint32_t written = 0;
+                for (uint32_t i = 0; i < item_size; ++i) {
+                    item->dump(buffer);
+                    if (__builtin_expect(!pred || pred(buffer), 1)) {
+                        DataRow &nextrow = wit->next();
+                        // Copy data
+                        nextrow = buffer;
+                        ++written;
+                    }
+                }
+                counter += written;
+                remain -= written;
             }
-            counter += written;
-            remain -= written;
         }
         if (size != counter)
             block->resize(counter);
@@ -526,7 +552,13 @@ namespace lqf {
     }
 
     void SimpleCore::reduce(SimpleCore &another) {
-        reducer_->merge(*(another.reducer_));
+        if (another.reducer_) {
+            if (reducer_) {
+                reducer_->merge(*(another.reducer_));
+            } else {
+                reducer_= move(another.reducer_);
+            }
+        }
     }
 
     void SimpleCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
@@ -599,26 +631,6 @@ namespace lqf {
         predicate_ = pred;
     }
 
-    template<typename CORE>
-    DictAgg<CORE>::DictAgg(const vector<uint32_t> &col_size, initializer_list<pair<uint32_t, uint32_t>> need_trans)
-            : Agg<CORE>(col_size), need_trans_(need_trans) {}
-
-    using namespace std::placeholders;
-
-    template<typename CORE>
-    unique_ptr<CORE> DictAgg<CORE>::processBlock(const shared_ptr<Block> &block) {
-        auto rows = block->rows();
-        auto core = this->makeCore();
-        uint64_t blockSize = block->size();
-
-        for (uint32_t i = 0; i < blockSize; ++i) {
-            core->consume(rows->next());
-        }
-        auto translator = bind(&DataRowIterator::translate, rows.get(), _1, _2, _3);
-        core->translate(need_trans_, translator);
-
-        return core;
-    }
 
     CoreMaker::CoreMaker(const vector<uint32_t> &output_col_size, const initializer_list<int32_t> &header_fields,
                          function<vector<AggField *>()> agg_fields)

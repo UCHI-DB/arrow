@@ -232,7 +232,7 @@ namespace lqf {
     protected:
         vector<uint32_t> output_col_size_;
         bool vertical_;
-        function<bool(DataRow & )> predicate_;
+        function<bool(DataRow &)> predicate_;
 
         virtual unique_ptr<CORE> processBlock(const shared_ptr<Block> &block);
 
@@ -245,7 +245,7 @@ namespace lqf {
 
         void useVertical();
 
-        void setPredicate(function<bool(DataRow & )>);
+        void setPredicate(function<bool(DataRow &)>);
     };
 
     template<typename CORE>
@@ -273,7 +273,7 @@ namespace lqf {
 
         function<vector<AggField *>()> agg_fields_;
 
-        function<unique_ptr<AggReducer>(DataRow & )> headerInit();
+        function<unique_ptr<AggReducer>(DataRow &)> headerInit();
 
     public:
         CoreMaker(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>);
@@ -288,11 +288,11 @@ namespace lqf {
     class HashCore {
     protected:
         unordered_map<uint64_t, unique_ptr<AggReducer>> container_;
-        function<uint64_t(DataRow & )> hasher_;
-        function<unique_ptr<AggReducer>(DataRow & )> headerInit_;
+        function<uint64_t(DataRow &)> hasher_;
+        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
     public:
-        HashCore(function<uint64_t(DataRow & )> hasher,
-                 function<unique_ptr<AggReducer>(DataRow & )> headerInit);
+        HashCore(function<uint64_t(DataRow &)> hasher,
+                 function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
         virtual ~HashCore();
 
@@ -300,14 +300,14 @@ namespace lqf {
 
         void reduce(HashCore &another);
 
-        void dump(MemTable &table, function<bool(DataRow & )>);
+        void dump(MemTable &table, function<bool(DataRow &)>);
     };
 
     class HashAgg : public Agg<HashCore>, public CoreMaker {
-        function<uint64_t(DataRow & )> hasher_;
+        function<uint64_t(DataRow &)> hasher_;
     public:
         HashAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
-                function<uint64_t(DataRow & )>, bool vertical = false);
+                function<uint64_t(DataRow &)>, bool vertical = false);
 
     protected:
         unique_ptr<HashCore> makeCore() override;
@@ -317,21 +317,21 @@ namespace lqf {
     protected:
         unordered_map<string, unique_ptr<AggReducer>> translated_;
     public:
-        HashDictCore(function<uint64_t(DataRow & )> hasher,
-                     function<unique_ptr<AggReducer>(DataRow & )> headerInit);
+        HashDictCore(function<uint64_t(DataRow &)> hasher,
+                     function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
         void reduce(HashDictCore &another);
 
-        void dump(MemTable &table, function<bool(DataRow & )>);
+        void dump(MemTable &table, function<bool(DataRow &)>);
 
-        void translate(vector<pair<uint32_t, uint32_t>> &, function<void(DataField & , uint32_t, uint32_t)>);
+        void translate(vector<pair<uint32_t, const uint8_t *>> &);
     };
 
     class HashDictAgg : public DictAgg<HashDictCore>, public CoreMaker {
-        function<uint64_t(DataRow & )> hasher_;
+        function<uint64_t(DataRow &)> hasher_;
     public:
         HashDictAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
-                    function<uint64_t(DataRow & )>, initializer_list<pair<uint32_t, uint32_t>>);
+                    function<uint64_t(DataRow &)>, initializer_list<pair<uint32_t, uint32_t>>);
 
     protected:
         unique_ptr<HashDictCore> makeCore() override;
@@ -340,11 +340,11 @@ namespace lqf {
     class TableCore {
     private:
         vector<unique_ptr<AggReducer>> container_;
-        function<uint32_t(DataRow & )> indexer_;
-        function<unique_ptr<AggReducer>(DataRow & )> headerInit_;
+        function<uint32_t(DataRow &)> indexer_;
+        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
     public:
-        TableCore(uint32_t tableSize, function<uint32_t(DataRow & )> indexer,
-                  function<unique_ptr<AggReducer>(DataRow & )> headerInit);
+        TableCore(uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
+                  function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
         virtual ~TableCore();
 
@@ -352,15 +352,15 @@ namespace lqf {
 
         void reduce(TableCore &another);
 
-        void dump(MemTable &table, function<bool(DataRow & )>);
+        void dump(MemTable &table, function<bool(DataRow &)>);
     };
 
     class TableAgg : public Agg<TableCore>, public CoreMaker {
         uint32_t table_size_;
-        function<uint32_t(DataRow & )> indexer_;
+        function<uint32_t(DataRow &)> indexer_;
     public:
         TableAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
-                 uint32_t, function<uint32_t(DataRow & )>);
+                 uint32_t, function<uint32_t(DataRow &)>);
 
     protected:
         unique_ptr<TableCore> makeCore() override;
@@ -368,16 +368,16 @@ namespace lqf {
 
     class SimpleCore {
     private:
-        function<unique_ptr<AggReducer>(DataRow & )> headerInit_;
+        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
         unique_ptr<AggReducer> reducer_;
     public:
-        SimpleCore(function<unique_ptr<AggReducer>(DataRow & )> headerInit);
+        SimpleCore(function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
         void consume(DataRow &row);
 
         void reduce(SimpleCore &another);
 
-        void dump(MemTable &table, function<bool(DataRow & )>);
+        void dump(MemTable &table, function<bool(DataRow &)>);
     };
 
     class SimpleAgg : public Agg<SimpleCore>, public CoreMaker {

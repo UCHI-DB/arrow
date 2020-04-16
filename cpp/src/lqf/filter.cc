@@ -34,13 +34,14 @@ namespace lqf {
             : ColPredicate(index), predicate_(pred) {}
 
     shared_ptr<Bitmap> SimplePredicate::filterBlock(Block &block, Bitmap &skip) {
-        auto result = make_shared<SimpleBitmap>(block.size());
-        uint64_t block_size = block.size();
+        auto result = make_shared<SimpleBitmap>(block.limit());
+
         auto ite = block.col(index_);
         if (skip.isFull()) {
+            auto block_size = block.size();
             for (uint64_t i = 0; i < block_size; ++i) {
-                if (predicate_((*ite)[i])) {
-                    result->put(i);
+                if (predicate_(ite->next())) {
+                    result->put(ite->pos());
                 }
             }
         } else {
@@ -75,7 +76,7 @@ namespace lqf {
     }
 
     shared_ptr<Bitmap> ColFilter::filterBlock(Block &input) {
-        shared_ptr<Bitmap> result = make_shared<FullBitmap>(input.size());
+        shared_ptr<Bitmap> result = make_shared<FullBitmap>(input.limit());
         for (auto &pred: predicates_) {
             result = pred->filterBlock(input, *result);
         }
@@ -85,7 +86,7 @@ namespace lqf {
     RowFilter::RowFilter(function<bool(DataRow &)> pred) : predicate_(pred) {}
 
     shared_ptr<Bitmap> RowFilter::filterBlock(Block &input) {
-        auto result = make_shared<SimpleBitmap>(input.size());
+        auto result = make_shared<SimpleBitmap>(input.limit());
         auto rit = input.rows();
 
         auto block_size = input.size();
@@ -117,6 +118,36 @@ namespace lqf {
             }
         }
         return -1;
+    }
+
+    MapFilter::MapFilter(uint32_t key_index, unordered_set<uint64_t> &filter)
+            : key_index_(key_index), filter_(filter) {}
+
+    shared_ptr<Bitmap> MapFilter::filterBlock(Block &input) {
+        auto col = input.col(key_index_);
+        auto bitmap = make_shared<SimpleBitmap>(input.limit());
+        auto block_size = input.size();
+        for (uint32_t i = 0; i < block_size; ++i) {
+            if (filter_.find(col->next().asInt()) != filter_.end()) {
+                bitmap->put(i);
+            }
+        }
+        return bitmap;
+    }
+
+    PowerMapFilter::PowerMapFilter(function<uint64_t(DataRow &)> key_maker, unordered_set<uint64_t> &filter)
+            : key_maker_(key_maker), filter_(filter) {}
+
+    shared_ptr<Bitmap> PowerMapFilter::filterBlock(Block &input) {
+        auto rows = input.rows();
+        auto bitmap = make_shared<SimpleBitmap>(input.limit());
+        auto block_size = input.size();
+        for (uint32_t i = 0; i < block_size; ++i) {
+            if (filter_.find(key_maker_(rows->next())) != filter_.end()) {
+                bitmap->put(i);
+            }
+        }
+        return bitmap;
     }
 
     namespace raw {
@@ -397,6 +428,15 @@ namespace lqf {
 
         template
         class DictBetween<ByteArrayType>;
+
+        template
+        class DictRangele<Int32Type>;
+
+        template
+        class DictRangele<DoubleType>;
+
+        template
+        class DictRangele<ByteArrayType>;
 
         template
         class DictMultiEq<Int32Type>;

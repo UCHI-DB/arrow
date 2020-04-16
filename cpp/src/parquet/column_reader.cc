@@ -60,7 +60,6 @@ int LevelDecoder::SetData(Encoding::type encoding, int16_t max_level,
   int32_t num_bytes = 0;
   encoding_ = encoding;
   num_values_remaining_ = num_buffered_values;
-  bit_width_ = BitUtil::Log2(max_level + 1);
   switch (encoding) {
     case Encoding::RLE: {
       num_bytes = arrow::util::SafeLoadAs<int32_t>(data);
@@ -87,6 +86,19 @@ int LevelDecoder::SetData(Encoding::type encoding, int16_t max_level,
       throw ParquetException("Unknown encoding type for levels.");
   }
   return -1;
+}
+
+int LevelDecoder::SetRleData(int num_buffered_values, int16_t max_level,
+        const uint8_t *data, const uint32_t data_length) {
+    encoding_ = Encoding::RLE;
+    bit_width_ = BitUtil::Log2(max_level + 1);
+    if (!rle_decoder_) {
+        rle_decoder_.reset(
+                new ::arrow::util::RleDecoder(data, data_length, bit_width_));
+    } else {
+        rle_decoder_->Reset(data, data_length, bit_width_);
+    }
+    return data_length;
 }
 
 int LevelDecoder::Decode(int batch_size, int16_t* levels) {
@@ -556,6 +568,39 @@ protected:
     return levels_byte_size;
   }
 
+  ///  Hao @ Apr 14, 2020
+  ///  This override fixes a problem in original code that does not process DataPageV2 correctly
+  int64_t InitializeLevelDecoders(const DataPageV2& page,
+                                    Encoding::type repetition_level_encoding,
+                                    Encoding::type definition_level_encoding) {
+        // Read a data page.
+        num_buffered_values_ = page.num_values();
+
+        // Have not decoded any values from the data page yet
+        num_decoded_values_ = 0;
+
+        const uint8_t* buffer = page.data();
+
+        // Data page Layout: Repetition Levels - Definition Levels - encoded values.
+        // Levels are encoded as rle or bit-packed.
+        // Init repetition levels
+        if (max_rep_level_ > 0) {
+            repetition_level_decoder_.SetRleData(num_buffered_values_, max_def_level_,
+                    buffer, page.repetition_levels_byte_length());
+            buffer += page.repetition_levels_byte_length();
+        }
+        // TODO figure a way to set max_def_level_ to 0
+        // if the initial value is invalid
+
+        // Init definition levels
+        if (max_def_level_ > 0) {
+            definition_level_decoder_.SetRleData(num_buffered_values_, max_def_level_,
+                    buffer, page.definition_levels_byte_length());
+        }
+
+        return page.repetition_levels_byte_length() + page.definition_levels_byte_length();
+    }
+
   // Get a decoder object for this page or create a new decoder if this is the
   // first page with this encoding.
   void InitializeDataDecoder(const DataPage& page, int64_t levels_byte_size) {
@@ -744,6 +789,7 @@ int64_t TypedColumnReaderImpl<DType>::ReadBatch(int64_t batch_size, int16_t* def
   int64_t total_values = std::max(num_def_levels, *values_read);
   this->ConsumeBufferedValues(total_values);
 
+
   return total_values;
 }
 
@@ -848,34 +894,33 @@ int64_t TypedColumnReaderImpl<DType>::Skip(int64_t num_rows_to_skip) {
   }
   int64_t rows_to_skip = num_rows_to_skip;
 
-  if(rows_to_skip < this->num_buffered_values_ - this->num_decoded_values_) {
+  int64_t remain = this->num_buffered_values_ - this->num_decoded_values_;
+  if(rows_to_skip < remain) {
       // Can be done in current page
       this->current_decoder_->Skip(rows_to_skip);
       this->ConsumeBufferedValues(rows_to_skip);
       rows_to_skip = 0;
   } else {
-      int64_t remain = this->num_buffered_values_ - this->num_decoded_values_;
       rows_to_skip -= remain;
       this->ConsumeBufferedValues(remain);
-      // This code here is similar to what we have in ReadNewPage, but as we only decode
-      // a page when it contains the next record we want to read, we have to read a
-      // page header without decode the content.
-      while (rows_to_skip > 0) {
+      // The following logic is similar to what we have in ReadNewPage, but as we only decode
+      // a page when it contains the next record we want to read, we read a page header without
+      // decoding the content.
+
+      // The iteration must read at least one page
+      this->current_page_ = this->pager_.get()->NextPage();
+      if(__builtin_expect(this->current_page_->type() == PageType::DICTIONARY_PAGE, 0)) {
+          // This is a dictionary page and the first page
+          this->ConfigureDictionary(static_cast<const DictionaryPage *>(this->current_page_.get()));
           this->current_page_ = this->pager_.get()->NextPage();
-          if(__builtin_expect(this->current_page_->type() == PageType::DICTIONARY_PAGE, 0)) {
-              // This is a dictionary page and the first page
-              this->ConfigureDictionary(static_cast<const DictionaryPage *>(this->current_page_.get()));
-              continue;
-          }
-          const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
-//          lqf::validate_true(pagedata->type() != PageType::DICTIONARY_PAGE, "wrong page encoding");
-          if (pagedata->num_values() <= rows_to_skip) {
-              rows_to_skip -= pagedata->num_values();
-              this->num_read_values_ += pagedata->num_values();
-          } else {
-              break;
-          }
       }
+      while (rows_to_skip > std::static_pointer_cast<DataPage>(this->current_page_)->num_values()) {
+          auto num_values_in_page = std::static_pointer_cast<DataPage>(this->current_page_)->num_values();
+          rows_to_skip -= num_values_in_page;
+          this->num_read_values_ += num_values_in_page;
+          this->current_page_ = this->pager_.get()->NextPage();
+      }
+
       // Decode the page
       const auto pagedata = std::static_pointer_cast<DataPage>(this->current_page_);
       if (pagedata->type() == PageType::DATA_PAGE) {

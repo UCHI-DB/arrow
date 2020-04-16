@@ -26,17 +26,19 @@ namespace lqf {
                 CostField() : agg::DoubleSum(0) {}
 
                 void reduce(DataRow &row) {
-                    *value_ += row[PartSupp::AVAILQTY].asDouble() * row[PartSupp::SUPPLYCOST].asDouble();
+                    *value_ += row[PartSupp::AVAILQTY].asInt() * row[PartSupp::SUPPLYCOST].asDouble();
                 }
             };
         }
-using namespace q11;
+        using namespace q11;
+
         void executeQ11() {
 
             auto nation = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY});
             auto partsupp = ParquetTable::Open(PartSupp::path,
-                                               {PartSupp::SUPPKEY, PartSupp::AVAILQTY, PartSupp::SUPPLYCOST});
+                                               {PartSupp::SUPPKEY, PartSupp::PARTKEY, PartSupp::AVAILQTY,
+                                                PartSupp::SUPPLYCOST});
 
             ColFilter nationNameFilter({new SimplePredicate(Nation::NAME, [=](const DataField &field) {
                 return field.asByteArray() == nationChosen;
@@ -48,7 +50,6 @@ using namespace q11;
 
             HashFilterJoin validPsJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto validps = FilterMat().mat(*validPsJoin.join(*partsupp, *validSupplier));
-
 
             function<vector<AggField *>()> agg_fields = []() { return vector<AggField *>{new CostField()}; };
             SimpleAgg totalAgg(vector<uint32_t>({1}), agg_fields);
@@ -67,8 +68,8 @@ using namespace q11;
             SmallSort sort(comparator);
             auto sorted = sort.sort(*byParts);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PD(1) PEND);
-            printer->print(*sorted);
+            Printer printer(PBEGIN PI(0) PD(1) PEND);
+            printer.print(*sorted);
         }
 
     }

@@ -17,21 +17,21 @@
 namespace lqf {
     namespace tpch {
 
+        using namespace agg;
         using namespace sboost;
         using namespace raw;
         namespace q16 {
             ByteArray brand("Brand#45");
             const char *type = "MEDIUM POLISHED";
             unordered_set<int32_t> size{49, 14, 23, 45, 19, 3, 36, 9};
-
         }
 
         using namespace q16;
-        void executeQ16() {
-            auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::TYPE, Part::SIZE});
-            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::COMMENT});
-            auto partsupp = ParquetTable::Open(PartSupp::path, {PartSupp::SUPPKEY});
 
+        void executeQ16() {
+            auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::BRAND, Part::TYPE, Part::SIZE});
+            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::COMMENT});
+            auto partsupp = ParquetTable::Open(PartSupp::path, {PartSupp::SUPPKEY, PartSupp::PARTKEY});
 
             function<unique_ptr<RawAccessor<ByteArrayType>>()> brandgen = bind(&ByteArrayDictEq::build, brand);
             function<unique_ptr<RawAccessor<ByteArrayType>>()> typegen = bind(&ByteArrayDictMultiEq::build,
@@ -65,9 +65,9 @@ namespace lqf {
             psSupplierFilter.useAnti();
             auto validps = psSupplierFilter.join(*partsupp, *validSupplier);
 
-            HashJoin pswithsJoin(PartSupp::PARTKEY, 0, new RowBuilder({JR(PartSupp::SUPPKEY),
-                                                                       JLR(Part::BRAND), JLR(Part::TYPE),
-                                                                       JLR(Part::SIZE)}));
+            HashJoin pswithsJoin(PartSupp::PARTKEY, Part::PARTKEY, new RowBuilder({JR(PartSupp::SUPPKEY),
+                                                                                   JLR(Part::BRAND), JLR(Part::TYPE),
+                                                                                   JLR(Part::SIZE)}));
             // TODO Which is on the right ?
             // SUPPKEY, BRAND, TYPE, SIZE
             auto partWithSupplier = pswithsJoin.join(*validPart, *validps);
@@ -76,7 +76,6 @@ namespace lqf {
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 return (input[1].asInt() << 20) + (input[2].asInt() << 10) + input[3].asInt();
             };
-            using namespace agg;
             HashAgg psagg(vector<uint32_t>({1, 1, 1, 1}), {AGI(1), AGI(2), AGI(3)},
                           []() { return vector<AggField *>({new IntDistinctCount(0)}); },
                           hasher);
@@ -87,10 +86,10 @@ namespace lqf {
                        (SIE(3) && SIE(0) && SIE(1) && SILE(2));
             };
             SmallSort sort(comparator);
-            result = sort.sort(*result);
+            auto sorted = sort.sort(*result);
 
-            auto printer = Printer::Make(PBEGIN PI(0) PI(1) PI(2) PI(3) PEND);
-            printer->print(*result);
+            Printer printer(PBEGIN PI(0) PI(1) PI(2) PI(3) PEND);
+            printer.print(*sorted);
         }
 
     }

@@ -5,7 +5,7 @@ select
 from (
          select
              n_name as nation,
-             extract(year from o_orderdate) as o_year,
+             substr(o_orderdate,1,4) as o_year,
              l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
          from
              part,
@@ -21,7 +21,7 @@ from (
            and p_partkey = l_partkey
            and o_orderkey = l_orderkey
            and s_nationkey = n_nationkey
-           and p_name like '%[COLOR]%'
+           and p_name like '%green%'
      ) as profit
 group by
     nation,

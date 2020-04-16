@@ -31,11 +31,18 @@ namespace lqf {
 
     template<typename DTYPE>
     shared_ptr<Bitmap> FilterExecutor::executeSboost(Block &block, SboostPredicate<DTYPE> &predicate) {
-        auto mappingKey = makeKey(*block.owner(), predicate.index());
-        ParquetBlock &pblock = static_cast<ParquetBlock &>(block);
+
+        ParquetBlock *ppblock;
+        MaskedBlock *pmblock = dynamic_cast<MaskedBlock *>(&block);
+        if (pmblock) {
+            ppblock = static_cast<ParquetBlock *>(pmblock->inner().get());
+        } else {
+            ppblock = static_cast<ParquetBlock *>(&block);
+        }
+        auto mappingKey = makeKey(*(ppblock->owner()), predicate.index());
 
         stringstream ss;
-        ss << mappingKey << "." << pblock.index();
+        ss << mappingKey << "." << ppblock->index();
         auto resultKey = ss.str();
 
         auto found = result_.find(resultKey);
@@ -54,13 +61,14 @@ namespace lqf {
 
             PackedRawAccessor<DTYPE> packedAccessor(content);
 
-            pblock.raw(predicate.index(), &packedAccessor);
+            ppblock->raw(predicate.index(), &packedAccessor);
 
             auto resultMap = new unordered_map<ColPredicate *, shared_ptr<Bitmap>>();
             for (uint32_t i = 0; i < preds.size(); ++i) {
                 (*resultMap)[preds[i]] = content[i]->result();
             }
             result_[resultKey] = unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>(resultMap);
+            // Here we do not bitand the result with mask, as this will be done in Filter::processBlock
             return (*resultMap)[&predicate];
         }
         return nullptr;
