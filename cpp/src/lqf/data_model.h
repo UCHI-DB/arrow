@@ -383,6 +383,8 @@ namespace lqf {
         template<typename DTYPE>
         unique_ptr<Dictionary<DTYPE>> LoadDictionary(int column);
 
+        uint32_t DictionarySize(int column);
+
     protected:
         shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
 

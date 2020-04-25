@@ -62,7 +62,6 @@ namespace lqf {
                 return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
             };
 
-
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{
                         new IntSum(LineItem::QUANTITY),
@@ -84,8 +83,13 @@ namespace lqf {
             SmallSort sort(SORTER2(0, 1));
             auto sorted = sort.sort(*agged);
 
-            Printer printer(PBEGIN PI(0)
-                    PI(1)
+            auto dict1 = lineItemTable->LoadDictionary<ByteArrayType>(LineItem::RETURNFLAG);
+            auto dict2 = lineItemTable->LoadDictionary<ByteArrayType>(LineItem::LINESTATUS);
+            auto pdict1 = dict1.get();
+            auto pdict2 = dict2.get();
+
+            Printer printer(PBEGIN PDICT(pdict1,0)
+                    PDICT(pdict2,1)
                     PI(2)
                     PD(3)
                     PD(4)
@@ -99,15 +103,3 @@ namespace lqf {
         }
     }
 }
-
-//
-//int main(int argc, char **argv) {
-//    using namespace std;
-//    using namespace std::chrono;
-//    auto start = system_clock::now();
-//    lqf::tpch::executeQ1();
-//    auto stop = system_clock::now();
-//    auto duration = duration_cast<microseconds>(stop - start);
-//
-//    cout << duration.count() << endl;
-//}

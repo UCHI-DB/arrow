@@ -805,6 +805,12 @@ namespace lqf {
         return unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictpage));
     }
 
+    uint32_t ParquetTable::DictionarySize(int column) {
+        auto dictpage = static_pointer_cast<DictionaryPage>(
+                fileReader_->RowGroup(0)->GetColumnPageReader(column)->NextPage());
+        return dictpage->num_values();
+    }
+
     MaskedTable::MaskedTable(ParquetTable *inner, unordered_map<uint32_t, shared_ptr<Bitmap>> &masks)
             : inner_(inner) {
         masks_ = vector<shared_ptr<Bitmap>>(masks.size());

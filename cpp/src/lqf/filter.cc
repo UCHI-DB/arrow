@@ -91,8 +91,8 @@ namespace lqf {
 
         auto block_size = input.size();
         for (uint32_t i = 0; i < block_size; ++i) {
-            if (predicate_((*rit).next())) {
-                result->put(i);
+            if (predicate_(rit->next())) {
+                result->put(rit->pos());
             }
         }
         return result;

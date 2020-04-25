@@ -7,6 +7,7 @@
 
 #include <climits>
 #include "data_model.h"
+#include "concurrent.h"
 
 #define JL(x) x
 #define JR(x) x | 0x10000
@@ -20,6 +21,7 @@
 
 namespace lqf {
     using namespace std;
+    using namespace lqf::phasecon;
 
     static function<bool(DataRow &, DataRow &)> TRUE = [](DataRow &a, DataRow &b) { return true; };
 
@@ -84,85 +86,100 @@ namespace lqf {
 
     }
 
-    namespace hash {
+    namespace hashjoin {
+
+        template<typename DTYPE>
         class IntPredicate {
+            using ktype = typename DTYPE::type;
         public:
-            virtual bool test(int64_t) = 0;
+            virtual bool test(ktype) = 0;
         };
 
-        class HashPredicate : public IntPredicate {
+        using Int32Predicate = IntPredicate<Int32>;
+        using Int64Predicate = IntPredicate<Int64>;
+
+        template<typename DTYPE>
+        class HashPredicate : public IntPredicate<DTYPE> {
+            using ktype = typename DTYPE::type;
         private:
-            unordered_set<int64_t> content_;
+            PhaseConcurrentHashSet<DTYPE> content_;
         public:
             HashPredicate();
 
-            void add(int64_t);
+            void add(ktype);
 
-            bool test(int64_t) override;
+            bool test(ktype) override;
         };
 
-        class BitmapPredicate : public IntPredicate {
+        using Hash32Predicate = HashPredicate<Int32>;
+        using Hash64Predicate = HashPredicate<Int64>;
+
+        class BitmapPredicate : public Int32Predicate {
         private:
             SimpleBitmap bitmap_;
         public:
-            BitmapPredicate(uint64_t max);
+            BitmapPredicate(uint32_t max);
 
-            void add(int64_t);
+            void add(int32_t);
 
-            bool test(int64_t) override;
+            bool test(int32_t) override;
         };
 
-        class HashContainer : public IntPredicate {
+        template<typename DTYPE>
+        class HashContainer : public IntPredicate<DTYPE> {
+            using ktype = typename DTYPE::type;
         private:
-            unordered_map<int64_t, unique_ptr<MemDataRow>> hashmap_;
-            int64_t min_ = INT64_MAX;
-            int64_t max_ = INT64_MIN;
+            PhaseConcurrentHashMap<DTYPE, MemDataRow*> hashmap_;
+            ktype min_ = DTYPE::min;
+            ktype max_ = DTYPE::max;
 
         public:
             HashContainer();
 
-            void add(int64_t key, unique_ptr<MemDataRow> dataRow);
+            void add(ktype key, unique_ptr<MemDataRow> dataRow);
 
-            bool test(int64_t) override;
+            bool test(ktype) override;
 
-            MemDataRow *get(int64_t key);
+            MemDataRow *get(ktype key);
 
-            unique_ptr<MemDataRow> remove(int64_t key);
+            unique_ptr<MemDataRow> remove(ktype key);
 
-            inline unordered_map<int64_t, unique_ptr<MemDataRow>> &content() { return hashmap_; }
+//            inline unordered_map<int64_t, unique_ptr<MemDataRow>> &content() { return hashmap_; }
 
-            uint32_t size();
+            inline uint32_t size() { return hashmap_.size(); }
         };
 
+        using Hash32Container = HashContainer<Int32>;
+        using Hash64Container = HashContainer<Int64>;
+
+        template<typename CONTENT>
         class HashMemBlock : public MemBlock {
         private:
-            shared_ptr<IntPredicate> content_;
+            shared_ptr<CONTENT> content_;
         public:
-            HashMemBlock(shared_ptr<IntPredicate> predicate);
+            HashMemBlock(shared_ptr<CONTENT> predicate);
 
-            shared_ptr<IntPredicate> content();
+            shared_ptr<CONTENT> content();
         };
 
         class HashBuilder {
         public:
-            static shared_ptr<IntPredicate> buildHashPredicate(Table &input, uint32_t);
+            static shared_ptr<Int32Predicate> buildHashPredicate(Table &input, uint32_t);
 
-            static shared_ptr<IntPredicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
+            static shared_ptr<Int64Predicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 
-            static shared_ptr<IntPredicate> buildBitmapPredicate(Table &input, uint32_t);
+            static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t);
 
-            static shared_ptr<HashContainer>
+            static shared_ptr<Hash32Container>
             buildContainer(Table &input, uint32_t, function<unique_ptr<MemDataRow>(DataRow &)>);
 
-            static shared_ptr<HashContainer>
+            static shared_ptr<Hash64Container>
             buildContainer(Table &input, function<int64_t(DataRow &)>, function<unique_ptr<MemDataRow>(DataRow &)>);
-
         };
-
     }
 
     using namespace join;
-    using namespace hash;
+    using namespace hashjoin;
 
     class Join {
     public:
@@ -174,7 +191,7 @@ namespace lqf {
         uint32_t leftKeyIndex_;
         uint32_t rightKeyIndex_;
         unique_ptr<JoinBuilder> builder_;
-        shared_ptr<HashContainer> container_;
+        shared_ptr<Hash32Container> container_;
         bool outer_ = false;
     public:
         HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
@@ -205,7 +222,7 @@ namespace lqf {
     protected:
         uint32_t leftKeyIndex_;
         uint32_t rightKeyIndex_;
-        shared_ptr<IntPredicate> predicate_;
+        shared_ptr<Int32Predicate> predicate_;
         bool anti_ = false;
     public:
         HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex);
@@ -269,7 +286,7 @@ namespace lqf {
             function<int64_t(DataRow &)> left_key_maker_;
             function<int64_t(DataRow &)> right_key_maker_;
             unique_ptr<JoinBuilder> builder_;
-            shared_ptr<HashContainer> container_;
+            shared_ptr<Hash64Container> container_;
             function<bool(DataRow &, DataRow &)> predicate_;
             bool outer_ = false;
         public:
@@ -309,7 +326,7 @@ namespace lqf {
         protected:
             function<int64_t(DataRow &)> left_key_maker_;
             function<int64_t(DataRow &)> right_key_maker_;
-            shared_ptr<IntPredicate> predicate_;
+            shared_ptr<Int64Predicate> predicate_;
             bool anti_ = false;
         public:
             PowerHashFilterJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>);

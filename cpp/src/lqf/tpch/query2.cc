@@ -23,7 +23,6 @@ namespace lqf {
         using namespace q2;
 
         void executeQ2() {
-
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -111,7 +110,7 @@ namespace lqf {
             });;
             auto result = top.sort(*alljoined);
 
-            Printer printer(PBEGIN PI(0) PD(1) PB(2) PB(3) PB(4) PB(5) PB(6) PB(7) PEND);
+            Printer printer(PBEGIN PI(0) PD(1) /*PB(2)*/ PB(3) PB(4) PB(5) PB(6) PB(7) PEND);
             printer.print(*result);
         }
 

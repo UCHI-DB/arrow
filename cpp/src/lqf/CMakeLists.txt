@@ -58,6 +58,8 @@ set(LQF_SRCS
         util.cc
         union.cc
         dict.cc
+        concurrent.cc
+        hash.cc
         )
 
 add_arrow_lib(lqf
@@ -94,6 +96,7 @@ set(LQF_TEST_SRC
         print_test.cc
         sort_test.cc
         mat_test.cc
+        concurrent_test.cc
         )
 
 add_test_case(all-test
@@ -117,5 +120,10 @@ arrow_install_all_headers(lqf)
 
 add_executable(scan_column scan_column.cc)
 target_link_libraries(scan_column lqf_static)
+
+add_custom_target(lqf-benchmarks)
+set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
+add_lqf_benchmark(concurrent_benchmark)
+
 
 add_subdirectory(tpch)

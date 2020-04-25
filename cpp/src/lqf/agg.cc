@@ -100,7 +100,7 @@ namespace lqf {
         template<typename T, typename ACC>
         void Max<T, ACC>::init() {
             value_ = (T *) storage_.pointer_.raw_;
-            *value_ = INT_MIN;
+            *value_ = INT32_MIN;
         }
 
         template<typename T, typename ACC>
@@ -119,7 +119,7 @@ namespace lqf {
         template<typename T, typename ACC>
         void Min<T, ACC>::init() {
             value_ = (T *) storage_.pointer_.raw_;
-            *value_ = INT_MAX;
+            *value_ = INT32_MAX;
         }
 
         template<typename T, typename ACC>
@@ -139,7 +139,7 @@ namespace lqf {
         template<typename T, typename ACC>
         void RecordingMin<T, ACC>::init() {
             value_ = (T *) storage_.pointer_.raw_;
-            *value_ = INT_MAX;
+            *value_ = INT32_MAX;
         }
 
         template<typename T, typename ACC>
@@ -172,7 +172,7 @@ namespace lqf {
         template<typename T, typename ACC>
         void RecordingMax<T, ACC>::init() {
             value_ = (T *) storage_.pointer_.raw_;
-            *value_ = INT_MIN;
+            *value_ = INT32_MIN;
         }
 
         template<typename T, typename ACC>

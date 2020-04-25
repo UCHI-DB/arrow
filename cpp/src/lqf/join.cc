@@ -88,81 +88,105 @@ namespace lqf {
                 : JoinBuilder(fields, false, true) {}
 
     }
-    namespace hash {
-        HashPredicate::HashPredicate() {}
+    namespace hashjoin {
 
-        void HashPredicate::add(int64_t val) {
-            content_.insert(val);
+        template<typename DTYPE>
+        HashPredicate<DTYPE>::HashPredicate() {}
+
+        template<typename DTYPE>
+        void HashPredicate<DTYPE>::add(ktype val) {
+            content_.add(val);
         }
 
-        bool HashPredicate::test(int64_t val) {
-            return content_.find(val) != content_.end();
+        template<typename DTYPE>
+        bool HashPredicate<DTYPE>::test(ktype val) {
+            return content_.test(val);
         }
 
-        BitmapPredicate::BitmapPredicate(uint64_t size) : bitmap_(size) {}
+        template
+        class HashPredicate<Int32>;
 
-        void BitmapPredicate::add(int64_t val) {
+        template
+        class HashPredicate<Int64>;
+
+        BitmapPredicate::BitmapPredicate(uint32_t size) : bitmap_(size) {}
+
+        void BitmapPredicate::add(int32_t val) {
             bitmap_.put(val);
         }
 
-        bool BitmapPredicate::test(int64_t val) {
+        bool BitmapPredicate::test(int32_t val) {
             return bitmap_.check(val);
         }
 
-        HashContainer::HashContainer() : hashmap_() {}
+        template<typename DTYPE>
+        HashContainer<DTYPE>::HashContainer() : hashmap_() {}
 
-        void HashContainer::add(int64_t key, unique_ptr<MemDataRow> dataRow) {
+        template<typename DTYPE>
+        void HashContainer<DTYPE>::add(ktype key, unique_ptr<MemDataRow> dataRow) {
             min_ = min(min_, key);
             max_ = max(max_, key);
-            hashmap_[key] = move(dataRow);
+            hashmap_.put(key, dataRow.get());
         }
 
-        MemDataRow *HashContainer::get(int64_t key) {
+        template<typename DTYPE>
+        MemDataRow *HashContainer<DTYPE>::get(ktype key) {
             if (key > max_ || key < min_)
                 return nullptr;
-            auto it = hashmap_.find(key);
-            if (it != hashmap_.end()) {
-                return it->second.get();
+            return hashmap_.get(key);
+        }
+
+        template<typename DTYPE>
+        unique_ptr<MemDataRow> HashContainer<DTYPE>::remove(ktype key) {
+            if (key > max_ || key < min_)
+                return nullptr;
+            auto result = hashmap_.remove(key);
+            if (result != nullptr) {
+                return unique_ptr<MemDataRow>(result);
             }
             return nullptr;
         }
 
-        unique_ptr<MemDataRow> HashContainer::remove(int64_t key) {
-            if (key > max_ || key < min_)
-                return nullptr;
-            auto it = hashmap_.find(key);
-            if (it != hashmap_.end()) {
-                auto value = move(it->second);
-                hashmap_.erase(it);
-                return value;
-            }
-            return nullptr;
+        template<typename DTYPE>
+        bool HashContainer<DTYPE>::test(ktype key) {
+            return hashmap_.get(key) != nullptr;
         }
 
-        uint32_t HashContainer::size() {
-            return hashmap_.size();
-        }
+        template
+        class HashContainer<Int32>;
 
-        bool HashContainer::test(int64_t key) {
-            return hashmap_.find(key) != hashmap_.end();
-        }
+        template
+        class HashContainer<Int64>;
 
-        HashMemBlock::HashMemBlock(shared_ptr<IntPredicate> predicate)
-                : MemBlock(0, 0) {
+        template<typename CONTENT>
+        HashMemBlock<CONTENT>::HashMemBlock(shared_ptr<CONTENT> predicate) : MemBlock(0, 0) {
             content_ = move(predicate);
         }
 
-        shared_ptr<IntPredicate> HashMemBlock::content() {
+        template<typename CONTENT>
+        shared_ptr<CONTENT> HashMemBlock<CONTENT>::content() {
             return content_;
         }
 
-        shared_ptr<IntPredicate> HashBuilder::buildHashPredicate(Table &input, uint32_t keyIndex) {
-            HashPredicate *pred = new HashPredicate();
-            shared_ptr<IntPredicate> retval = shared_ptr<IntPredicate>(pred);
+        template
+        class HashMemBlock<Hash32Predicate>;
+
+        template
+        class HashMemBlock<Hash64Predicate>;
+
+        template
+        class HashMemBlock<Hash32Container>;
+
+        template
+        class HashMemBlock<Hash64Container>;
+
+        shared_ptr<Int32Predicate> HashBuilder::buildHashPredicate(Table &input, uint32_t keyIndex) {
+            Hash32Predicate *pred = new Hash32Predicate();
+            shared_ptr<Int32Predicate> retval = shared_ptr<Int32Predicate>(pred);
 
             function<void(const shared_ptr<Block> &)> processor =
                     [&pred, &retval, keyIndex](const shared_ptr<Block> &block) {
-                        auto hashblock = dynamic_pointer_cast<HashMemBlock>(block);
+                        auto hashblock = dynamic_pointer_cast<HashMemBlock<Int32Predicate>>(block);
                         if (hashblock) {
                             retval = hashblock->content();
                             return;
@@ -178,13 +202,14 @@ namespace lqf {
             return retval;
         }
 
-        shared_ptr<IntPredicate> HashBuilder::buildHashPredicate(Table &input, function<int64_t(DataRow &)> key_maker) {
-            HashPredicate *pred = new HashPredicate();
-            shared_ptr<IntPredicate> retval = shared_ptr<IntPredicate>(pred);
+        shared_ptr<Int64Predicate>
+        HashBuilder::buildHashPredicate(Table &input, function<int64_t(DataRow &)> key_maker) {
+            Hash64Predicate *pred = new Hash64Predicate();
+            shared_ptr<Int64Predicate> retval = shared_ptr<Int64Predicate>(pred);
 
             function<void(const shared_ptr<Block> &)> processor =
                     [&pred, &retval, key_maker](const shared_ptr<Block> &block) {
-                        auto hashblock = dynamic_pointer_cast<HashMemBlock>(block);
+                        auto hashblock = dynamic_pointer_cast<HashMemBlock<Int64Predicate>>(block);
                         if (hashblock) {
                             retval = hashblock->content();
                             return;
@@ -200,7 +225,7 @@ namespace lqf {
             return retval;
         }
 
-        shared_ptr<IntPredicate> HashBuilder::buildBitmapPredicate(Table &input, uint32_t keyIndex) {
+        shared_ptr<Int32Predicate> HashBuilder::buildBitmapPredicate(Table &input, uint32_t keyIndex) {
             ParquetTable &ptable = (ParquetTable &) input;
 
             auto predicate = new BitmapPredicate(ptable.size());
@@ -212,24 +237,20 @@ namespace lqf {
                     predicate->add(key);
                 }
             };
-#ifdef LQF_PARALLEL
-            input.blocks()->parallel()->foreach(processor);
-#else
             input.blocks()->foreach(processor);
-#endif
-            return shared_ptr<IntPredicate>(predicate);
+            return shared_ptr<Int32Predicate>(predicate);
         }
 
-        shared_ptr<HashContainer> HashBuilder::buildContainer(Table &input, uint32_t keyIndex,
-                                                              function<unique_ptr<MemDataRow>(DataRow &)> builder) {
-            HashContainer *container = new HashContainer();
-            shared_ptr<HashContainer> retval = shared_ptr<HashContainer>(container);
+        shared_ptr<Hash32Container> HashBuilder::buildContainer(Table &input, uint32_t keyIndex,
+                                                                function<unique_ptr<MemDataRow>(DataRow &)> builder) {
+            Hash32Container *container = new Hash32Container();
+            shared_ptr<Hash32Container> retval = shared_ptr<Hash32Container>(container);
 
             function<void(const shared_ptr<Block> &)> processor = [builder, keyIndex, &container, &retval](
                     const shared_ptr<Block> &block) {
-                auto hashblock = dynamic_pointer_cast<HashMemBlock>(block);
+                auto hashblock = dynamic_pointer_cast<HashMemBlock<Hash32Container>>(block);
                 if (hashblock) {
-                    retval = dynamic_pointer_cast<HashContainer>(hashblock->content());
+                    retval = hashblock->content();
                     return;
                 }
                 auto rows = block->rows();
@@ -244,16 +265,16 @@ namespace lqf {
             return retval;
         }
 
-        shared_ptr<HashContainer> HashBuilder::buildContainer(Table &input,
-                                                              function<int64_t(DataRow &)> key_maker,
-                                                              function<unique_ptr<MemDataRow>(DataRow &)> builder) {
-            HashContainer *container = new HashContainer();
-            shared_ptr<HashContainer> retval = shared_ptr<HashContainer>(container);
+        shared_ptr<Hash64Container> HashBuilder::buildContainer(Table &input,
+                                                                function<int64_t(DataRow &)> key_maker,
+                                                                function<unique_ptr<MemDataRow>(DataRow &)> builder) {
+            Hash64Container *container = new Hash64Container();
+            shared_ptr<Hash64Container> retval = shared_ptr<Hash64Container>(container);
             function<void(const shared_ptr<Block> &)> processor = [builder, &container, &retval, key_maker](
                     const shared_ptr<Block> &block) {
-                auto hashblock = dynamic_pointer_cast<HashMemBlock>(block);
+                auto hashblock = dynamic_pointer_cast<HashMemBlock<Hash64Container>>(block);
                 if (hashblock) {
-                    retval = dynamic_pointer_cast<HashContainer>(hashblock->content());
+                    retval = hashblock->content();
                 }
                 auto rows = block->rows();
                 auto block_size = block->size();
@@ -269,7 +290,7 @@ namespace lqf {
     }
 
     using namespace join;
-    using namespace hash;
+    using namespace hashjoin;
 
     HashBasedJoin::HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *builder)
             : leftKeyIndex_(leftKeyIndex), rightKeyIndex_(rightKeyIndex), builder_(unique_ptr<JoinBuilder>(builder)),

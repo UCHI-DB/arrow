@@ -10,19 +10,46 @@
 #include <iomanip>
 #include "data_model.h"
 
-#define PBEGIN [=](DataRow& row) { std::cout << std::setprecision(2) << std::fixed <<
-#define PEND std::endl ;}
-#define PI(x) row[x].asInt() << ",\t" <<
-#define PD(x) row[x].asDouble() << ",\t" <<
-#define PB(x) row[x].asByteArray() << ",\t" <<
-#define PR(x) row(x).asInt() << "," <<
-#define PDICT(dict, x) (*dict)[row[x].asInt()] << ",\t" <<
+#define PBEGIN [=](DataRow& row) { lqf::pout <<  //std::setprecision(8) <<
+#define PEND '\n' ;}
+#define PI(x) row[x].asInt() <<
+#define PD(x) row[x].asDouble() <<
+#define PB(x) row[x].asByteArray() <<
+#define PDICT(dict, x) (*dict)[row[x].asInt()] <<
 
 using namespace std;
 using namespace std::placeholders;
 namespace lqf {
 
     ostream &operator<<(ostream &os, const ByteArray &dt);
+
+    ///
+    /// Buffer and Print Result in tabular format
+    ///
+    class PrintBuffer {
+    protected:
+        uint8_t* data_;
+        uint32_t data_pointer_;
+        vector<uint32_t> data_type_;
+        vector<uint32_t> output_width_;
+        uint32_t position_;
+        bool firstline_;
+        uint32_t num_lines_;
+    public:
+        PrintBuffer();
+
+        PrintBuffer &operator<<(const int32_t value);
+
+        PrintBuffer &operator<<(const double value);
+
+        PrintBuffer &operator<<(const ByteArray &value);
+
+        PrintBuffer &operator<<(const char value);
+
+        void output();
+    };
+
+    extern PrintBuffer pout;
 
     class Printer {
     protected:
