@@ -176,7 +176,7 @@ namespace lqf {
             // ORDERKEY, SUPPKEY, COUNT
             auto l1agged = l1agg.agg(*l1withsupplier);
 
-//             Exist Query
+            // Exist Query
             HashExistJoin existJoin(LineItem::ORDERKEY, 0,
                                     new RowBuilder({JR(0), JR(1), JR(2)}),
                                     [](DataRow &left, DataRow &right) {

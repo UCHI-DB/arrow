@@ -91,16 +91,27 @@ namespace lqf {
     namespace hashjoin {
 
         template<typename DTYPE>
-        HashPredicate<DTYPE>::HashPredicate() {}
+        HashPredicate<DTYPE>::HashPredicate():min_(DTYPE::max), max_(DTYPE::min) {}
 
         template<typename DTYPE>
         void HashPredicate<DTYPE>::add(ktype val) {
+            // Update range
+            ktype current;
+            do {
+                current = min_.load();
+            } while (!min_.compare_exchange_strong(current, std::min(val, current)));
+            do {
+                current = max_.load();
+            } while (!max_.compare_exchange_strong(current, std::max(val, current)));
             content_.add(val);
         }
 
         template<typename DTYPE>
         bool HashPredicate<DTYPE>::test(ktype val) {
-            return content_.test(val);
+            if (val >= min_ && val <= max_) {
+                return content_.test(val);
+            }
+            return false;
         }
 
         template
@@ -120,12 +131,17 @@ namespace lqf {
         }
 
         template<typename DTYPE>
-        HashContainer<DTYPE>::HashContainer() : hashmap_() {}
+        HashContainer<DTYPE>::HashContainer() : hashmap_(), min_(DTYPE::max), max_(DTYPE::min) {}
 
         template<typename DTYPE>
         void HashContainer<DTYPE>::add(ktype key, unique_ptr<MemDataRow> dataRow) {
-            min_ = min(min_, key);
-            max_ = max(max_, key);
+            ktype current;
+            do {
+                current = min_.load();
+            } while (!min_.compare_exchange_strong(current, std::min(key, current)));
+            do {
+                current = max_.load();
+            } while (!max_.compare_exchange_strong(current, std::max(key, current)));
             hashmap_.put(key, dataRow.get());
         }
 
@@ -152,6 +168,11 @@ namespace lqf {
             return hashmap_.get(key) != nullptr;
         }
 
+        template<typename DTYPE>
+        unique_ptr<Iterator<pair<typename DTYPE::type, MemDataRow *>>> HashContainer<DTYPE>::iterator() {
+            return hashmap_.iterator();
+        }
+
         template
         class HashContainer<Int32>;
 
@@ -167,6 +188,12 @@ namespace lqf {
         shared_ptr<CONTENT> HashMemBlock<CONTENT>::content() {
             return content_;
         }
+
+        template
+        class HashMemBlock<Int32Predicate>;
+
+        template
+        class HashMemBlock<Int64Predicate>;
 
         template
         class HashMemBlock<Hash32Predicate>;
@@ -407,38 +434,74 @@ namespace lqf {
                                  JoinBuilder *builder, function<bool(DataRow &, DataRow &)> pred)
             : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder), predicate_(pred) {}
 
-    void HashExistJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
-        auto resultblock = output->allocate(container_->size());
+    shared_ptr<Table> HashExistJoin::join(Table &left, Table &right) {
+        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
+                bind(&JoinBuilder::snapshot, builder_.get(), std::placeholders::_1);
+        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, snapshoter);
 
+        auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
+
+        if (predicate_) {
+            function<shared_ptr<Bitmap>(const shared_ptr<Block> &)> prober = bind(
+                    &HashExistJoin::probeWithPredicate, this, _1);
+            function<shared_ptr<Bitmap>(shared_ptr<Bitmap> &, shared_ptr<Bitmap> &)> reducer =
+                    [](shared_ptr<Bitmap> &a, shared_ptr<Bitmap> &b) {
+                        return (*a) | (*b);
+                    };
+            auto exist = left.blocks()->map(prober)->reduce(reducer);
+            auto memblock = memTable->allocate(exist->cardinality());
+
+            auto writerows = memblock->rows();
+            auto writecount = 0;
+
+            auto bitmapite = exist->iterator();
+            while (bitmapite->hasNext()) {
+                (*writerows)[writecount++] = *container_->get(static_cast<int32_t>(bitmapite->next()));
+            }
+        } else {
+            function<void(const shared_ptr<Block> &)> prober = bind(&HashExistJoin::probe, this, memTable.get(), _1);
+            left.blocks()->foreach(prober);
+        }
+
+        return memTable;
+    }
+
+    shared_ptr<SimpleBitmap> HashExistJoin::probeWithPredicate(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         auto leftrows = leftBlock->rows();
-        uint32_t counter = 0;
-        auto writer = resultblock->rows();
-
-        auto &content = container_->content();
 
         auto left_block_size = leftBlock->size();
-        if (predicate_) {
-            for (uint32_t i = 0; i < left_block_size; ++i) {
-                DataField &keyfield = leftkeys->next();
-                auto key = keyfield.asInt();
-                auto result = content.find(key);
-                if (result != content.end()) {
+
+        shared_ptr<SimpleBitmap> local_mask = make_shared<SimpleBitmap>(container_->max() + 1);
+
+        for (uint32_t i = 0; i < left_block_size; ++i) {
+            DataField &keyfield = leftkeys->next();
+            auto key = keyfield.asInt();
+            if (!local_mask->check(key)) {
+                auto result = container_->get(key);
+                if (result != nullptr) {
                     DataRow &leftrow = (*leftrows)[leftkeys->pos()];
-                    if (predicate_(leftrow, *result->second)) {
-                        (*writer)[counter++] = (*result->second);
-                        content.erase(result);
+                    if (predicate_(leftrow, *result)) {
+                        local_mask->put(key);
                     }
                 }
             }
-        } else {
-            for (uint32_t i = 0; i < left_block_size; ++i) {
-                DataField &keyfield = leftkeys->next();
-                auto key = keyfield.asInt();
-                auto result = container_->remove(key);
-                if (result) {
-                    (*writer)[counter++] = (*result);
-                }
+        }
+        return local_mask;
+    }
+
+    void HashExistJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
+        auto resultblock = output->allocate(container_->size());
+        auto leftkeys = leftBlock->col(leftKeyIndex_);
+        uint32_t counter = 0;
+        auto writer = resultblock->rows();
+        auto left_block_size = leftBlock->size();
+
+        for (uint32_t i = 0; i < left_block_size; ++i) {
+            DataField &keyfield = leftkeys->next();
+            auto result = container_->remove(keyfield.asInt());
+            if (result) {
+                (*writer)[counter++] = (*result);
             }
         }
         resultblock->resize(counter);
@@ -446,7 +509,7 @@ namespace lqf {
 
     HashNotExistJoin::HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::JoinBuilder *rowBuilder,
                                        function<bool(DataRow &, DataRow &)> pred) :
-            HashBasedJoin(leftKeyIndex, rightKeyIndex, rowBuilder), predicate_(pred) {}
+            HashExistJoin(leftKeyIndex, rightKeyIndex, rowBuilder), predicate_(pred) {}
 
     shared_ptr<Table> HashNotExistJoin::join(Table &left, Table &right) {
         function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
@@ -455,15 +518,36 @@ namespace lqf {
 
         auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
 
-        function<void(const shared_ptr<Block> &)> prober = bind(&HashNotExistJoin::probe, this, memTable.get(), _1);
-        left.blocks()->foreach(prober);
+        if (predicate_) {
+            function<shared_ptr<Bitmap>(const shared_ptr<Block> &)> prober = bind(
+                    &HashNotExistJoin::probeWithPredicate, this, _1);
+            function<shared_ptr<Bitmap>(shared_ptr<Bitmap> &, shared_ptr<Bitmap> &)> reducer =
+                    [](shared_ptr<Bitmap> &a, shared_ptr<Bitmap> &b) {
+                        return (*a) | (*b);
+                    };
+            auto exist = left.blocks()->map(prober)->reduce(reducer);
+            auto notExist = ~(*exist);
+            auto memblock = memTable->allocate(notExist->cardinality());
 
-        auto resultBlock = memTable->allocate(container_->size());
-        auto writeRows = resultBlock->rows();
-        for (auto &entry: container_->content()) {
-            writeRows->next() = *entry.second;
+            auto writerows = memblock->rows();
+            auto writecount = 0;
+
+            auto bitmapite = notExist->iterator();
+            while (bitmapite->hasNext()) {
+                (*writerows)[writecount++] = *container_->get(static_cast<int32_t>(bitmapite->next()));
+            }
+        } else {
+            function<void(const shared_ptr<Block> &)> prober = bind(&HashNotExistJoin::probe, this, memTable.get(), _1);
+            left.blocks()->foreach(prober);
+
+            auto resultBlock = memTable->allocate(container_->size());
+            auto writeRows = resultBlock->rows();
+            auto iterator = container_->iterator();
+            while (iterator->hasNext()) {
+                auto entry = iterator->next();
+                writeRows->next() = *entry.second;
+            }
         }
-
         return memTable;
     }
 
@@ -471,27 +555,10 @@ namespace lqf {
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         auto leftrows = leftBlock->rows();
 
-        auto &content = container_->content();
-
         auto left_block_size = leftBlock->size();
-        if (predicate_) {
-            for (uint32_t i = 0; i < left_block_size; ++i) {
-                DataField &keyfield = leftkeys->next();
-                auto key = keyfield.asInt();
-                auto result = content.find(key);
-                if (result != content.end()) {
-                    DataRow &leftrow = (*leftrows)[leftkeys->pos()];
-                    if (predicate_(leftrow, *result->second)) {
-                        content.erase(result);
-                    }
-                }
-            }
-        } else {
-            for (uint32_t i = 0; i < left_block_size; ++i) {
-                DataField &keyfield = leftkeys->next();
-                auto key = keyfield.asInt();
-                auto result = container_->remove(key);
-            }
+        for (uint32_t i = 0; i < left_block_size; ++i) {
+            DataField &keyfield = leftkeys->next();
+            container_->remove(keyfield.asInt());
         }
     }
 

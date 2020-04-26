@@ -56,11 +56,11 @@ namespace lqf {
         if (snapshoter_) {
             // Make Container
             auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_);
-            auto block = make_shared<HashMemBlock>(move(container));
+            auto block = make_shared<HashMemBlock<HashContainer<Int32>>>(move(container));
             table->append(block);
         } else {
             auto predicate = HashBuilder::buildHashPredicate(input, key_index_);
-            auto block = make_shared<HashMemBlock>(move(predicate));
+            auto block = make_shared<HashMemBlock<IntPredicate<Int32>>>(move(predicate));
             table->append(block);
         }
         return table;
@@ -75,11 +75,11 @@ namespace lqf {
         if (snapshoter_) {
             // Make Container
             auto container = HashBuilder::buildContainer(input, key_maker_, snapshoter_);
-            auto block = make_shared<HashMemBlock>(move(container));
+            auto block = make_shared<HashMemBlock<HashContainer<Int64>>>(move(container));
             table->append(block);
         } else {
             auto predicate = HashBuilder::buildHashPredicate(input, key_maker_);
-            auto block = make_shared<HashMemBlock>(move(predicate));
+            auto block = make_shared<HashMemBlock<IntPredicate<Int64>>>(move(predicate));
             table->append(block);
         }
         return table;

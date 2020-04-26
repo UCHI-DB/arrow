@@ -141,9 +141,9 @@ namespace lqf {
                     futures.push_back(res->getFuture());
                 }
                 unique_ptr<vector<T>> result = unique_ptr<vector<T>>(new vector<T>());
-                for (auto ite = futures.begin(); ite != futures.end(); ite++) {
-                    (*ite).wait();
-                    result->push_back((*ite).get());
+                for (auto &future:futures) {
+                    future.wait();
+                    result->push_back(future.get());
                 }
                 return result;
             }

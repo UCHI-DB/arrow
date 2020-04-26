@@ -11,6 +11,7 @@
 #include <cstring>
 #include <mutex>
 #include <fstream>
+#include <lqf/lang.h>
 #include <lqf/hash.h>
 #include <atomic>
 
@@ -47,24 +48,167 @@ namespace lqf {
 
             vector<type> *content_;
 
-            bool _insert(vector<type> *, type);
+            bool _insert(vector<type> *content, type value) {
+                auto data = content->data();
+                auto content_size = content_->size();
+                auto content_mask = content_size - 1;
+                auto insert_index = knuth_hash(value) & content_mask;
+                auto insert_value = value;
+                while (insert_value != DTYPE::empty) {
+                    auto exist = (*content)[insert_index];
+                    if (exist == insert_value) {
+                        return 0;
+                    } else if (exist > insert_value) {
+                        insert_index = (insert_index + 1) & content_mask;
+                    } else if (__sync_bool_compare_and_swap(data + insert_index, exist, insert_value)) {
+                        insert_value = exist;
+                        insert_index = (insert_index + 1) & content_mask;
+                    }
+                }
+                return 1;
+            }
 
-            pair<uint32_t, type> _findreplacement(uint32_t);
+            pair<uint32_t, type> _findreplacement(uint32_t start_index) {
+                auto content_mask = content_->size() - 1;
+                auto ref_index = start_index;
+                auto data = content_->data();
+                type ref_value;
+                do {
+                    ++ref_index;
+                    ref_value = data[ref_index & content_mask];
+                } while (ref_value != DTYPE::empty && (knuth_hash(ref_value) & content_mask) > start_index);
+                auto back_index = ref_index - 1;
+                while (back_index > start_index) {
+                    auto cand_value = data[back_index & content_mask];
+                    if (cand_value == DTYPE::empty || (knuth_hash(cand_value) & content_mask) <= start_index) {
+                        ref_value = cand_value;
+                        ref_index = back_index;
+                    }
+                    --back_index;
+                }
+                return pair<uint32_t, type>(ref_index, ref_value);
+            }
 
         public:
-            PhaseConcurrentHashSet();
+            PhaseConcurrentHashSet() : PhaseConcurrentHashSet(1048576) {};
 
-            PhaseConcurrentHashSet(uint32_t size);
+            PhaseConcurrentHashSet(uint32_t expect_size) : size_(0) {
+                content_ = new vector<type>(ceil2(expect_size * SCALE), DTYPE::empty);
+            }
 
-            virtual ~PhaseConcurrentHashSet();
+            virtual ~PhaseConcurrentHashSet() {
+                delete content_;
+            }
 
-            void add(type);
+            void add(type value) {
+                if (_insert(content_, value)) {
+                    size_++;
+                    if (size_ >= limit()) {
+                        // TODO What error?
+                        throw std::invalid_argument("hash set is full");
+                    }
+                }
+                // resize operation cannot be done here.
+                // Will race with insert
+//            if (size_ * SCALE > content_->size()) {
+//                internal_resize(content_->size() << 1);
+//            }
+            }
 
-            bool test(type);
+            bool test(type value) {
+                auto content_size = content_->size();
+                auto content_mask = content_size - 1;
+                auto index = knuth_hash(value) & content_mask;
+                while ((*content_)[index] != DTYPE::empty && (*content_)[index] != value) {
+                    index = (index + 1) & content_mask;
+                }
+                return (*content_)[index] == value;
+            }
 
-            void remove(type);
+            void remove(type value) {
+                auto data = content_->data();
+                auto content_mask = content_->size() - 1;
+                int start_index = knuth_hash(value) & content_mask;
+                int ref_index = start_index;
+                auto ref_value = value;
+                while (data[ref_index & content_mask] != DTYPE::empty
+                       && data[ref_index & content_mask] > ref_value) {
+                    ++ref_index;
+                }
+                // The expecting key is found iff at least one cas happens
+                bool cas_success = false;
+                while (ref_index >= start_index) {
+                    if (ref_value == DTYPE::empty || data[ref_index & content_mask] != ref_value) {
+                        --ref_index;
+                    } else {
+                        auto cand = _findreplacement(ref_index);
+                        auto cand_index = cand.first;
+                        auto cand_value = cand.second;
+                        auto data_index = ref_index & content_mask;
+                        if (__sync_bool_compare_and_swap(data + data_index, ref_value, cand_value)) {
+                            cas_success = true;
+                            if (cand_value != DTYPE::empty) {
+                                ref_index = cand_index;
+                                ref_value = cand_value;
+                                start_index = knuth_hash(ref_value) & content_mask;
+                            } else {
+                                if (cas_success) {
+                                    size_--;
+                                }
+                                return;
+                            }
+                        } else {
+                            --ref_index;
+                        }
+                    }
+                }
+                if (cas_success) {
+                    size_--;
+                }
+            }
 
-            void resize(uint32_t);
+            void resize(uint32_t expect) {
+                auto new_size = ceil2(expect);
+                if (content_->size() < new_size) {
+                    auto new_content = new vector<type>(new_size, DTYPE::empty);
+                    // Rehash all elements
+                    for (auto &value: *content_) {
+                        if (value != DTYPE::empty) {
+                            _insert(new_content, value);
+                        }
+                    }
+
+                    delete content_;
+                    content_ = new_content;
+                }
+            }
+
+            class PCHSIterator : public Iterator<typename DTYPE::type> {
+                using type = typename DTYPE::type;
+            protected:
+                vector<type> &content_;
+                uint32_t pointer_;
+            public:
+                PCHSIterator(vector<type> &content) : content_(content), pointer_(0) {
+                    while (pointer_ < content_.size() && content_[pointer_] == DTYPE::empty) {
+                        ++pointer_;
+                    }
+                }
+
+                bool hasNext() override {
+                    return pointer_ < content_.size();
+                }
+
+                type next() override {
+                    type value = content_[pointer_];
+                    do { ++pointer_; } while (pointer_ < content_.size() && content_[pointer_] == DTYPE::empty);
+                    return value;
+                }
+            };
+
+            unique_ptr<Iterator<type>> iterator() {
+                return unique_ptr<PCHSIterator>(new PCHSIterator(*content_));
+            }
 
             inline uint32_t size() { return size_; }
 
@@ -161,7 +305,8 @@ namespace lqf {
 
             virtual~ PhaseConcurrentHashMap() {
                 for (uint32_t i = 0; i < content_len_; ++i) {
-                    delete (content_ + i);
+                    if (content_[i].pair.key_ != KTYPE::empty)
+                        delete content_[i].pair.value_;
                 }
                 free(content_);
             }
@@ -194,13 +339,14 @@ namespace lqf {
             VTYPEP remove(ktype key) {
                 auto content_size = content_len_;
                 auto content_mask = content_size - 1;
-                auto base_index = knuth_hash(key) & content_mask;
-                auto ref_index = base_index;
+                int base_index = knuth_hash(key) & content_mask;
+                int ref_index = base_index;
                 Entry ref_entry;
                 ref_entry.pair.key_ = key;
                 VTYPEP retval = nullptr;
-                while (content_[ref_index & content_mask].key_ != KTYPE::empty &&
-                       key < content_[ref_index & content_mask].key_) {
+                bool cas_success = false;
+                while (content_[ref_index & content_mask].pair.key_ != KTYPE::empty &&
+                       key < content_[ref_index & content_mask].pair.key_) {
                     ref_index += 1;
                 }
                 while (ref_index >= base_index) {
@@ -216,7 +362,8 @@ namespace lqf {
                         auto cand_entry = cand.second;
                         if (cas128((__uint128_t *) (content_ + (ref_index & content_mask)),
                                    ref_entry.whole, cand_entry.whole)) {
-                            if (retval) {
+                            cas_success = true;
+                            if (!retval) {
                                 retval = ref_entry.pair.value_;
                             }
                             if (cand_entry.pair.key_ != KTYPE::empty) {
@@ -224,12 +371,18 @@ namespace lqf {
                                 ref_index = cand_index;
                                 ref_entry = cand_entry;
                             } else {
+                                if (cas_success) {
+                                    size_--;
+                                }
                                 return retval;
                             }
                         } else {
                             ref_index -= 1;
                         }
                     }
+                }
+                if (cas_success) {
+                    size_--;
                 }
                 return retval;
             }
@@ -251,6 +404,33 @@ namespace lqf {
                 free(content_);
                 content_ = new_content;
                 content_len_ = new_content_len;
+            }
+
+            class PCHMIterator : public Iterator<pair<ktype, VTYPEP>> {
+                Entry *content_;
+                uint32_t content_len_;
+                uint32_t pointer_;
+            public:
+                PCHMIterator(Entry *content, uint32_t content_len) : content_(content), content_len_(content_len),
+                                                                     pointer_(0) {
+                    while (pointer_ < content_len_ && content_[pointer_].pair.key_ == KTYPE::empty) {
+                        ++pointer_;
+                    }
+                }
+
+                bool hasNext() {
+                    return pointer_ < content_len_;
+                }
+
+                pair<ktype, VTYPEP> next() {
+                    Entry value = content_[pointer_];
+                    do { ++pointer_; } while (pointer_ < content_len_ && content_[pointer_].pair.key_ == KTYPE::empty);
+                    return pair<ktype, VTYPEP>{value.pair.key_, value.pair.value_};
+                }
+            };
+
+            unique_ptr<Iterator<pair<ktype, VTYPEP>>> iterator() {
+                return unique_ptr<Iterator<pair<ktype, VTYPEP>>>(new PCHMIterator(content_, content_len_));
             }
 
             inline uint32_t size() { return size_; }

@@ -7,6 +7,13 @@
 
 namespace lqf {
 
+    template<typename type>
+    class Iterator {
+    public:
+        virtual bool hasNext() = 0;
+
+        virtual type next() = 0;
+    };
 }
 
 #endif //ARROW_LANG_H

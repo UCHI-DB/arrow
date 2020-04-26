@@ -802,6 +802,59 @@ TEST(HashExistJoinTest, Join) {
     EXPECT_EQ(4, (*read_rows)[i][1].asInt());
 }
 
+TEST(HashNotExistJoinTest, Join) {
+    auto left = ParquetTable::Open("testres/lineitem");
+    left->updateColumns((1 << 14) - 1);
+    auto right = MemTable::Make(2);
+    auto block = right->allocate(100);
+
+    auto rows = block->rows();
+    (*rows)[0][0] = 35; // 6
+    (*rows)[1][0] = 99; // 4
+    (*rows)[2][0] = 1154; // 6
+    (*rows)[3][0] = 4452; // 2
+    (*rows)[4][0] = 5987; // 4
+    (*rows)[5][0] = 14145;
+    (*rows)[6][0] = 21859;
+    (*rows)[7][0] = 40;
+    (*rows)[0][1] = 0;
+    (*rows)[1][1] = 1;
+    (*rows)[2][1] = 2;
+    (*rows)[3][1] = 3;
+    (*rows)[4][1] = 4;
+    (*rows)[5][1] = 5;
+    (*rows)[6][1] = 6;
+    (*rows)[7][1] = 7;
+
+
+    HashExistJoin join(0, 0, new RowBuilder({JR(0), JR(1)}));
+
+    auto joined = join.join(*left, *right);
+    EXPECT_EQ(vector<uint32_t>({1, 1}), joined->colSize());
+
+    auto blocks = joined->blocks()->collect();
+    auto rblock = (*blocks)[0];
+    EXPECT_EQ(5, rblock->size());
+
+    auto read_rows = rblock->rows();
+
+    int i = 0;
+    EXPECT_EQ(35, (*read_rows)[i][0].asInt());
+    EXPECT_EQ(0, (*read_rows)[i][1].asInt());
+    ++i;
+    EXPECT_EQ(99, (*read_rows)[i][0].asInt());
+    EXPECT_EQ(1, (*read_rows)[i][1].asInt());
+    ++i;
+    EXPECT_EQ(1154, (*read_rows)[i][0].asInt());
+    EXPECT_EQ(2, (*read_rows)[i][1].asInt());
+    ++i;
+    EXPECT_EQ(4452, (*read_rows)[i][0].asInt());
+    EXPECT_EQ(3, (*read_rows)[i][1].asInt());
+    ++i;
+    EXPECT_EQ(5987, (*read_rows)[i][0].asInt());
+    EXPECT_EQ(4, (*read_rows)[i][1].asInt());
+}
+
 TEST(HashColumnJoinTest, Join) {
     auto left = MemTable::Make(2, true);
     auto lblock1 = left->allocate(100);

@@ -103,6 +103,8 @@ namespace lqf {
             using ktype = typename DTYPE::type;
         private:
             PhaseConcurrentHashSet<DTYPE> content_;
+            atomic<ktype> min_;
+            atomic<ktype> max_;
         public:
             HashPredicate();
 
@@ -128,10 +130,10 @@ namespace lqf {
         template<typename DTYPE>
         class HashContainer : public IntPredicate<DTYPE> {
             using ktype = typename DTYPE::type;
-        private:
-            PhaseConcurrentHashMap<DTYPE, MemDataRow*> hashmap_;
-            ktype min_ = DTYPE::min;
-            ktype max_ = DTYPE::max;
+        protected:
+            PhaseConcurrentHashMap<DTYPE, MemDataRow *> hashmap_;
+            atomic<ktype> min_;
+            atomic<ktype> max_;
 
         public:
             HashContainer();
@@ -144,9 +146,13 @@ namespace lqf {
 
             unique_ptr<MemDataRow> remove(ktype key);
 
-//            inline unordered_map<int64_t, unique_ptr<MemDataRow>> &content() { return hashmap_; }
+            unique_ptr<Iterator<pair<ktype, MemDataRow*>>> iterator();
 
             inline uint32_t size() { return hashmap_.size(); }
+
+            inline ktype min() { return min_.load(); }
+
+            inline ktype max() { return max_.load(); }
         };
 
         using Hash32Container = HashContainer<Int32>;
@@ -235,22 +241,41 @@ namespace lqf {
         shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
     };
 
-    ///
-    /// HashExistJoin returns matched records from the hashtable
-    ///
+    /*
+     * HashExistJoin works by creating a hash table containing all records to be checked,
+     * and probe using another table. All records in the hashtable that has at least one match
+     * will be output. It is different from HashFilterJoin in the case that the results are
+     * output from the build table, not the probe table.
+     *
+     * When there's no predicate present, we remove a record from the hash table when one
+     * match appears. This makes sure a record only appears in the output once.
+     *
+     * When there's a predicate, we fetch a record from the hash table, apply the predicate.
+     * If the result is success, we mark the key in a bitmap. Keys already in the bitmap will
+     * not be further checked. Bitmaps from different blocks will be logical or to obtain the final
+     * result. The reason for this complicated operation is that with existence of a predicate,
+     * we need to perform either a remove-check-putback or get-check-remove operation.
+     * These operations are not parallelizable.
+     */
+
+
     class HashExistJoin : public HashBasedJoin {
 
     public:
         HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
                       function<bool(DataRow &, DataRow &)> pred = nullptr);
 
+        shared_ptr<Table> join(Table &, Table &) override;
+
     protected:
         function<bool(DataRow &, DataRow &)> predicate_;
 
         void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
+
+        shared_ptr<SimpleBitmap> probeWithPredicate(const shared_ptr<Block> &leftBlock);
     };
 
-    class HashNotExistJoin : public HashBasedJoin {
+    class HashNotExistJoin : public HashExistJoin {
     public:
         HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
                          function<bool(DataRow &, DataRow &)> pred = nullptr);
@@ -260,11 +285,12 @@ namespace lqf {
     protected:
         function<bool(DataRow &, DataRow &)> predicate_;
 
-        void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
+        void probe(MemTable *, const shared_ptr<Block> &) override;
+
     };
 
     /**
-     * HashVJoin is used to perform joining on vertical memory table.
+     * HashColumnJoin is used to perform joining on vertical memory table.
      * It allows reading only columns participating joining, and avoids
      * unnecessary data movement between memory tables when multiple
      * joins are performed in sequence.
@@ -276,7 +302,7 @@ namespace lqf {
     protected:
         ColumnBuilder *columnBuilder_;
 
-        void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
+        void probe(MemTable *, const shared_ptr<Block> &) override;
     };
 
     namespace powerjoin {
@@ -319,7 +345,7 @@ namespace lqf {
         protected:
             ColumnBuilder *columnBuilder_;
 
-            void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
+            void probe(MemTable *, const shared_ptr<Block> &) override;
         };
 
         class PowerHashFilterJoin : public Join {

@@ -60,6 +60,7 @@ set(LQF_SRCS
         dict.cc
         concurrent.cc
         hash.cc
+        lang.cc
         )
 
 add_arrow_lib(lqf

@@ -8,6 +8,7 @@
 #include "concurrent.h"
 #include "executor.h"
 
+using namespace lqf;
 using namespace lqf::phasecon;
 using namespace lqf::executor;
 
