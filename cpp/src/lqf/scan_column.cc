@@ -45,26 +45,7 @@ void scanTable2() {
 }
 
 void scanTable3() {
-    std::ofstream output;
-    output.open("/home/harper/cpp_res");
-    const char *fileName = "/local/hajiang/tpch/5/lineitem/lineitem.parquet";
-
-    using namespace parquet;
-
-    auto fileReader = ParquetFileReader::OpenFile(fileName);
-    auto rowGroup = fileReader->RowGroup(0);
-    auto reader1 = rowGroup->Column(0);
-    int32_t size = sizeof(uint32_t) * rowGroup->metadata()->num_rows();
-    void *buffer1 = malloc(sizeof(uint32_t) * rowGroup->metadata()->num_rows());
-    int64_t value_read;
-    reader1->ReadBatch(rowGroup->metadata()->num_rows(), 0, 0, buffer1, &value_read);
-    auto reader2 = rowGroup->Column(0);
-    void *buffer2 = malloc(sizeof(uint32_t) * rowGroup->metadata()->num_rows());
-    reader2->ReadBatch(rowGroup->metadata()->num_rows(), 0, 0, buffer2, &value_read);
-    for(int i = 0 ; i < size;i++) {
-        assert(((char*)buffer1)[i] == ((char*)buffer2)[i]);
-    }
-    return;
+    const char *fileName = "testres/lineitem";
 }
 
 void scanTable() {

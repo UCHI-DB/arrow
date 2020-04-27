@@ -146,7 +146,7 @@ namespace lqf {
 
             unique_ptr<MemDataRow> remove(ktype key);
 
-            unique_ptr<Iterator<pair<ktype, MemDataRow*>>> iterator();
+            unique_ptr<lqf::Iterator<std::pair<ktype, MemDataRow *>>> iterator();
 
             inline uint32_t size() { return hashmap_.size(); }
 
@@ -283,7 +283,6 @@ namespace lqf {
         shared_ptr<Table> join(Table &, Table &) override;
 
     protected:
-        function<bool(DataRow &, DataRow &)> predicate_;
 
         void probe(MemTable *, const shared_ptr<Block> &) override;
 

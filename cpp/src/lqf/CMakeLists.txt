@@ -124,7 +124,8 @@ target_link_libraries(scan_column lqf_static)
 
 add_custom_target(lqf-benchmarks)
 set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
-add_lqf_benchmark(concurrent_benchmark)
 
+add_lqf_benchmark(concurrent_benchmark)
+add_lqf_benchmark(join_benchmark)
 
 add_subdirectory(tpch)

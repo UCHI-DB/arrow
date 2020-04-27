@@ -113,14 +113,14 @@ namespace lqf {
 
     SimpleBitmap::SimpleBitmap(uint64_t size) {
         validate_true(size < 0xFFFFFFFFL, "size overflow");
-        array_size_ = (size >> 6) + 1;
-        bitmap_ = new uint64_t[array_size_];
+        array_size_ = (size+63) >> 6;
+        bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
         size_ = (int) size;
     }
 
     SimpleBitmap::~SimpleBitmap() {
-        delete[] bitmap_;
+        free(bitmap_);
     }
 
     bool SimpleBitmap::check(uint64_t pos) {
@@ -141,15 +141,14 @@ namespace lqf {
 
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
-//        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 2;
+        uint64_t limit = array_size_ >> 3;
         uint64_t i = 0;
-        for (i = 0; i < limit; i += 4) {
-            __m256i a = _mm256_loadu_si256((__m256i *) (this->bitmap_ + i));
-            __m256i b = _mm256_loadu_si256((__m256i *) (sx1.bitmap_ + i));
-            __m256i res = _mm256_and_si256(a, b);
-            _mm256_storeu_si256((__m256i *) (this->bitmap_ + i), res);
+        for (i = 0; i < limit; i += 8) {
+            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
+            __m512i res = _mm512_and_si512(a, b);
+            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
         for (; i < array_size_; i++) {
             this->bitmap_[i] &= sx1.bitmap_[i];
@@ -159,15 +158,14 @@ namespace lqf {
 
     shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
-//        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 2;
+        uint64_t limit = array_size_ >> 3;
         uint64_t i = 0;
-        for (i = 0; i < limit; i += 4) {
-            __m256i a = _mm256_loadu_si256((__m256i *) (this->bitmap_ + i));
-            __m256i b = _mm256_loadu_si256((__m256i *) (sx1.bitmap_ + i));
-            __m256i res = _mm256_or_si256(a, b);
-            _mm256_storeu_si256((__m256i *) (this->bitmap_ + i), res);
+        for (i = 0; i < limit; i += 8) {
+            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
+            __m512i res = _mm512_or_si512(a, b);
+            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
         for (; i < array_size_; i++) {
             this->bitmap_[i] |= sx1.bitmap_[i];
@@ -175,15 +173,33 @@ namespace lqf {
         return shared_from_this();
     }
 
+    shared_ptr<Bitmap> SimpleBitmap::operator^(Bitmap &another) {
+        SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
+//        validate_true(size_ == sx1.size_, "size not the same");
+        this->first_valid_ = -1;
+        uint64_t limit = array_size_ >> 3;
+        uint64_t i = 0;
+        for (i = 0; i < limit; i += 8) {
+            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
+            __m512i res = _mm512_xor_si512(a, b);
+            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
+        }
+        for (; i < array_size_; i++) {
+            this->bitmap_[i] ^= sx1.bitmap_[i];
+        }
+        return shared_from_this();
+    }
+
     shared_ptr<Bitmap> SimpleBitmap::operator~() {
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 2;
+        uint64_t limit = array_size_ >> 3;
         uint64_t i = 0;
         __m256i ONE = _mm256_set1_epi64x(-1);
-        for (i = 0; i < limit; i += 4) {
-            __m256i a = _mm256_loadu_si256((__m256i *) (this->bitmap_ + i));
+        for (i = 0; i < limit; i += 8) {
+            __m256i a = _mm256_load_si256((__m256i *) (this->bitmap_ + i));
             __m256i res = _mm256_xor_si256(a, ONE);
-            _mm256_storeu_si256((__m256i *) (this->bitmap_ + i), res);
+            _mm256_store_si256((__m256i *) (this->bitmap_ + i), res);
         }
         for (; i < array_size_; i++) {
             this->bitmap_[i] ^= -1;
@@ -250,6 +266,10 @@ namespace lqf {
 
     shared_ptr<Bitmap> FullBitmap::operator|(Bitmap &x1) {
         return shared_from_this();
+    }
+
+    shared_ptr<Bitmap> FullBitmap::operator^(Bitmap &x1) {
+        return ~x1;
     }
 
     shared_ptr<Bitmap> FullBitmap::operator~() {

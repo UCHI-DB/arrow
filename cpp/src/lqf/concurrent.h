@@ -245,10 +245,9 @@ namespace lqf {
             Entry *content_;
             uint32_t content_len_;
 
-            bool _insert(Entry *content, Entry entry) {
+            bool _insert(Entry *content, uint32_t content_len, Entry entry) {
                 auto data = content;
-                auto content_size = content_len_;
-                auto content_mask = content_size - 1;
+                auto content_mask = content_len - 1;
                 auto insert_index = knuth_hash(entry.pair.key_) & content_mask;
 
                 auto insert_value = entry;
@@ -314,7 +313,7 @@ namespace lqf {
             void put(ktype key, VTYPEP value) {
                 Entry entry;
                 entry.pair = {key, value};
-                if (_insert(content_, entry)) {
+                if (_insert(content_, content_len_, entry)) {
                     size_++;
                     if (size_ >= limit()) {
                         // TODO What error?
@@ -398,7 +397,7 @@ namespace lqf {
                 for (uint32_t i = 0; i < content_len_; ++i) {
                     auto entry = content_[i];
                     if (entry.key_ != KTYPE::empty) {
-                        internal_insert(new_content, entry);
+                        internal_insert(new_content, new_content_len, entry);
                     }
                 }
                 free(content_);

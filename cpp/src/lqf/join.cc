@@ -142,7 +142,7 @@ namespace lqf {
             do {
                 current = max_.load();
             } while (!max_.compare_exchange_strong(current, std::max(key, current)));
-            hashmap_.put(key, dataRow.get());
+            hashmap_.put(key, dataRow.release());
         }
 
         template<typename DTYPE>
@@ -454,6 +454,7 @@ namespace lqf {
             auto writerows = memblock->rows();
             auto writecount = 0;
 
+
             auto bitmapite = exist->iterator();
             while (bitmapite->hasNext()) {
                 (*writerows)[writecount++] = *container_->get(static_cast<int32_t>(bitmapite->next()));
@@ -509,7 +510,7 @@ namespace lqf {
 
     HashNotExistJoin::HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::JoinBuilder *rowBuilder,
                                        function<bool(DataRow &, DataRow &)> pred) :
-            HashExistJoin(leftKeyIndex, rightKeyIndex, rowBuilder), predicate_(pred) {}
+            HashExistJoin(leftKeyIndex, rightKeyIndex, rowBuilder, pred) {}
 
     shared_ptr<Table> HashNotExistJoin::join(Table &left, Table &right) {
         function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
@@ -526,15 +527,17 @@ namespace lqf {
                         return (*a) | (*b);
                     };
             auto exist = left.blocks()->map(prober)->reduce(reducer);
-            auto notExist = ~(*exist);
-            auto memblock = memTable->allocate(notExist->cardinality());
+            auto memblock = memTable->allocate(container_->size() - exist->cardinality());
 
             auto writerows = memblock->rows();
             auto writecount = 0;
 
-            auto bitmapite = notExist->iterator();
-            while (bitmapite->hasNext()) {
-                (*writerows)[writecount++] = *container_->get(static_cast<int32_t>(bitmapite->next()));
+            auto ite = container_->iterator();
+            while (ite->hasNext()) {
+                auto entry = ite->next();
+                if (!exist->check(entry.first)) {
+                    (*writerows)[writecount++] = *(entry.second);
+                }
             }
         } else {
             function<void(const shared_ptr<Block> &)> prober = bind(&HashNotExistJoin::probe, this, memTable.get(), _1);
