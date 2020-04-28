@@ -376,14 +376,16 @@ namespace lqf {
 
         inline uint64_t size() { return fileReader_->metadata()->num_rows(); }
 
-        static shared_ptr<ParquetTable> Open(const string &filename, uint64_t columns = 0);
-
-        static shared_ptr<ParquetTable> Open(const string &filename, std::initializer_list<uint32_t> columns);
+        inline uint32_t numBlocks() { return fileReader_->metadata()->num_row_groups(); }
 
         template<typename DTYPE>
         unique_ptr<Dictionary<DTYPE>> LoadDictionary(int column);
 
         uint32_t DictionarySize(int column);
+
+        static shared_ptr<ParquetTable> Open(const string &filename, uint64_t columns = 0);
+
+        static shared_ptr<ParquetTable> Open(const string &filename, std::initializer_list<uint32_t> columns);
 
     protected:
         shared_ptr<ParquetBlock> createParquetBlock(const int &block_idx);
@@ -396,7 +398,7 @@ namespace lqf {
         vector<shared_ptr<Bitmap>> masks_;
     public:
 
-        MaskedTable(ParquetTable *, unordered_map<uint32_t, shared_ptr<Bitmap>> &);
+        MaskedTable(ParquetTable *, vector<shared_ptr<Bitmap>> &);
 
         virtual ~MaskedTable();
 

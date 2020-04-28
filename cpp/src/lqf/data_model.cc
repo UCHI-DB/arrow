@@ -797,12 +797,9 @@ namespace lqf {
         return dictpage->num_values();
     }
 
-    MaskedTable::MaskedTable(ParquetTable *inner, unordered_map<uint32_t, shared_ptr<Bitmap>> &masks)
-            : inner_(inner) {
-        masks_ = vector<shared_ptr<Bitmap>>(masks.size());
-        for (auto ite = masks.begin(); ite != masks.end(); ++ite) {
-            masks_[ite->first] = move(ite->second);
-        }
+    MaskedTable::MaskedTable(ParquetTable *inner, vector<shared_ptr<Bitmap>> &masks)
+            : inner_(inner), masks_(masks) {
+        masks_.resize(inner_->numBlocks());
     }
 
     MaskedTable::~MaskedTable() {}

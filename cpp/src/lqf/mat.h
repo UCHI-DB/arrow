@@ -5,7 +5,7 @@
 #ifndef ARROW_MAT_H
 #define ARROW_MAT_H
 
-#include <lqf/data_model.h>
+#include "data_model.h"
 
 //#define MLB [](DataRow& in, DataRow& out) {
 //#define MI(i, j) out[j] = in[i].asInt();

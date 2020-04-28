@@ -9,43 +9,18 @@ using namespace std::placeholders;
 
 namespace lqf {
 
-//    MemMat::MemMat(uint32_t num_fields, function<void(DataRow &, DataRow &)> loader)
-//            : num_fields_(num_fields), loader_(loader) {}
-//
-//    MemMat::MemMat(uint32_t num_fields, function<void(DataRow &, DataRow &)> loader)
-//            : num_fields_(num_fields), loader_(loader) {}
-//
-//    shared_ptr<MemTable> MemMat::mat(Table &input) {
-//        auto mtable = MemTable::Make(num_fields_);
-//
-//        function<void(const shared_ptr<Block> &)> mapper = bind(&MemMat::matBlock, this, mtable.get(), _1);
-//        input.blocks()->foreach(mapper);
-//        return mtable;
-//    }
-//
-//    void MemMat::matBlock(MemTable *table, const shared_ptr<Block> &block) {
-//        auto mblock = table->allocate(block->size());
-//
-//        auto irows = block->rows();
-//        auto orows = mblock->rows();
-//
-//        auto size = block->size();
-//        for (uint32_t i = 0; i < size; ++i) {
-//            loader_((*irows).next(), (*orows)[i]);
-//        }
-//    }
-
     shared_ptr<Table> FilterMat::mat(Table &input) {
-        unordered_map<uint32_t, shared_ptr<Bitmap>> map;
+        // Instead of using a hashmap and involves concurrency problem, use an array instead.
+        vector<shared_ptr<Bitmap>> storage(100, nullptr);
         ParquetTable *owner;
-        function<void(const shared_ptr<Block> &)> processor = [&map, &owner](const shared_ptr<Block> &block) {
+        function<void(const shared_ptr<Block> &)> processor = [&storage, &owner](const shared_ptr<Block> &block) {
             auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
             owner = static_cast<ParquetTable *>(mblock->inner()->owner());
-            map[mblock->inner()->id()] = mblock->mask();
+            storage[mblock->inner()->id()] = mblock->mask();
         };
         input.blocks()->foreach(processor);
 
-        return make_shared<MaskedTable>(owner, map);
+        return make_shared<MaskedTable>(owner, storage);
     }
 
     HashMat::HashMat(uint32_t key_index, function<unique_ptr<MemDataRow>(DataRow &)> snapshoter) :
