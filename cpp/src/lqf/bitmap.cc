@@ -113,7 +113,7 @@ namespace lqf {
 
     SimpleBitmap::SimpleBitmap(uint64_t size) {
         validate_true(size < 0xFFFFFFFFL, "size overflow");
-        array_size_ = (size+63) >> 6;
+        array_size_ = (size + 63) >> 6;
         bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
         size_ = (int) size;
@@ -142,7 +142,7 @@ namespace lqf {
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 3;
+        uint64_t limit = (array_size_ >> 3) << 3;
         uint64_t i = 0;
         for (i = 0; i < limit; i += 8) {
             __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
@@ -159,7 +159,7 @@ namespace lqf {
     shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 3;
+        uint64_t limit = (array_size_ >> 3) << 3;
         uint64_t i = 0;
         for (i = 0; i < limit; i += 8) {
             __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
@@ -177,7 +177,7 @@ namespace lqf {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
 //        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 3;
+        uint64_t limit = (array_size_ >> 3) << 3;
         uint64_t i = 0;
         for (i = 0; i < limit; i += 8) {
             __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
@@ -193,13 +193,13 @@ namespace lqf {
 
     shared_ptr<Bitmap> SimpleBitmap::operator~() {
         this->first_valid_ = -1;
-        uint64_t limit = array_size_ >> 3;
+        uint64_t limit = (array_size_ >> 3) << 3;
         uint64_t i = 0;
-        __m256i ONE = _mm256_set1_epi64x(-1);
+        __m512i ONE = _mm512_set1_epi64(-1);
         for (i = 0; i < limit; i += 8) {
-            __m256i a = _mm256_load_si256((__m256i *) (this->bitmap_ + i));
-            __m256i res = _mm256_xor_si256(a, ONE);
-            _mm256_store_si256((__m256i *) (this->bitmap_ + i), res);
+            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+            __m512i res = _mm512_xor_si512(a, ONE);
+            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
         for (; i < array_size_; i++) {
             this->bitmap_[i] ^= -1;
@@ -238,6 +238,20 @@ namespace lqf {
 
     uint64_t *SimpleBitmap::raw() {
         return bitmap_;
+    }
+
+    ConcurrentBitmap::ConcurrentBitmap(uint64_t size) : SimpleBitmap(size) {}
+
+    void ConcurrentBitmap::put(uint64_t pos) {
+        uint32_t index = static_cast<uint32_t>(pos >> 6);
+        uint32_t offset = static_cast<uint32_t> (pos & 0x3F);
+        uint64_t modify = 1L << offset;
+        uint64_t oldval = bitmap_[index];
+        uint64_t newval;
+        do {
+            newval = oldval | modify;
+        } while (!__atomic_compare_exchange_n(bitmap_ + index, &oldval, newval, false,
+                                              std::memory_order_seq_cst, std::memory_order_seq_cst));
     }
 
     FullBitmap::FullBitmap(uint64_t size) {

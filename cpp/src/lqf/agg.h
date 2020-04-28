@@ -16,34 +16,34 @@ using namespace std;
 using namespace std::placeholders;
 namespace lqf {
 
-    class AggField {
-    protected:
-        uint32_t readIndex_;
-    public:
-        DataField storage_;
-
-        AggField(uint32_t readIndex);
-
-        virtual void init() = 0;
-
-        virtual void reduce(DataRow &) = 0;
-
-        virtual void merge(AggField &) = 0;
-
-        virtual void dump() {}
-    };
-
-    class AggRecordingField : public AggField {
-    protected:
-        vector<int32_t> keys_;
-        uint32_t keyIndex_;
-    public:
-        AggRecordingField(uint32_t rIndex, uint32_t kIndex);
-
-        vector<int32_t> &keys();
-    };
-
     namespace agg {
+        class AggField {
+        protected:
+            uint32_t readIndex_;
+        public:
+            DataField storage_;
+
+            AggField(uint32_t readIndex);
+
+            virtual void init() = 0;
+
+            virtual void reduce(DataRow &) = 0;
+
+            virtual void merge(AggField &) = 0;
+
+            virtual void dump() {}
+        };
+
+        class AggRecordingField : public AggField {
+        protected:
+            vector<int32_t> keys_;
+            uint32_t keyIndex_;
+        public:
+            AggRecordingField(uint32_t rIndex, uint32_t kIndex);
+
+            vector<int32_t> &keys();
+        };
+
 
         struct AsDouble {
             static double get(DataField &df) { return df.asDouble(); }
@@ -187,45 +187,47 @@ namespace lqf {
             void dump() override;
         };
 
-        using IntDistinctCount= DistinctCount<int32_t, AsInt>;
+        using IntDistinctCount = DistinctCount<int32_t, AsInt>;
+
+        class AggReducer {
+        protected:
+            uint32_t header_size_;
+            MemDataRow storage_;
+            vector<unique_ptr<AggField>> fields_;
+        public:
+            AggReducer(uint32_t numHeaders, vector<AggField *> fields);
+
+            AggReducer(const vector<uint32_t> &, vector<AggField *> fields);
+
+            inline uint32_t header_size() { return header_size_; }
+
+            inline MemDataRow &storage() { return storage_; }
+
+            inline vector<unique_ptr<AggField>> &fields() { return fields_; }
+
+            void reduce(DataRow &);
+
+            void merge(AggReducer &reducer);
+
+            virtual void dump(MemDataRow &);
+
+            virtual uint32_t size() { return 1; }
+        };
+
+        class AggRecordingReducer : public AggReducer {
+        protected:
+            AggRecordingField *field_;
+        public:
+
+            AggRecordingReducer(vector<uint32_t> &, AggRecordingField *field);
+
+            void dump(MemDataRow &) override;
+
+            uint32_t size() override;
+        };
+
     }
-
-    class AggReducer {
-    protected:
-        uint32_t header_size_;
-        MemDataRow storage_;
-        vector<unique_ptr<AggField>> fields_;
-    public:
-        AggReducer(uint32_t numHeaders, vector<AggField *> fields);
-
-        AggReducer(const vector<uint32_t> &, vector<AggField *> fields);
-
-        inline uint32_t header_size() { return header_size_; }
-
-        inline MemDataRow &storage() { return storage_; }
-
-        inline vector<unique_ptr<AggField>> &fields() { return fields_; }
-
-        void reduce(DataRow &);
-
-        void merge(AggReducer &reducer);
-
-        virtual void dump(MemDataRow &);
-
-        virtual uint32_t size() { return 1; }
-    };
-
-    class AggRecordingReducer : public AggReducer {
-    protected:
-        AggRecordingField *field_;
-    public:
-
-        AggRecordingReducer(vector<uint32_t> &, AggRecordingField *field);
-
-        void dump(MemDataRow &) override;
-
-        uint32_t size() override;
-    };
+    using namespace agg;
 
     template<typename CORE>
     class Agg {

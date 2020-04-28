@@ -950,6 +950,9 @@ TEST(HashNotExistJoinTest, JoinWithPredicate) {
     EXPECT_EQ(141454224, (*read_rows)[i][0].asInt());
     EXPECT_EQ(5, (*read_rows)[i][1].asInt());
     ++i;
+    EXPECT_EQ(35, (*read_rows)[i][0].asInt());
+    EXPECT_EQ(0, (*read_rows)[i][1].asInt());
+    ++i;
     EXPECT_EQ(218593224, (*read_rows)[i][0].asInt());
     EXPECT_EQ(6, (*read_rows)[i][1].asInt());
 }

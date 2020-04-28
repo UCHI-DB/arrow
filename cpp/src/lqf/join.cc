@@ -221,8 +221,7 @@ namespace lqf {
                         auto col = block->col(keyIndex);
                         uint32_t block_size = block->size();
                         for (uint32_t i = 0; i < block_size; ++i) {
-                            auto key = col->next().asInt();
-                            pred->add(key);
+                            pred->add(col->next().asInt());
                         }
                     };
             input.blocks()->foreach(processor);

@@ -104,7 +104,7 @@ namespace lqf {
     };
 
     class SimpleBitmap : public Bitmap {
-    private:
+    protected:
         uint64_t *bitmap_;
         uint64_t array_size_;
         uint64_t size_;
@@ -116,7 +116,7 @@ namespace lqf {
 
         bool check(uint64_t pos) override;
 
-        void put(uint64_t pos) override;
+        virtual void put(uint64_t pos) override;
 
         void clear() override;
 
@@ -141,6 +141,16 @@ namespace lqf {
         std::unique_ptr<BitmapIterator> iterator() override;
 
         uint64_t *raw();
+    };
+
+    /**
+     * Support non-blocking concurrent append
+     */
+    class ConcurrentBitmap : public SimpleBitmap {
+    public:
+        ConcurrentBitmap(uint64_t);
+
+        void put(uint64_t) override;
     };
 
     class FullBitmap : public Bitmap {

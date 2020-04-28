@@ -11,70 +11,70 @@ using namespace std;
 using namespace std::placeholders;
 namespace lqf {
 
-    AggReducer::AggReducer(uint32_t numFields, vector<AggField *> fields) :
-            AggReducer(lqf::colOffset(numFields), fields) {}
-
-
-    AggReducer::AggReducer(const vector<uint32_t> &col_offset, vector<AggField *> fields)
-            : storage_(col_offset) {
-        header_size_ = col_offset.size() - 1 - fields.size();
-        auto start = header_size_;
-        for (auto &field:fields) {
-            field->storage_ = storage_[start++].data();
-            field->init();
-            fields_.push_back(unique_ptr<AggField>(field));
-        }
-    }
-
-    void AggReducer::reduce(DataRow &row) {
-        for (auto &field: fields_) {
-            field->reduce(row);
-        }
-    }
-
-    void AggReducer::merge(AggReducer &reducer) {
-        auto field_size = fields_.size();
-        for (uint32_t i = 0; i < field_size; ++i) {
-            this->fields_[i]->merge(*reducer.fields_[i]);
-        }
-    }
-
-    void AggReducer::dump(MemDataRow &target) {
-        for (auto &field:fields_) {
-            field->dump();
-        }
-        target = storage_;
-    }
-
-    AggRecordingReducer::AggRecordingReducer(vector<uint32_t> &col_offset, AggRecordingField *field)
-            : AggReducer(col_offset, {field}), field_(field) {}
-
-    uint32_t AggRecordingReducer::size() {
-        return field_->keys().size();
-    }
-
-    void AggRecordingReducer::dump(MemDataRow &target) {
-        for (auto &field:fields_) {
-            field->dump();
-        }
-        target = storage_;
-        auto key = field_->keys().back();
-        field_->keys().pop_back();
-        target[header_size_ - 1] = key;
-    }
-
-    AggField::AggField(uint32_t index) : readIndex_(index) {
-        storage_.size_ = 1;
-    }
-
-    AggRecordingField::AggRecordingField(uint32_t rIndex, uint32_t kIndex)
-            : AggField(rIndex), keyIndex_(kIndex) {}
-
-    vector<int32_t> &AggRecordingField::keys() {
-        return keys_;
-    }
-
     namespace agg {
+        AggReducer::AggReducer(uint32_t numFields, vector<AggField *> fields) :
+                AggReducer(lqf::colOffset(numFields), fields) {}
+
+
+        AggReducer::AggReducer(const vector<uint32_t> &col_offset, vector<AggField *> fields)
+                : storage_(col_offset) {
+            header_size_ = col_offset.size() - 1 - fields.size();
+            auto start = header_size_;
+            for (auto &field:fields) {
+                field->storage_ = storage_[start++].data();
+                field->init();
+                fields_.push_back(unique_ptr<AggField>(field));
+            }
+        }
+
+        void AggReducer::reduce(DataRow &row) {
+            for (auto &field: fields_) {
+                field->reduce(row);
+            }
+        }
+
+        void AggReducer::merge(AggReducer &reducer) {
+            auto field_size = fields_.size();
+            for (uint32_t i = 0; i < field_size; ++i) {
+                this->fields_[i]->merge(*reducer.fields_[i]);
+            }
+        }
+
+        void AggReducer::dump(MemDataRow &target) {
+            for (auto &field:fields_) {
+                field->dump();
+            }
+            target = storage_;
+        }
+
+        AggRecordingReducer::AggRecordingReducer(vector<uint32_t> &col_offset, AggRecordingField *field)
+                : AggReducer(col_offset, {field}), field_(field) {}
+
+        uint32_t AggRecordingReducer::size() {
+            return field_->keys().size();
+        }
+
+        void AggRecordingReducer::dump(MemDataRow &target) {
+            for (auto &field:fields_) {
+                field->dump();
+            }
+            target = storage_;
+            auto key = field_->keys().back();
+            field_->keys().pop_back();
+            target[header_size_ - 1] = key;
+        }
+
+        AggField::AggField(uint32_t index) : readIndex_(index) {
+            storage_.size_ = 1;
+        }
+
+        AggRecordingField::AggRecordingField(uint32_t rIndex, uint32_t kIndex)
+                : AggField(rIndex), keyIndex_(kIndex) {}
+
+        vector<int32_t> &AggRecordingField::keys() {
+            return keys_;
+        }
+
         template<typename T, typename ACC>
         Sum<T, ACC>::Sum(uint32_t rIndex) : AggField(rIndex) {}
 
@@ -556,7 +556,7 @@ namespace lqf {
             if (reducer_) {
                 reducer_->merge(*(another.reducer_));
             } else {
-                reducer_= move(another.reducer_);
+                reducer_ = move(another.reducer_);
             }
         }
     }

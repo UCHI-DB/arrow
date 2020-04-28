@@ -252,20 +252,6 @@ namespace lqf {
     }
 
     shared_ptr<Block> MemBlock::mask(shared_ptr<Bitmap> mask) {
-//        auto newBlock = make_shared<MemBlock>(mask->cardinality(), row_size_, col_offset_);
-//        auto ite = mask->iterator();
-//
-//        auto newData = newBlock->content_.data();
-//        auto oldData = content_.data();
-//
-//        auto newCounter = 0;
-//        while (ite->hasNext()) {
-//            auto next = ite->next();
-//            memcpy((void *) (newData + (newCounter++) * row_size_),
-//                   (void *) (oldData + next * row_size_),
-//                   sizeof(uint64_t) * row_size_);
-//        }
-//        return newBlock;
         return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
@@ -884,7 +870,11 @@ namespace lqf {
     }
 
     shared_ptr<Stream<shared_ptr<Block>>> MemTable::blocks() {
+#ifdef LQF_PARALLEL
+        return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_))->parallel();
+#else
         return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_));
+#endif
     }
 
     const vector<uint32_t> &MemTable::colSize() { return col_size_; }
