@@ -133,19 +133,19 @@ namespace lqf {
             auto validLineitem = filterMat.mat(*itemPartJoin.join(*lineitem, *validPart));
 
             // Use the lineitem to make three filter maps
-            unordered_set<uint64_t> orderkeys;
-            unordered_set<uint64_t> suppkeys;
-            unordered_set<uint64_t> partsuppkeys;
+            HashPredicate<Int32> orderkeys;
+            HashPredicate<Int32> suppkeys;
+            HashPredicate<Int64> partsuppkeys;
             validLineitem->blocks()->foreach([&orderkeys, &suppkeys, &partsuppkeys](const shared_ptr<Block> &block) {
                 auto rows = block->rows();
                 auto block_size = block->size();
                 for (uint32_t i = 0; i < block_size; ++i) {
                     DataRow &row = rows->next();
-                    orderkeys.insert(row[LineItem::ORDERKEY].asInt());
+                    orderkeys.add(row[LineItem::ORDERKEY].asInt());
                     int suppkey = row[LineItem::SUPPKEY].asInt();
                     int partkey = row[LineItem::PARTKEY].asInt();
-                    suppkeys.insert(row[LineItem::SUPPKEY].asInt());
-                    partsuppkeys.insert((static_cast<uint64_t>(partkey) << 32) + suppkey);
+                    suppkeys.add(suppkey);
+                    partsuppkeys.add((static_cast<uint64_t>(partkey) << 32) + suppkey);
                 }
             });
 

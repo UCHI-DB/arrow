@@ -9,6 +9,14 @@ using namespace std::placeholders;
 
 namespace lqf {
 
+    FilterMat::FilterMat() : Node(1) {}
+
+    unique_ptr<NodeOutput> FilterMat::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = mat(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
+
     shared_ptr<Table> FilterMat::mat(Table &input) {
         // Instead of using a hashmap and involves concurrency problem, use an array instead.
         vector<shared_ptr<Bitmap>> storage(100, nullptr);
@@ -23,8 +31,14 @@ namespace lqf {
         return make_shared<MaskedTable>(owner, storage);
     }
 
-    HashMat::HashMat(uint32_t key_index, function<unique_ptr<MemDataRow>(DataRow &)> snapshoter) :
-            key_index_(key_index), snapshoter_(snapshoter) {}
+    HashMat::HashMat(uint32_t key_index, function<unique_ptr<MemDataRow>(DataRow &)> snapshoter)
+            : Node(1), key_index_(key_index), snapshoter_(snapshoter) {}
+
+    unique_ptr<NodeOutput> HashMat::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = mat(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
 
     shared_ptr<Table> HashMat::mat(Table &input) {
         auto table = MemTable::Make(0);
@@ -43,7 +57,13 @@ namespace lqf {
 
     PowerHashMat::PowerHashMat(function<int64_t(DataRow &)> key_maker,
                                function<unique_ptr<MemDataRow>(DataRow &)> snapshoter)
-            : key_maker_(key_maker), snapshoter_(snapshoter) {}
+            : Node(1), key_maker_(key_maker), snapshoter_(snapshoter) {}
+
+    unique_ptr<NodeOutput> PowerHashMat::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = mat(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
 
     shared_ptr<Table> PowerHashMat::mat(Table &input) {
         auto table = MemTable::Make(0);

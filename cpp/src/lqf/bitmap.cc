@@ -26,9 +26,7 @@ namespace lqf {
         return value_ != 0;
     }
 
-    BitmapIterator::~BitmapIterator() {
-
-    }
+    BitmapIterator::~BitmapIterator() {}
 
     SimpleBitmapIterator::SimpleBitmapIterator(uint64_t *content, uint64_t content_size, uint64_t num_bits) {
         this->content_ = content;
@@ -113,7 +111,10 @@ namespace lqf {
 
     SimpleBitmap::SimpleBitmap(uint64_t size) {
         validate_true(size < 0xFFFFFFFFL, "size overflow");
-        array_size_ = (size + 63) >> 6;
+        // Attention: Due to a glitch in sboost, the bitmap should be one word larger than
+        // the theoretical size. Otherwise sboost will read past the boundary and cause
+        // memory issues.
+        array_size_ = (size >> 6) + 1;
         bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
         size_ = (int) size;
@@ -121,6 +122,7 @@ namespace lqf {
 
     SimpleBitmap::~SimpleBitmap() {
         free(bitmap_);
+        bitmap_ = nullptr;
     }
 
     bool SimpleBitmap::check(uint64_t pos) {
@@ -150,7 +152,7 @@ namespace lqf {
             __m512i res = _mm512_and_si512(a, b);
             _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
-        for (; i < array_size_; i++) {
+        for (; i < array_size_; ++i) {
             this->bitmap_[i] &= sx1.bitmap_[i];
         }
         return shared_from_this();
@@ -167,7 +169,7 @@ namespace lqf {
             __m512i res = _mm512_or_si512(a, b);
             _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
-        for (; i < array_size_; i++) {
+        for (; i < array_size_; ++i) {
             this->bitmap_[i] |= sx1.bitmap_[i];
         }
         return shared_from_this();
@@ -185,7 +187,7 @@ namespace lqf {
             __m512i res = _mm512_xor_si512(a, b);
             _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
-        for (; i < array_size_; i++) {
+        for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= sx1.bitmap_[i];
         }
         return shared_from_this();
@@ -201,7 +203,7 @@ namespace lqf {
             __m512i res = _mm512_xor_si512(a, ONE);
             _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
         }
-        for (; i < array_size_; i++) {
+        for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= -1;
         }
         return shared_from_this();

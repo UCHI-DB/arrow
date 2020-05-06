@@ -6,8 +6,11 @@
 #define LQF_OPERATOR_FILTER_H
 
 #include <memory>
+#include "lang.h"
+#include "parallel.h"
 #include "data_model.h"
 #include "bitmap.h"
+#include "hash_container.h"
 #include <sboost/encoding/rlehybrid.h>
 #include <sboost/encoding/deltabp.h>
 
@@ -18,14 +21,20 @@ using namespace std;
 
 namespace lqf {
 
-    class Filter {
+    using namespace parallel;
+
+    class Filter : public Node {
     protected:
         shared_ptr<Block> processBlock(const shared_ptr<Block> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &) = 0;
 
     public:
+        Filter();
+
         virtual shared_ptr<Table> filter(Table &input);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
     };
 
     class ColPredicate {
@@ -88,22 +97,15 @@ namespace lqf {
         template<typename DTYPE>
         class SboostPredicate : public ColPredicate {
         public:
-            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()
-
-            > accbuilder)
-                    :
-
-                    ColPredicate(index), builder_(accbuilder) {}
+            SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()> accbuilder)
+                    : ColPredicate(index), builder_(accbuilder) {}
 
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
 
             unique_ptr<RawAccessor<DTYPE>> build();
 
         protected:
-            function<unique_ptr<RawAccessor<DTYPE>>()
-
-            >
-                    builder_;
+            function<unique_ptr<RawAccessor<DTYPE>>()> builder_;
         };
 
         using SBoostInt32Predicate = SboostPredicate<Int32Type>;
@@ -168,8 +170,8 @@ namespace lqf {
         };
 
         using Int32DictGreater = DictGreater<Int32Type>;
-        using DoubleDictGreater= DictGreater<DoubleType>;
-        using ByteArrayDictGreater= DictGreater<ByteArrayType>;
+        using DoubleDictGreater = DictGreater<DoubleType>;
+        using ByteArrayDictGreater = DictGreater<ByteArrayType>;
 
         template<typename DTYPE>
         class DictBetween : public RawAccessor<DTYPE> {
@@ -211,9 +213,9 @@ namespace lqf {
             static unique_ptr<DictRangele<DTYPE>> build(const T &lower, const T &upper);
         };
 
-        using Int32DictRangele= DictRangele<Int32Type>;
-        using DoubleDictRangele= DictRangele<DoubleType>;
-        using ByteArrayDictRangele= DictRangele<ByteArrayType>;
+        using Int32DictRangele = DictRangele<Int32Type>;
+        using DoubleDictRangele = DictRangele<DoubleType>;
+        using ByteArrayDictRangele = DictRangele<ByteArrayType>;
 
         template<typename DTYPE>
         class DictMultiEq : public RawAccessor<DTYPE> {
@@ -223,6 +225,8 @@ namespace lqf {
         public:
             DictMultiEq(function<bool(const T &)> pred);
 
+            virtual ~DictMultiEq();
+
             void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
@@ -231,9 +235,9 @@ namespace lqf {
             static unique_ptr<DictMultiEq<DTYPE>> build(function<bool(const T &)>);
         };
 
-        using Int32DictMultiEq= DictMultiEq<Int32Type>;
-        using DoubleDictMultiEq= DictMultiEq<DoubleType>;
-        using ByteArrayDictMultiEq= DictMultiEq<ByteArrayType>;
+        using Int32DictMultiEq = DictMultiEq<Int32Type>;
+        using DoubleDictMultiEq = DictMultiEq<DoubleType>;
+        using ByteArrayDictMultiEq = DictMultiEq<ByteArrayType>;
 
         class DeltaEq : public RawAccessor<Int32Type> {
         private:
@@ -307,12 +311,14 @@ namespace lqf {
         virtual ~RowFilter() {}
     };
 
+    using namespace hashcontainer;
+
     class MapFilter : public Filter {
     private:
         uint32_t key_index_;
-        unordered_set<uint64_t> &filter_;
+        IntPredicate<Int32> &filter_;
     public:
-        MapFilter(uint32_t key_index, unordered_set<uint64_t> &);
+        MapFilter(uint32_t key_index, IntPredicate<Int32> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
     };
@@ -320,9 +326,9 @@ namespace lqf {
     class PowerMapFilter : public Filter {
     private:
         function<uint64_t(DataRow &)> key_maker_;
-        unordered_set<uint64_t> &filter_;
+        IntPredicate<Int64> &filter_;
     public:
-        PowerMapFilter(function<uint64_t(DataRow &)>, unordered_set<uint64_t> &);
+        PowerMapFilter(function<uint64_t(DataRow &)>, IntPredicate<Int64> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
     };

@@ -6,57 +6,66 @@
 
 namespace lqf {
 
-    FilterUnion::FilterUnion() {}
+    FilterUnion::FilterUnion(uint32_t num_input) : Node(num_input) {}
 
-    shared_ptr<Table> FilterUnion::execute(initializer_list<Table *> tables) {
-        unordered_map<uint32_t, shared_ptr<Bitmap>> map;
-        mutex write_lock;
-        ParquetTable *owner;
-        function<void(const shared_ptr<Block> &)> processor = [&map, &owner, &write_lock](
-                const shared_ptr<Block> &block) {
-            auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
-            owner = static_cast<ParquetTable *>(mblock->inner()->owner());
-            auto blockid = mblock->inner()->id();
-
-            write_lock.lock();
-            if (map.find(blockid) != map.end()) {
-                (*map[blockid]) | (*mblock->mask());
-            } else {
-                map[blockid] = mblock->mask();
-            }
-            write_lock.unlock();
-        };
-        for (auto &table: tables) {
-            table->blocks()->foreach(processor);
+    unique_ptr<NodeOutput> FilterUnion::execute(const vector<NodeOutput *> &inputs) {
+        vector<Table *> inputTables;
+        for (auto &input: inputs) {
+            inputTables.push_back(static_cast<TableOutput *>(input)->get().get());
         }
-
-        return make_shared<MaskedTable>(owner, map);
+        return unique_ptr<TableOutput>(new TableOutput(execute(inputTables)));
     }
 
-    FilterAnd::FilterAnd() {}
-
-    shared_ptr<Table> FilterAnd::execute(initializer_list<Table *> tables) {
-        unordered_map<uint32_t, shared_ptr<Bitmap>> map;
-        mutex write_lock;
+    shared_ptr<Table> FilterUnion::execute(const vector<Table *> &tables) {
+        vector<shared_ptr<Bitmap>> storage(100, nullptr);
         ParquetTable *owner;
-        function<void(const shared_ptr<Block> &)> processor = [&map, &owner, &write_lock](
+        function<void(const shared_ptr<Block> &)> processor = [&storage, &owner](
                 const shared_ptr<Block> &block) {
             auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
             owner = static_cast<ParquetTable *>(mblock->inner()->owner());
             auto blockid = mblock->inner()->id();
 
-            write_lock.lock();
-            if (map.find(blockid) != map.end()) {
-                (*map[blockid]) & (*mblock->mask());
+            if (storage[blockid]) {
+                *(storage[blockid]) | (*mblock->mask());
             } else {
-                map[blockid] = mblock->mask();
+                storage[blockid] = mblock->mask();
             }
-            write_lock.unlock();
+        };
+        for (auto &table: tables) {
+            table->blocks()->foreach(processor);
+        }
+        return make_shared<MaskedTable>(owner, storage);
+    }
+
+    FilterAnd::FilterAnd(uint32_t num_input) : Node(num_input) {}
+
+    unique_ptr<NodeOutput> FilterAnd::execute(const vector<NodeOutput *> &inputs) {
+        vector<Table *> inputTables;
+        for (auto &input: inputs) {
+            inputTables.push_back(static_cast<TableOutput *>(input)->get().get());
+        }
+        return unique_ptr<TableOutput>(new TableOutput(execute(inputTables)));
+    }
+
+    shared_ptr<Table> FilterAnd::execute(const vector<Table *> &tables) {
+        vector<shared_ptr<Bitmap>> storage;
+        ParquetTable *owner;
+        function<void(const shared_ptr<Block> &)> processor = [&storage, &owner](
+                const shared_ptr<Block> &block) {
+            auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
+            owner = static_cast<ParquetTable *>(mblock->inner()->owner());
+            auto blockid = mblock->inner()->id();
+
+            if (storage[blockid]) {
+                *(storage[blockid]) & (*mblock->mask());
+            } else {
+                storage[blockid] = mblock->mask();
+            }
         };
         for (auto &table: tables) {
             table->blocks()->foreach(processor);
         }
 
-        return make_shared<MaskedTable>(owner, map);
+        return make_shared<MaskedTable>(owner, storage);
     }
 }

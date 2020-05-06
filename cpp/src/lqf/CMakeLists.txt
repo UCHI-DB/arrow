@@ -44,10 +44,11 @@ set(LQF_SIMD_FLAGS -msse4.1 -mavx -mavx2 -mavx512f -mavx512bw -mavx512dq -mavx51
 set(LQF_BENCHMARK_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads)
 
 set(LQF_SRCS
-        executor.cc
+        threadpool.cc
         stream.cc
         agg.cc
         bitmap.cc
+        concurrent.cc
         data_model.cc
         filter.cc
         filter_executor.cc
@@ -58,8 +59,10 @@ set(LQF_SRCS
         util.cc
         union.cc
         dict.cc
-        concurrent.cc
+        container.cc
+        parallel.cc
         hash.cc
+        hash_container.cc
         lang.cc
         )
 
@@ -97,7 +100,8 @@ set(LQF_TEST_SRC
         print_test.cc
         sort_test.cc
         mat_test.cc
-        concurrent_test.cc
+        container_test.cc
+        parallel_test.cc
         )
 
 add_test_case(all-test
@@ -125,9 +129,8 @@ target_link_libraries(scan_column lqf_static)
 add_custom_target(lqf-benchmarks)
 set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
 
-add_lqf_benchmark(concurrent_benchmark)
+add_lqf_benchmark(container_benchmark)
 add_lqf_benchmark(join_benchmark)
 add_lqf_benchmark(bitmap_benchmark)
-add_lqf_benchmark(mat_benchmark)
 
 add_subdirectory(tpch)

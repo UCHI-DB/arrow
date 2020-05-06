@@ -5,22 +5,29 @@
 #ifndef ARROW_UNION_H
 #define ARROW_UNION_H
 
-#include <lqf/data_model.h>
+#include "data_model.h"
+#include "parallel.h"
 
 namespace lqf {
-    class FilterUnion {
+    using namespace parallel;
+
+    class FilterUnion: public Node {
 
     public:
-        FilterUnion();
+        FilterUnion(uint32_t);
 
-        shared_ptr<Table> execute(initializer_list<Table *>);
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+
+        shared_ptr<Table> execute(const vector<Table *>&);
     };
 
-    class FilterAnd {
+    class FilterAnd:public Node {
     public:
-        FilterAnd();
+        FilterAnd(uint32_t);
 
-        shared_ptr<Table> execute(initializer_list<Table*>);
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+
+        shared_ptr<Table> execute(const vector<Table*>&);
     };
 }
 #endif //ARROW_UNION_H

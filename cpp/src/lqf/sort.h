@@ -7,6 +7,7 @@
 
 #include "heap.h"
 #include "data_model.h"
+#include "parallel.h"
 
 #define SORTER1(x) [](DataRow *a, DataRow *b) {return (*a)[x].asInt() < (*b)[x].asInt();}
 #define SORTER2(x, y) [](DataRow *a, DataRow *b) { auto a0 = (*a)[x].asInt(); auto b0 = (*b)[x].asInt(); return a0 < b0 || (a0 == b0 && (*a)[y].asInt() < (*b)[y].asInt()); }
@@ -23,10 +24,12 @@ using namespace std;
 namespace lqf {
 
 
+    using namespace parallel;
+
     /**
      *
      */
-    class SmallSort {
+    class SmallSort : public Node {
     protected:
         function<bool(DataRow *, DataRow *)> comparator_;
         bool vertical_ = false;
@@ -34,10 +37,12 @@ namespace lqf {
     public:
         SmallSort(function<bool(DataRow *, DataRow *)>, bool vertical = false);
 
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+
         shared_ptr<Table> sort(Table &);
     };
 
-    class SnapshotSort {
+    class SnapshotSort : public Node {
     protected:
         vector<uint32_t> col_size_;
         function<bool(DataRow *, DataRow *)> comparator_;
@@ -45,12 +50,14 @@ namespace lqf {
         bool vertical_;
     public:
         SnapshotSort(const vector<uint32_t>, function<bool(DataRow *, DataRow *)>,
-                     function<unique_ptr<MemDataRow>(DataRow &)>,bool vertical = false);
+                     function<unique_ptr<MemDataRow>(DataRow &)>, bool vertical = false);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> sort(Table &);
     };
 
-    class TopN {
+    class TopN : public Node {
     private:
         uint32_t n_;
         mutex collector_lock_;
@@ -58,6 +65,8 @@ namespace lqf {
         bool vertical_ = false;
     public:
         TopN(uint32_t, function<bool(DataRow *, DataRow *)>, bool vertical = false);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> sort(Table &);
 

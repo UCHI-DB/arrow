@@ -1,28 +1,62 @@
 //
-// Created by Harper on 4/20/20.
+// Created by Harper on 4/29/20.
 //
 
 #include "concurrent.h"
-#include <iostream>
-#include <exception>
 
 namespace lqf {
+    namespace concurrent {
 
-    const int32_t Int32::empty = -1;
-    const int32_t Int32::min = INT32_MIN;
-    const int32_t Int32::max = INT32_MAX;
+        void Semaphore::notify() {
+            std::lock_guard<decltype(mutex_)> lock(mutex_);
+            ++count_;
+            condition_.notify_one();
+        }
 
-    const int64_t Int64::empty = -1;
-    const int64_t Int64::min = INT64_MIN;
-    const int64_t Int64::max = INT64_MAX;
-
-    namespace phasecon {
-
-        uint32_t ceil2(uint32_t input) {
-            if (__builtin_popcount(input) == 1) {
-                return input;
+        void Semaphore::notify(uint32_t num) {
+            std::lock_guard<decltype(mutex_)> lock(mutex_);
+            count_ += num;
+            for (uint32_t i = 0; i < num; ++i) {
+                condition_.notify_one();
             }
-            return 1 << (32 - __builtin_clz(input));
+        }
+
+        void Semaphore::wait() {
+            std::unique_lock<decltype(mutex_)> lock(mutex_);
+            while (!count_) // Handle spurious wake-ups.
+                condition_.wait(lock);
+            --count_;
+        }
+
+        void Semaphore::wait(uint32_t num) {
+            std::unique_lock<decltype(mutex_)> lock(mutex_);
+            uint32_t remain = num;
+            while (remain) {
+                while (!count_) {
+                    condition_.wait(lock);
+                }
+                auto delta = std::min(remain, count_);
+                remain -= delta;
+                count_ -= delta;
+            }
+        }
+
+        bool Semaphore::try_wait() {
+            std::lock_guard<decltype(mutex_)> lock(mutex_);
+            if (count_) {
+                --count_;
+                return true;
+            }
+            return false;
+        }
+
+        bool Semaphore::try_wait(uint32_t num) {
+            std::lock_guard<decltype(mutex_)> lock(mutex_);
+            if (count_ > num) {
+                count_ -= num;
+                return true;
+            }
+            return false;
         }
     }
 }

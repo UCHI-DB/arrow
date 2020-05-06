@@ -6,6 +6,7 @@
 #define ARROW_MAT_H
 
 #include "data_model.h"
+#include "parallel.h"
 
 //#define MLB [](DataRow& in, DataRow& out) {
 //#define MI(i, j) out[j] = in[i].asInt();
@@ -15,29 +16,38 @@
 
 namespace lqf {
 
-    /// Enable multi-load of filtered tables
+    using namespace parallel;
 
-    class FilterMat {
+    /// Enable multi-load of filtered tables
+    class FilterMat : public Node {
     public:
+        FilterMat();
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+
         shared_ptr<Table> mat(Table &input);
     };
 
-    class HashMat {
+    class HashMat : public Node {
     private:
         uint32_t key_index_;
-        function<unique_ptr<MemDataRow>(DataRow & )> snapshoter_;
+        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter_;
     public:
-        HashMat(uint32_t, function<unique_ptr<MemDataRow>(DataRow & )>);
+        HashMat(uint32_t, function<unique_ptr<MemDataRow>(DataRow &)>);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> mat(Table &input);
     };
 
-    class PowerHashMat {
+    class PowerHashMat : public Node {
     private:
-        function<int64_t(DataRow & )> key_maker_;
-        function<unique_ptr<MemDataRow>(DataRow & )> snapshoter_;
+        function<int64_t(DataRow &)> key_maker_;
+        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter_;
     public:
-        PowerHashMat(function<int64_t(DataRow & )>, function<unique_ptr<MemDataRow>(DataRow & )>);
+        PowerHashMat(function<int64_t(DataRow &)>, function<unique_ptr<MemDataRow>(DataRow &)>);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> mat(Table &input);
     };

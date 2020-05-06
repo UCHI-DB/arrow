@@ -20,6 +20,7 @@ namespace lqf {
     protected:
         unordered_map<string, unique_ptr<vector<ColPredicate *>>> regTable_;
         unordered_map<string, unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>> result_;
+        mutex write_lock;
 
         string makeKey(Table &, uint32_t);
 

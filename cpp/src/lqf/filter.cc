@@ -15,6 +15,14 @@ using namespace sboost::encoding;
 
 namespace lqf {
 
+    Filter::Filter() : Node(1, true) {}
+
+    unique_ptr<NodeOutput> Filter::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = filter(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
+
     shared_ptr<Table> Filter::filter(Table &input) {
         function<shared_ptr<Block>(
                 const shared_ptr<Block> &)> mapper = bind(&Filter::processBlock, this, _1);
@@ -120,7 +128,7 @@ namespace lqf {
         return -1;
     }
 
-    MapFilter::MapFilter(uint32_t key_index, unordered_set<uint64_t> &filter)
+    MapFilter::MapFilter(uint32_t key_index, IntPredicate<Int32> &filter)
             : key_index_(key_index), filter_(filter) {}
 
     shared_ptr<Bitmap> MapFilter::filterBlock(Block &input) {
@@ -128,14 +136,14 @@ namespace lqf {
         auto bitmap = make_shared<SimpleBitmap>(input.limit());
         auto block_size = input.size();
         for (uint32_t i = 0; i < block_size; ++i) {
-            if (filter_.find(col->next().asInt()) != filter_.end()) {
+            if (filter_.test(col->next().asInt())) {
                 bitmap->put(i);
             }
         }
         return bitmap;
     }
 
-    PowerMapFilter::PowerMapFilter(function<uint64_t(DataRow &)> key_maker, unordered_set<uint64_t> &filter)
+    PowerMapFilter::PowerMapFilter(function<uint64_t(DataRow &)> key_maker, IntPredicate<Int64> &filter)
             : key_maker_(key_maker), filter_(filter) {}
 
     shared_ptr<Bitmap> PowerMapFilter::filterBlock(Block &input) {
@@ -143,7 +151,7 @@ namespace lqf {
         auto bitmap = make_shared<SimpleBitmap>(input.limit());
         auto block_size = input.size();
         for (uint32_t i = 0; i < block_size; ++i) {
-            if (filter_.find(key_maker_(rows->next())) != filter_.end()) {
+            if (filter_.test(key_maker_(rows->next()))) {
                 bitmap->put(i);
             }
         }
@@ -316,6 +324,10 @@ namespace lqf {
 
         template<typename DTYPE>
         DictMultiEq<DTYPE>::DictMultiEq(function<bool(const T &)> pred) : predicate_(pred) {}
+
+        template<typename DTYPE>
+        DictMultiEq<DTYPE>::~DictMultiEq() {
+        }
 
         template<typename DTYPE>
         void DictMultiEq<DTYPE>::dict(Dictionary<DTYPE> &dict) {

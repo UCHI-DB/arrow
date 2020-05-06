@@ -2,8 +2,8 @@
 // Created by harper on 3/14/20.
 //
 
-#ifndef ARROW_EXECUTOR_H
-#define ARROW_EXECUTOR_H
+#ifndef ARROW_THREADPOOL_H
+#define ARROW_THREADPOOL_H
 
 #include<thread>
 #include<memory>
@@ -13,62 +13,13 @@
 #include<future>
 #include<functional>
 #include <condition_variable>
+#include "concurrent.h"
 
 using namespace std;
 
 namespace lqf {
-    namespace executor {
-
-        class Semaphore {
-        private:
-            std::mutex mutex_;
-            std::condition_variable condition_;
-            uint32_t count_ = 0; // Initialized as locked.
-
-        public:
-            void notify() {
-                std::lock_guard<decltype(mutex_)> lock(mutex_);
-                ++count_;
-                condition_.notify_one();
-            }
-
-            void notify(uint32_t num) {
-                std::lock_guard<decltype(mutex_)> lock(mutex_);
-                count_ += num;
-                for (uint32_t i = 0; i < num; ++i) {
-                    condition_.notify_one();
-                }
-            }
-
-            void wait() {
-                std::unique_lock<decltype(mutex_)> lock(mutex_);
-                while (!count_) // Handle spurious wake-ups.
-                    condition_.wait(lock);
-                --count_;
-            }
-
-            void wait(uint32_t num) {
-                std::unique_lock<decltype(mutex_)> lock(mutex_);
-                uint32_t remain = num;
-                while (remain) {
-                    while (!count_) {
-                        condition_.wait(lock);
-                    }
-                    auto delta = std::min(remain, count_);
-                    remain -= delta;
-                    count_ -= delta;
-                }
-            }
-
-            bool try_wait() {
-                std::lock_guard<decltype(mutex_)> lock(mutex_);
-                if (count_) {
-                    --count_;
-                    return true;
-                }
-                return false;
-            }
-        };
+    using namespace concurrent;
+    namespace threadpool {
 
         class Executor;
 
@@ -118,6 +69,7 @@ namespace lqf {
             void submit(unique_ptr<Task>);
 
         public:
+            inline uint32_t pool_size() { return pool_size_; }
 
             virtual ~Executor();
 
@@ -155,6 +107,11 @@ namespace lqf {
         protected:
             void routine();
         };
+
+        class BatchExecutor : public Executor {
+        public:
+
+        };
     }
 }
-#endif //ARROW_EXECUTOR_H
+#endif //ARROW_THREADPOOL_H

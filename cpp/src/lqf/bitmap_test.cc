@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include "bitmap.h"
-#include "executor.h"
+#include "threadpool.h"
 
 using namespace lqf;
 
@@ -169,7 +169,7 @@ TEST(SimpleBitmapTest, BitwiseNot) {
     }
 }
 
-using namespace executor;
+using namespace threadpool;
 
 TEST(ConcurrentBitmapTest, Put) {
     ConcurrentBitmap conc(1525025);

@@ -596,7 +596,7 @@ TEST(ParquetTableTest, LoadDictionary) {
 TEST(MaskedTableTest, Create) {
     auto ptable = ParquetTable::Open("testres/lineitem", 0x7);
 
-    unordered_map<uint32_t, shared_ptr<Bitmap>> masks;
+    vector<shared_ptr<Bitmap>> masks(10, nullptr);
     masks[0] = make_shared<SimpleBitmap>(1000);
     auto maskTable = make_shared<MaskedTable>(ptable.get(), masks);
 

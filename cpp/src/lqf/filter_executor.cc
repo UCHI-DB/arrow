@@ -67,7 +67,11 @@ namespace lqf {
             for (uint32_t i = 0; i < preds.size(); ++i) {
                 (*resultMap)[preds[i]] = content[i]->result();
             }
+
+            write_lock.lock();
             result_[resultKey] = unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>(resultMap);
+            write_lock.unlock();
+
             // Here we do not bitand the result with mask, as this will be done in Filter::processBlock
             return (*resultMap)[&predicate];
         }

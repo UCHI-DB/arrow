@@ -2,9 +2,9 @@
 // Created by harper on 3/14/20.
 //
 #include <gtest/gtest.h>
-#include "executor.h"
+#include "threadpool.h"
 
-using namespace lqf::executor;
+using namespace lqf::threadpool;
 
 TEST(ExecutorTest, Shutdown) {
     auto executor = Executor::Make(10);

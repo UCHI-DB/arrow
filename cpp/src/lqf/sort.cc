@@ -11,7 +11,13 @@ using namespace std::placeholders;
 namespace lqf {
 
     SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp, bool vertical)
-            : comparator_(comp), vertical_(vertical) {}
+            : Node(1), comparator_(comp), vertical_(vertical) {}
+
+    unique_ptr<NodeOutput> SmallSort::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = sort(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
 
     shared_ptr<Table> SmallSort::sort(Table &table) {
         auto output = MemTable::Make(table.colSize(), false);
@@ -33,7 +39,13 @@ namespace lqf {
     SnapshotSort::SnapshotSort(const vector<uint32_t> col_size,
                                function<bool(DataRow *, DataRow *)> comp,
                                function<unique_ptr<MemDataRow>(DataRow &)> snapshoter, bool vertical)
-            : col_size_(col_size), comparator_(comp), snapshoter_(snapshoter), vertical_(vertical) {}
+            : Node(1), col_size_(col_size), comparator_(comp), snapshoter_(snapshoter), vertical_(vertical) {}
+
+    unique_ptr<NodeOutput> SnapshotSort::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = sort(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
 
     shared_ptr<Table> SnapshotSort::sort(Table &input) {
         auto memblock = make_shared<MemListBlock>();
@@ -53,7 +65,13 @@ namespace lqf {
     }
 
     TopN::TopN(uint32_t n, function<bool(DataRow *, DataRow *)> comp, bool vertical)
-            : n_(n), comparator_(comp), vertical_(vertical) {}
+            : Node(1), n_(n), comparator_(comp), vertical_(vertical) {}
+
+    unique_ptr<NodeOutput> TopN::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        auto table = sort(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(table));
+    }
 
     shared_ptr<Table> TopN::sort(Table &table) {
         auto resultTable = MemTable::Make(table.colSize(), vertical_);

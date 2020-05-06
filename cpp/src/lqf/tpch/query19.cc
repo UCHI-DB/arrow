@@ -72,10 +72,10 @@ namespace lqf {
             FilterMat fmat;
             auto lineitemBase = fmat.mat(*lineitemBaseFilter.filter(*lineitem));
 
-            FilterAnd fand;
-            auto validLineitem1 = fand.execute({qtyLineitem1.get(), lineitemBase.get()});
-            auto validLineitem2 = fand.execute({qtyLineitem2.get(), lineitemBase.get()});
-            auto validLineitem3 = fand.execute({qtyLineitem3.get(), lineitemBase.get()});
+            FilterAnd fand(3);
+            auto validLineitem1 = fand.execute(vector<Table*>{qtyLineitem1.get(), lineitemBase.get()});
+            auto validLineitem2 = fand.execute(vector<Table*>{qtyLineitem2.get(), lineitemBase.get()});
+            auto validLineitem3 = fand.execute(vector<Table*>{qtyLineitem3.get(), lineitemBase.get()});
 
             ColFilter partFilter1(
                     {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand1)),
@@ -122,8 +122,8 @@ namespace lqf {
             HashFilterJoin itemOnPartJoin3(LineItem::PARTKEY, Part::PARTKEY);
             auto itemWithPart3 = itemOnPartJoin3.join(*validLineitem3, *validPart3);
 
-            FilterUnion funion;
-            auto unioneditem = funion.execute({itemWithPart1.get(), itemWithPart2.get(), itemWithPart3.get()});
+            FilterUnion funion(3);
+            auto unioneditem = funion.execute(vector<Table*>{itemWithPart1.get(), itemWithPart2.get(), itemWithPart3.get()});
 
 
             SimpleAgg sumagg({1}, []() { return vector<AggField *>{new PriceField()}; });

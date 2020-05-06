@@ -6,6 +6,7 @@
 #define ARROW_HASH_H
 
 #include <cstdint>
+#include "lang.h"
 
 namespace lqf {
     namespace hash {
@@ -14,7 +15,6 @@ namespace lqf {
         uint32_t knuth_hash(int64_t v);
 
         uint32_t murmur3_hash(int64_t v);
-
     }
 }
 

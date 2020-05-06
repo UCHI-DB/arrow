@@ -9,6 +9,7 @@
 #include <string>
 #include <iomanip>
 #include "data_model.h"
+#include "parallel.h"
 
 #define PBEGIN [=](DataRow& row) { lqf::pout <<  //std::setprecision(8) <<
 #define PEND '\n' ;}
@@ -51,7 +52,8 @@ namespace lqf {
 
     extern PrintBuffer pout;
 
-    class Printer {
+    using namespace parallel;
+    class Printer:public Node {
     protected:
         uint64_t sum_;
 
@@ -61,6 +63,8 @@ namespace lqf {
 
     public:
         Printer(function<void(DataRow & )> linePrinter);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         void print(Table &table);
 

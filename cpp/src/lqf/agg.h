@@ -6,6 +6,7 @@
 #define LQF_OPERATOR_AGG_H
 
 #include "data_model.h"
+#include "parallel.h"
 
 #define AGI(x) x
 #define AGD(x) 0x10000 | x
@@ -228,9 +229,10 @@ namespace lqf {
 
     }
     using namespace agg;
+    using namespace parallel;
 
     template<typename CORE>
-    class Agg {
+    class Agg :public Node {
     protected:
         vector<uint32_t> output_col_size_;
         bool vertical_;
@@ -242,6 +244,8 @@ namespace lqf {
 
     public:
         Agg(const vector<uint32_t> &output_col_size, bool vertical = false);
+
+        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> agg(Table &input);
 

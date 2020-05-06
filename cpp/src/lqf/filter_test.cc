@@ -38,7 +38,7 @@ TEST(RowFilterTest, Filter) {
         return row[0].asInt() % 5 == 0;
     };
 
-    auto rowFilter = RowFilter(pred);
+    RowFilter rowFilter(pred);
     auto filteredTable = rowFilter.filter(*memTable);
 
     auto filteredBlocks = filteredTable->blocks()->collect();

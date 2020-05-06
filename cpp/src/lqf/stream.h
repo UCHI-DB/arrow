@@ -2,13 +2,13 @@
 // Created by harper on 2/13/20.
 //
 
-#ifndef CHIDATA_STREAM_H
-#define CHIDATA_STREAM_H
+#ifndef LQF_STREAM_H
+#define LQF_STREAM_H
 
 #include <vector>
 #include <memory>
 #include <functional>
-#include "executor.h"
+#include "threadpool.h"
 
 using namespace std;
 
@@ -61,7 +61,7 @@ namespace lqf {
     template<typename FROM, typename TO>
     class StreamLink;
 
-    using namespace lqf::executor;
+    using namespace lqf::threadpool;
 
 
     class StreamEvaluator {

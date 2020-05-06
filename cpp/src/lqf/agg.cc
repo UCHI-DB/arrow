@@ -584,10 +584,16 @@ namespace lqf {
             block->resize(written);
     }
 
-
     template<typename CORE>
     Agg<CORE>::Agg(const vector<uint32_t> &col_size, bool vertical)
-            : output_col_size_(col_size), vertical_(vertical), predicate_(nullptr) {}
+            : Node(1), output_col_size_(col_size), vertical_(vertical), predicate_(nullptr) {}
+
+    template<typename CORE>
+    unique_ptr<NodeOutput> Agg<CORE>::execute(const vector<NodeOutput *> &input) {
+        auto input0 = static_cast<TableOutput*>(input[0]);
+        auto result = agg(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(result));
+    }
 
     template<typename CORE>
     shared_ptr<Table> Agg<CORE>::agg(Table &input) {

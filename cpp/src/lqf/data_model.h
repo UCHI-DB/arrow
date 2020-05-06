@@ -14,11 +14,13 @@
 #include "stream.h"
 #include "bitmap.h"
 #include "dict.h"
+#include "parallel.h"
 
 namespace lqf {
 
     using namespace std;
     using namespace parquet;
+
 
     const vector<uint32_t> &colOffset(uint32_t num_fields);
 
@@ -457,6 +459,7 @@ namespace lqf {
         const vector<uint32_t> &colOffset();
     };
 
+    using TableOutput = parallel::TypedOutput<shared_ptr<Table>>;
 }
 
 #endif //CHIDATA_LQF_DATA_MODEL_H

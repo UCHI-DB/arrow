@@ -11,7 +11,7 @@ namespace lqf {
 
     // Honor the width and fill setting
     ostream &operator<<(ostream &os, const ByteArray &dt) {
-        __ostream_insert(os, (const char*)dt.ptr, dt.len);
+        __ostream_insert(os, (const char *) dt.ptr, dt.len);
         return os;
     }
 
@@ -139,7 +139,13 @@ namespace lqf {
         sum_ += block->size();
     }
 
-    Printer::Printer(function<void(DataRow &)> linePrinter) : linePrinter_(linePrinter) {}
+    Printer::Printer(function<void(DataRow &)> linePrinter) : Node(1), linePrinter_(linePrinter) {}
+
+    unique_ptr<NodeOutput> Printer::execute(const vector<NodeOutput *> &inputs) {
+        auto input0 = static_cast<TableOutput *>(inputs[0]);
+        print(*(input0->get()));
+        return nullptr;
+    }
 
     unique_ptr<Printer> Printer::Make(function<void(DataRow &)> linePrinter) {
         Printer *printer = new Printer(linePrinter);
