@@ -10,7 +10,6 @@
 #include <vector>
 #include <unordered_map>
 #include <initializer_list>
-#include <gtest/gtest_prod.h>
 #include "threadpool.h"
 
 namespace lqf {
@@ -61,11 +60,9 @@ namespace lqf {
         template<typename T>
         class WrapperNode : public Node {
         protected:
-            const T content_;
+            T content_;
         public:
-            WrapperNode(const T content) : Node(0, true) {
-                content_ = move(content);
-            }
+            WrapperNode(T content) : Node(0, true), content_(move(content)) {}
 
             unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override {
                 return unique_ptr<NodeOutput>(new TypedOutput<T>(content_));

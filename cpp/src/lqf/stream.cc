@@ -6,5 +6,5 @@
 
 namespace lqf {
 
-    shared_ptr<Executor> StreamEvaluator::defaultExecutor = Executor::Make(32);
+    shared_ptr<Executor> StreamEvaluator::defaultExecutor = Executor::Make(20);
 }

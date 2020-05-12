@@ -14,6 +14,7 @@ namespace lqf {
 
     void FilterExecutor::reg(Table &table, ColPredicate &predicate) {
         auto key = makeKey(table, predicate.index());
+        lock_guard<mutex> lock(write_lock);
         auto place = regTable_.emplace(key, new vector<ColPredicate *>());
         (*place.first).second->push_back(&predicate);
     }
@@ -68,9 +69,9 @@ namespace lqf {
                 (*resultMap)[preds[i]] = content[i]->result();
             }
 
-            write_lock.lock();
+            unique_lock<mutex> lock(write_lock);
             result_[resultKey] = unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>(resultMap);
-            write_lock.unlock();
+            lock.unlock();
 
             // Here we do not bitand the result with mask, as this will be done in Filter::processBlock
             return (*resultMap)[&predicate];

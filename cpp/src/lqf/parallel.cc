@@ -40,7 +40,7 @@ namespace lqf {
         }
 
         void ExecutionGraph::executeNode(Node *next) {
-            if (!next->trivial()) {
+            if (concurrent_ && !next->trivial()) {
                 executeNodeAsync(next);
             } else {
                 executeNodeSync(next);

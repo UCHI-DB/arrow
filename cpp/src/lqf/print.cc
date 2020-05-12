@@ -135,7 +135,7 @@ namespace lqf {
 //            cout << left << setw(3) << i;
             linePrinter_(rows->next());
         }
-        lqf::pout.output();
+//        lqf::pout.output();
         sum_ += block->size();
     }
 

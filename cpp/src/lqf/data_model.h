@@ -153,7 +153,9 @@ namespace lqf {
     };
 
     class Table;
-
+    ///
+    /// Each block will be processed by a thread
+    ///
     class Block : public enable_shared_from_this<Block> {
     private:
         static mt19937 rand_;
@@ -347,7 +349,7 @@ namespace lqf {
 
     class Table {
     public:
-        virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() = 0;
+        virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() = 0;
 
         /**
          * The number of columns in the table
@@ -370,7 +372,7 @@ namespace lqf {
 
         virtual ~ParquetTable();
 
-        virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
+        virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         const vector<uint32_t> &colSize() override;
 
@@ -404,7 +406,7 @@ namespace lqf {
 
         virtual ~MaskedTable();
 
-        virtual shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
+        virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         const vector<uint32_t> &colSize() override;
 
@@ -415,11 +417,11 @@ namespace lqf {
     class TableView : public Table {
         vector<uint32_t> col_size_;
         Table *root_;
-        shared_ptr<Stream<shared_ptr<Block>>> stream_;
+        unique_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
-        TableView(const vector<uint32_t> &, shared_ptr<Stream<shared_ptr<Block>>>);
+        TableView(const vector<uint32_t> &, unique_ptr<Stream<shared_ptr<Block>>>);
 
-        shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
+        unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         const vector<uint32_t> &colSize() override;
 
@@ -452,7 +454,7 @@ namespace lqf {
 
         void append(shared_ptr<Block>);
 
-        shared_ptr<Stream<shared_ptr<Block>>> blocks() override;
+        unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
         const vector<uint32_t> &colSize() override;
 
@@ -460,6 +462,7 @@ namespace lqf {
     };
 
     using TableOutput = parallel::TypedOutput<shared_ptr<Table>>;
+    using TableNode = parallel::WrapperNode<shared_ptr<Table>>;
 }
 
 #endif //CHIDATA_LQF_DATA_MODEL_H

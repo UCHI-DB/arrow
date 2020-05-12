@@ -7,24 +7,57 @@
 
 #include <vector>
 #include <memory>
+#include <iostream>
 #include <functional>
+#include <optional>
+#include <tuple>
 #include "threadpool.h"
 
 using namespace std;
 
+///
+///
+///
 namespace lqf {
-    namespace stream {
-        template<typename OUT>
+
+    using namespace threadpool;
+    ///
+    /// This is the first attempt to create a stream. It is slow though
+    ///
+    namespace oldstream {
+
+        ///
+        /// We create these operators for parallel execution of stream tasks.
+        /// The operator performs lazy evaluation of stream mapper/filters when its eval() function is called.
+        /// It is known that such wrapping (involving creating new object/calling virtual function for each
+        /// element in the stream) has overhead. The result of stream_benchmark shows the overhead the wrapper
+        /// brings is 35ns per unit compared to executing the mappers/filters directly on the element.
+        /// \tparam T
+        template<typename T>
         class EvalOp {
         public:
             virtual ~EvalOp() {}
 
-            virtual OUT eval() = 0;
+            virtual T eval() = 0;
+        };
+
+        template<typename T>
+        class FilterOp {
+        protected:
+            unique_ptr<EvalOp<T>> previous_;
+            function<bool(const T &)> filter_;
+        public:
+            FilterOp(unique_ptr<EvalOp<T>> prev, function<bool(const T &)> f)
+                    : previous_(prev), filter_(f) {}
+
+            inline T eval() override {
+                T result = previous_->eval();
+                return filter_(result) ? result : nullptr;
+            }
         };
 
         template<typename FROM, typename TO>
         class TransformOp : public EvalOp<TO> {
-
         public:
             TransformOp(unique_ptr<EvalOp<FROM>> from, function<TO(const FROM &)> f)
                     : previous_(move(from)), mapper_(f) {}
@@ -51,18 +84,346 @@ namespace lqf {
             }
         };
 
+
+        template<typename VIEW>
+        class Stream;
+
+        template<typename FROM, typename TO>
+        class MapStream;
+
+        template<typename TYPE>
+        class FilterStream;
+
+        using namespace lqf::threadpool;
+
+        class StreamEvaluator {
+        public:
+            static shared_ptr<Executor> defaultExecutor;
+
+            bool parallel_;
+
+            StreamEvaluator() : parallel_(false) {}
+
+            ~StreamEvaluator() {}
+
+            template<typename T>
+            shared_ptr<vector<T>> eval(vector<unique_ptr<EvalOp<T>>> &input) {
+                if (parallel_) {
+                    return evalParallel(input);
+                } else {
+                    return evalSequential(input);
+                }
+            }
+
+            template<typename T>
+            static T evalOp(EvalOp<T> *op) {
+                return op->eval();
+            }
+
+            template<typename T>
+            inline shared_ptr<vector<T>> evalParallel(vector<unique_ptr<EvalOp<T>>> &input) {
+                vector<function<T()>> tasks;
+                for (auto &eval:input) {
+                    tasks.push_back(std::bind(&StreamEvaluator::evalOp<T>, eval.get()));
+                }
+                shared_ptr<vector<T>> res = move(defaultExecutor->invokeAll(tasks));
+                return res;
+            }
+
+            template<typename T>
+            inline shared_ptr<vector<T>> evalSequential(vector<unique_ptr<EvalOp<T>>> &input) {
+                auto result = make_shared<vector<T>>();
+                for (auto &eval:input) {
+                    result->push_back(evalOp(eval.get()));
+                }
+                return result;
+            }
+        };
+
+        template<typename VIEW>
+        class Stream : public enable_shared_from_this<Stream<VIEW>> {
+        public:
+            Stream() : evaluator_(nullptr) {}
+
+            template<typename NEXT>
+            shared_ptr<Stream<NEXT>> map(function<NEXT(const VIEW &)> f) {
+                return make_shared<MapStream<VIEW, NEXT>>(this->shared_from_this(), f, evaluator_);
+            }
+
+            shared_ptr<Stream<VIEW>> filter(function<bool(const VIEW &)> f) {
+                return make_shared<FilterStream<VIEW>>(this->shared_from_this(), f, evaluator_);
+            }
+
+            /// Use int32_t as workaround as void cannot be allocated return space
+            void foreach(function<void(const VIEW &)> f) {
+                if (evaluator_->parallel_) {
+                    vector<unique_ptr<EvalOp<int32_t>>> holder;
+                    while (!_isEmpty()) {
+                        holder.push_back(unique_ptr<EvalOp<int32_t>>(
+                                new TransformOp<VIEW, int32_t>(
+                                        _next(),
+                                        [=](const VIEW &a) {
+                                            f(a);
+                                            return 0;
+                                        })));
+                    }
+                    evaluator_->eval(holder);
+                } else {
+                    // Using EvalOp has overhead
+                    while (!_isEmpty()) {
+                        f(_next2());
+                    }
+                }
+            }
+
+            shared_ptr<vector<VIEW>> collect() {
+                if (evaluator_->parallel_) {
+                    vector<unique_ptr<EvalOp<VIEW>>> holder;
+                    while (!_isEmpty()) {
+                        holder.push_back(_next());
+                    }
+                    auto result = evaluator_->eval(holder);
+                    return result;
+                } else {
+                    shared_ptr<vector<VIEW>> result = make_shared<vector<VIEW>>();
+                    while (!_isEmpty()) {
+                        result->push_back(_next2());
+                    }
+                    return result;
+                }
+            }
+
+            VIEW reduce(function<VIEW(VIEW &, VIEW &)> reducer) {
+                auto collected = collect();
+                // TODO it is possible to execute reduce in parallel
+                if (collected->size() == 1) {
+                    return move((*collected)[0]);
+                }
+                VIEW first = move((*collected)[0]);
+                auto ite = collected->begin();
+                ite++;
+                for (; ite != collected->end(); ite++) {
+                    first = reducer(first, *ite);
+                }
+                return first;
+            }
+
+            inline bool isParallel() {
+                return evaluator_->parallel_;
+            }
+
+            inline shared_ptr<Stream<VIEW>> parallel() {
+                evaluator_->parallel_ = true;
+                return this->shared_from_this();
+            }
+
+            inline shared_ptr<Stream<VIEW>> sequential() {
+                evaluator_->parallel_ = false;
+                return this->shared_from_this();
+            }
+
+            virtual bool _isEmpty() = 0;
+
+            virtual unique_ptr<EvalOp<VIEW>> _next() = 0;
+
+            virtual VIEW _next2() = 0;
+
+            shared_ptr<StreamEvaluator> evaluator_;
+        };
+
+        template<typename FROM, typename TO>
+        class MapStream : public Stream<TO> {
+        public:
+            MapStream(shared_ptr<Stream<FROM>> source, function<TO(const FROM &)> mapper,
+                      shared_ptr<StreamEvaluator> eval)
+                    : source_(source), mapper_(mapper) {
+                this->evaluator_ = eval;
+            }
+
+            bool _isEmpty() override {
+                return source_->_isEmpty();
+            }
+
+            unique_ptr<EvalOp<TO>> _next() override {
+                return unique_ptr<TransformOp<FROM, TO>>(new TransformOp<FROM, TO>(source_->_next(), mapper_));
+            }
+
+            TO _next2() override {
+                return mapper_(source_->_next2());
+            }
+
+        protected:
+            shared_ptr<Stream<FROM>> source_;
+            function<TO(const FROM &)> mapper_;
+        };
+
+        template<typename TYPE>
+        class FilterStream : public Stream<TYPE> {
+        public:
+            FilterStream(shared_ptr<Stream<TYPE>> source, function<bool(const TYPE &)> filter,
+                         shared_ptr<StreamEvaluator> eval)
+                    : source_(source), filter_(filter) {
+                this->evaluator_ = eval;
+            }
+
+            bool _isEmpty() override {
+                return source_->isEmpty();
+            }
+
+            unique_ptr<EvalOp<TYPE>> _next() override {
+                return unique_ptr<FilterOp<TYPE>>(new FilterOp<TYPE>(source_->next(), filter_));
+            }
+
+            TYPE _next2() override {
+                auto next = source_->next2();
+                if (filter_(next)) {
+                    return next;
+                }
+                return nullptr;
+            }
+
+            shared_ptr<Stream<TYPE>> source_;
+            function<bool(const TYPE &)> filter_;
+        };
+
+        template<typename TYPE>
+        class VectorStream : public Stream<TYPE> {
+        private:
+            const vector<TYPE> &data_;
+            typename vector<TYPE>::const_iterator position_;
+        public:
+            VectorStream(const vector<TYPE> &data) :
+                    data_(data), position_(data.begin()) {
+                this->evaluator_ = make_shared<StreamEvaluator>();
+            }
+
+            virtual ~VectorStream() {}
+
+            bool _isEmpty() override {
+                return position_ == data_.end();
+            }
+
+            unique_ptr<EvalOp<TYPE>> _next() override {
+                return unique_ptr<EvalOp<TYPE>>(new TrivialOp<TYPE>(*(position_++)));
+            };
+
+            TYPE _next2() override {
+                return *(position_++);
+            }
+        };
+
+        class IntStream : public Stream<int32_t> {
+
+        public:
+            static shared_ptr<IntStream> Make(int32_t from, int32_t to) {
+                return make_shared<IntStream>(from, to, 1);
+            }
+
+            IntStream(int32_t from, int32_t to, int32_t step = 1)
+                    : to_(to), step_(step), pointer_(from) {
+                this->evaluator_ = make_shared<StreamEvaluator>();
+            }
+
+            bool _isEmpty() override {
+                return pointer_ >= to_;
+            }
+
+            unique_ptr<EvalOp<int32_t>> _next() override {
+                int32_t value = pointer_;
+                pointer_ += step_;
+                return unique_ptr<TrivialOp<int32_t>>(new TrivialOp<int32_t>(value));
+            }
+
+            int32_t _next2() override {
+                int32_t value = pointer_;
+                pointer_ += step_;
+                return value;
+            }
+
+        private:
+            int32_t to_;
+            int32_t step_;
+            int32_t pointer_;
+        };
     }
 
-    using namespace lqf::stream;
+    namespace mapper {
+        template<typename DST, typename SRC>
+        class Mapper {
+        public:
+            virtual DST operator()(SRC in) = 0;
+        };
 
-    template<typename VIEW>
-    class Stream;
+        template<typename DST, typename SRC>
+        class Cast : public Mapper<DST, SRC> {
+        public:
+            Cast() {}
 
-    template<typename FROM, typename TO>
-    class StreamLink;
+            DST operator()(SRC in) override {
+                return static_cast<DST>(in);
+            }
+        };
 
-    using namespace lqf::threadpool;
+        template<typename DST, typename SRC>
+        class PointerCast : public Mapper<DST, SRC> {
+        public:
+            PointerCast() {}
 
+            DST operator()(SRC in) override {
+                return reinterpret_cast<DST>(in);
+            }
+        };
+
+        template<typename T>
+        class VectorGet : public Mapper<T, uint64_t> {
+        protected:
+            vector<T> &content_;
+        public:
+            VectorGet(vector<T> &content) : content_(content) {}
+
+            T operator()(uint64_t in) override {
+                return content_[static_cast<int32_t>(in)];
+            }
+        };
+
+        template<typename OUT, typename IN, typename SRC>
+        class TransformMapper : public Mapper<OUT, SRC> {
+        protected:
+            function<OUT(const IN &)> map_;
+            unique_ptr<Mapper<IN, SRC>> inner_;
+        public:
+            TransformMapper(unique_ptr<Mapper<IN, SRC>> inner, function<OUT(const IN &)> map)
+                    : map_(map), inner_(move(inner)) {}
+
+            OUT operator()(SRC in) override {
+                return map_((*inner_)(in));
+            }
+        };
+
+        template<typename IN, typename SRC>
+        class EvalMapper : public Mapper<void, SRC> {
+        protected:
+            function<void(const IN &)> map_;
+            unique_ptr<Mapper<IN, SRC>> inner_;
+        public:
+            EvalMapper(unique_ptr<Mapper<IN, SRC>> inner, function<void(const IN &)> map)
+                    : map_(map), inner_(move(inner)) {}
+
+            void operator()(SRC in) override {
+                map_((*inner_)(in));
+            }
+        };
+    }
+
+    using namespace mapper;
+
+    template<typename T>
+    class StreamSource {
+    public:
+        virtual bool hasNext() = 0;
+
+        virtual T next() = 0;
+    };
 
     class StreamEvaluator {
     public:
@@ -74,180 +435,217 @@ namespace lqf {
 
         ~StreamEvaluator() {}
 
-        template<typename T>
-        shared_ptr<vector<T>> eval(vector<unique_ptr<EvalOp<T>>> &input) {
+        template<typename T, typename SRC>
+        unique_ptr<vector<T>> collect(StreamSource<SRC> *source, Mapper<T, SRC> *mapper) {
             if (parallel_) {
-                return evalParallel(input);
+                vector<function<T()>> tasks;
+                while (source->hasNext()) {
+                    auto next = source->next();
+                    tasks.push_back([=]() {
+                        return (*mapper)(next);
+                    });
+                }
+                return move(defaultExecutor->invokeAll(tasks));
             } else {
-                return evalSequential(input);
+                auto result = unique_ptr<vector<T>>(new vector<T>());
+                while (source->hasNext()) {
+                    result->push_back((*mapper)(source->next()));
+                }
+                return result;
             }
         }
 
-        template<typename T>
-        inline shared_ptr<vector<T>> evalParallel(vector<unique_ptr<EvalOp<T>>> &input) {
-            vector<function<T()>> tasks;
-            for (auto &eval:input) {
-                auto op = eval.get();
-                tasks.push_back([=]() {
-                    return op->eval();
-                });
+        template<typename SRC>
+        void eval(StreamSource<SRC> *source, Mapper<void, SRC> *mapper) {
+            if (parallel_) {
+                vector<function<int()>> tasks;
+                while (source->hasNext()) {
+                    auto next = source->next();
+                    tasks.push_back([=]() {
+                        (*mapper)(next);
+                        return 0;
+                    });
+                }
+                defaultExecutor->invokeAll(tasks);
+            } else {
+                while (source->hasNext()) {
+                    (*mapper)(source->next());
+                }
             }
-            shared_ptr<vector<T>> res = move(defaultExecutor->invokeAll(tasks));
-            return res;
-        }
-
-        template<typename T>
-        inline shared_ptr<vector<T>> evalSequential(vector<unique_ptr<EvalOp<T>>> &input) {
-            auto result = make_shared<vector<T>>();
-            for (auto &eval:input) {
-                result->push_back(eval->eval());
-            }
-
-            return result;
         }
     };
 
-    template<typename VIEW>
-    class Stream : public enable_shared_from_this<Stream<VIEW>> {
+    template<typename T, typename SRC>
+    class StreamBase {
+    protected:
+        unique_ptr<Mapper<T, SRC>> mapper_;
+        unique_ptr<StreamSource<SRC>> source_;
+        unique_ptr<StreamEvaluator> evaluator_;
     public:
-        Stream() : evaluator_(nullptr) {}
+        StreamBase(Mapper<T, SRC> *mapper, unique_ptr<StreamSource<SRC>> source, unique_ptr<StreamEvaluator> eval)
+                : mapper_(unique_ptr<Mapper<T, SRC>>(mapper)), source_(move(source)), evaluator_(move(eval)) {}
 
-        template<typename NEXT>
-        shared_ptr<Stream<NEXT>> map(function<NEXT(const VIEW &)> f) {
-            return make_shared<StreamLink<VIEW, NEXT>>(this->shared_from_this(), f, evaluator_);
+        template<typename TO>
+        unique_ptr<StreamBase<TO, SRC>> map(function<TO(const T &)> mapmore) {
+            return unique_ptr<StreamBase<TO, SRC>>(
+                    new StreamBase<TO, SRC>(new TransformMapper<TO, T, SRC>(move(mapper_), mapmore), move(source_),
+                                            move(evaluator_)));
         }
 
-        /// Use int32_t as workaround as void cannot be allocated return space
-        void foreach(function<void(const VIEW &)> f) {
-            vector<unique_ptr<EvalOp<int32_t>>> holder;
-            while (!isEmpty()) {
-                holder.push_back(unique_ptr<EvalOp<int32_t>>(
-                        new TransformOp<VIEW, int32_t>(
-                                next(),
-                                [=](const VIEW &a) {
-                                    f(a);
-                                    return 0;
-                                })));
-            }
-            evaluator_->eval(holder);
+        void foreach(function<void(const T &)> f) {
+            auto mapper = unique_ptr<Mapper<void, SRC>>(new EvalMapper<T, SRC>(move(mapper_), f));
+            evaluator_->eval(source_.get(), mapper.get());
         }
 
-        shared_ptr<vector<VIEW>> collect() {
-            vector<unique_ptr<EvalOp<VIEW>>> holder;
-            while (!isEmpty()) {
-                holder.push_back(next());
-            }
-            auto result = evaluator_->eval(holder);
-            return result;
+        unique_ptr<vector<T>> collect() {
+            return evaluator_->collect(source_.get(), mapper_.get());
         }
 
-        VIEW reduce(function<VIEW(VIEW &, VIEW &)> reducer) {
-            auto collected = collect();
-            // TODO it is possible to execute reduce in parallel
-            if (collected->size() == 1) {
-                return move((*collected)[0]);
+        // For simplicity we assume there is at least one valid element
+        template<typename REDUCER>
+        T reduce(REDUCER reducer) {
+            if (evaluator_->parallel_) {
+                auto collected = collect();
+                // TODO it is possible to execute reduce in parallel
+                T result = move((*collected)[0]);
+                auto ite = collected->begin();
+                ite++;
+                for (; ite != collected->end(); ite++) {
+                    result = reducer(result, *ite);
+                }
+                return result;
+            } else {
+                // Fetch the first
+                T result = (*mapper_)(source_->next());
+                while (source_->hasNext()) {
+                    auto next = (*mapper_)(source_->next());
+                    result = reducer(result, next);
+                }
+                return result;
             }
-            VIEW first = move((*collected)[0]);
-            auto ite = collected->begin();
-            ite++;
-            for (; ite != collected->end(); ite++) {
-                first = reducer(first, *ite);
-            }
-            return first;
         }
 
         inline bool isParallel() {
             return evaluator_->parallel_;
         }
 
-        inline shared_ptr<Stream<VIEW>> parallel() {
+        unique_ptr<StreamBase<T, SRC>> parallel() {
             evaluator_->parallel_ = true;
-            return this->shared_from_this();
+            return unique_ptr<StreamBase<T, SRC>>(
+                    new StreamBase<T, SRC>(mapper_.release(), move(source_), move(evaluator_)));
         }
 
-        inline shared_ptr<Stream<VIEW>> sequential() {
+        unique_ptr<StreamBase<T, SRC>> sequential() {
             evaluator_->parallel_ = false;
-            return this->shared_from_this();
+            return unique_ptr<StreamBase<T, SRC>>(
+                    new StreamBase<T, SRC>(mapper_.release(), move(source_), move(evaluator_)));
         }
-
-        virtual bool isEmpty() = 0;
-
-        virtual unique_ptr<EvalOp<VIEW>> next() = 0;
-
-    protected:
-        shared_ptr<StreamEvaluator> evaluator_;
     };
 
-    template<typename FROM, typename TO>
-    class StreamLink : public Stream<TO> {
-    public:
-        StreamLink(shared_ptr<Stream<FROM>> source, function<TO(const FROM &)> mapper, shared_ptr<StreamEvaluator> eval)
-                : source_(source), mapper_(mapper) {
-            this->evaluator_ = eval;
-        }
+    template<typename T>
+    using Stream = StreamBase<T, uint64_t>;
 
-        bool isEmpty() override {
-            return source_->isEmpty();
-        }
-
-        unique_ptr<EvalOp<TO>> next() override {
-            return unique_ptr<TransformOp<FROM, TO>>(new TransformOp<FROM, TO>(source_->next(), mapper_));
-        }
-
+    class IntSource : public StreamSource<uint64_t> {
     protected:
-        shared_ptr<Stream<FROM>> source_;
-        function<TO(const FROM &)> mapper_;
-    };
-
-    template<typename TYPE>
-    class VectorStream : public Stream<TYPE> {
-    private:
-        const vector<TYPE> &data_;
-        typename vector<TYPE>::const_iterator position_;
+        int32_t pointer_;
+        int32_t to_;
+        int32_t step_;
     public:
-        VectorStream(const vector<TYPE> &data) :
-                data_(data), position_(data.begin()) {
-            this->evaluator_ = make_shared<StreamEvaluator>();
+        IntSource(int32_t from, int32_t to, int32_t step = 1) : pointer_(from), to_(to), step_(step) {}
+
+        bool hasNext() override {
+            return pointer_ < to_;
         }
 
-        virtual ~VectorStream() {}
-
-        bool isEmpty() override {
-            return position_ == data_.end();
+        uint64_t next() override {
+            int result = pointer_;
+            pointer_ += step_;
+            return result;
         }
-
-        unique_ptr<EvalOp<TYPE>> next() override {
-            return unique_ptr<EvalOp<TYPE>>(new TrivialOp<TYPE>(*(position_++)));
-        };
     };
 
     class IntStream : public Stream<int32_t> {
-
     public:
-        static shared_ptr<IntStream> Make(int32_t from, int32_t to) {
-            return make_shared<IntStream>(from, to, 1);
-        }
-
         IntStream(int32_t from, int32_t to, int32_t step = 1)
-                : to_(to), step_(step), pointer_(from) {
-            this->evaluator_ = make_shared<StreamEvaluator>();
-        }
+                : StreamBase(new Cast<int32_t, uint64_t>(), unique_ptr<IntSource>(new IntSource(from, to, step)),
+                             unique_ptr<StreamEvaluator>(new StreamEvaluator())) {}
 
-        bool isEmpty() override {
-            return pointer_ >= to_;
+        static unique_ptr<IntStream> Make(int from, int to) {
+            return unique_ptr<IntStream>(new IntStream(from, to));
         }
-
-        unique_ptr<EvalOp<int32_t>> next() override {
-            int32_t value = pointer_;
-            pointer_ += step_;
-            return unique_ptr<TrivialOp<int32_t>>(new TrivialOp<int32_t>(*(new int32_t(value))));
-        }
-
-    private:
-        int32_t to_;
-        int32_t step_;
-        int32_t pointer_;
     };
 
+    template<typename T>
+    class VectorStream : public Stream<T> {
+    public:
+        VectorStream(vector<T> &source) :
+                Stream<T>(new VectorGet<T>(source), unique_ptr<IntSource>(new IntSource(0, source.size())),
+                          unique_ptr<StreamEvaluator>(new StreamEvaluator())) {}
+    };
+
+    namespace typeless {
+        // Experimental Development.
+        // This requires C++ 17 to work
+
+        // Update: this does not help as we need a single return type of Stream for inheritances in data model.
+        // In the main design, the type of a stream is determined by its source and its output type.
+        // In this design, the type of a stream is determined by the source and its mapper.
+        // We always have the same output type, so limiting the source to a unique type (e.g., uint64_t) can make the Stream type unique.
+        // But in this design, the mappers are all different and there's no way to make the streams all follow the same interface.
+        template<typename PREV, typename MAPPER>
+        class MapNode {
+        protected:
+            PREV previous_;
+            MAPPER mapper_;
+        public:
+            MapNode(PREV prev, MAPPER mapf)
+                    : previous_(move(prev)), mapper_(mapf) {}
+
+            template<typename IN>
+            auto operator()(IN input) {
+                return mapper_(previous_(input));
+            }
+        };
+
+        template<typename MAPPER>
+        class MapHead {
+        protected:
+            MAPPER mapper_;
+        public:
+            MapHead(MAPPER mapf) : mapper_(mapf) {}
+
+            template<typename IN>
+            auto operator()(IN input) {
+                return mapper_(input);
+            }
+        };
+
+        template<typename MAPPER, typename SRC>
+        class Stream {
+        protected:
+            MAPPER mapper_;
+            SRC source_;
+        public:
+            template<typename MAP>
+            unique_ptr<Stream> map(MAP mapper) {
+                return nullptr;
+            }
+
+            template<typename EVAL>
+            void foreach(EVAL eval) {
+
+            }
+
+            template<typename T, typename REDUCER>
+            T reduce(REDUCER reducer) {
+                return nullptr;
+            }
+
+            template<typename T>
+            shared_ptr<vector<T>> collect() {
+
+            }
+        };
+    }
 }
 #endif //CHIDATA_STREAM_H

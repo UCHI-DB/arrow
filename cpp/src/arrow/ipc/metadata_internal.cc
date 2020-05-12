@@ -286,7 +286,7 @@ Status ConcreteTypeFromFlatbuffer(flatbuf::Type type, const void* type_data,
     case flatbuf::Type::Timestamp: {
       auto ts_type = static_cast<const flatbuf::Timestamp*>(type_data);
       TimeUnit::type unit = FromFlatbufferUnit(ts_type->unit());
-      if (ts_type->timezone() != 0 && ts_type->timezone()->Length() > 0) {
+      if (ts_type->timezone() != 0 && ts_type->timezone()->size() > 0) {
         *out = timestamp(unit, ts_type->timezone()->str());
       } else {
         *out = timestamp(unit);

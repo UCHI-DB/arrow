@@ -730,11 +730,13 @@ namespace lqf {
     }
 
     uint64_t Table::size() {
-        uint64_t sum = 0;
-        blocks()->foreach([&sum](const shared_ptr<Block> &block) {
-            sum += block->size();
-        });
-        return sum;
+        function<uint64_t(const shared_ptr<Block> &)> sizer = [](const shared_ptr<Block> &block) {
+            return block->size();
+        };
+        function<uint64_t(uint64_t, uint64_t)> reducer = [](uint64_t a, uint64_t b) {
+            return a + b;
+        };
+        return blocks()->map(sizer)->reduce(reducer);
     }
 
     ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : name_(fileName), columns_(columns) {
@@ -764,11 +766,11 @@ namespace lqf {
 
     using namespace std::placeholders;
 
-    shared_ptr<Stream<shared_ptr<Block>>> ParquetTable::blocks() {
+    unique_ptr<Stream<shared_ptr<Block>>> ParquetTable::blocks() {
         function<shared_ptr<Block>(const int &)> mapper = bind(&ParquetTable::createParquetBlock, this, _1);
         uint32_t numRowGroups = fileReader_->metadata()->num_row_groups();
 #ifdef LQF_PARALLEL
-        auto stream = IntStream::Make(0, numRowGroups)->map(mapper)->parallel();
+        auto stream = IntStream::Make(0, numRowGroups)->parallel()->map(mapper);
 #else
         auto stream = IntStream::Make(0, numRowGroups)->map(mapper);
 #endif
@@ -806,7 +808,7 @@ namespace lqf {
 
     using namespace std::placeholders;
 
-    shared_ptr<Stream<shared_ptr<Block>>> MaskedTable::blocks() {
+    unique_ptr<Stream<shared_ptr<Block>>> MaskedTable::blocks() {
         function<shared_ptr<Block>(const shared_ptr<Block> &)> mapper =
                 bind(&MaskedTable::buildMaskedBlock, this, _1);
         return inner_->blocks()->map(mapper);
@@ -821,15 +823,15 @@ namespace lqf {
         return make_shared<MaskedBlock>(pblock, masks_[pblock->index()]);
     }
 
-    TableView::TableView(const vector<uint32_t> &col_size, shared_ptr<Stream<shared_ptr<Block>>> stream)
-            : col_size_(col_size), stream_(stream) {}
+    TableView::TableView(const vector<uint32_t> &col_size, unique_ptr<Stream<shared_ptr<Block>>> stream)
+            : col_size_(col_size), stream_(move(stream)) {}
 
     const vector<uint32_t> &TableView::colSize() {
         return col_size_;
     }
 
-    shared_ptr<Stream<shared_ptr<Block>>> TableView::blocks() {
-        return stream_;
+    unique_ptr<Stream<shared_ptr<Block>>> TableView::blocks() {
+        return move(stream_);
     }
 
     shared_ptr<MemTable> MemTable::Make(uint8_t num_fields, bool vertical) {
@@ -866,11 +868,11 @@ namespace lqf {
         blocks_.push_back(block);
     }
 
-    shared_ptr<Stream<shared_ptr<Block>>> MemTable::blocks() {
+    unique_ptr<Stream<shared_ptr<Block>>> MemTable::blocks() {
 #ifdef LQF_PARALLEL
-        return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_))->parallel();
+        return unique_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_))->parallel();
 #else
-        return shared_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_));
+        return unique_ptr<Stream<shared_ptr<Block>>>(new VectorStream<shared_ptr<Block>>(blocks_));
 #endif
     }
 

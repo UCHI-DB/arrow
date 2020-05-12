@@ -32,7 +32,7 @@ check_cxx_compiler_flag(${ARROW_ARMV8_CRC_CRYPTO_FLAG} CXX_SUPPORTS_ARMV8_CRC_CR
 set(CMAKE_C_STANDARD 11)
 
 # This ensures that things like gnu++11 get passed correctly
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 # We require a C++11 compliant compiler
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

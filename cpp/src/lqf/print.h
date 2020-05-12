@@ -11,12 +11,19 @@
 #include "data_model.h"
 #include "parallel.h"
 
-#define PBEGIN [=](DataRow& row) { lqf::pout <<  //std::setprecision(8) <<
+//#define PBEGIN [=](DataRow& row) { lqf::pout <<  //std::setprecision(8) <<
+//#define PEND '\n' ;}
+//#define PI(x) row[x].asInt() <<
+//#define PD(x) row[x].asDouble() <<
+//#define PB(x) row[x].asByteArray() <<
+//#define PDICT(dict, x) (*dict)[row[x].asInt()] <<
+
+#define PBEGIN [=](DataRow& row) { cout <<  std::setprecision(8) <<
 #define PEND '\n' ;}
-#define PI(x) row[x].asInt() <<
-#define PD(x) row[x].asDouble() <<
-#define PB(x) row[x].asByteArray() <<
-#define PDICT(dict, x) (*dict)[row[x].asInt()] <<
+#define PI(x) row[x].asInt() << "," <<
+#define PD(x) row[x].asDouble() << "," <<
+#define PB(x) row[x].asByteArray() << "," <<
+#define PDICT(dict, x) (*dict)[row[x].asInt()] << "," <<
 
 using namespace std;
 using namespace std::placeholders;

@@ -140,10 +140,29 @@ TEST(StreamTest, Parallel) {
     mapped->foreach(exec);
     EXPECT_EQ(buffer.size(), 10);
 
-    array<int,10> result = {0,0,0,0,0,0,0,0,0,0};
+    array<int, 10> result = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     for (int i = 0; i < 10; i++) {
-        EXPECT_EQ(result[buffer[i]],0);
+        EXPECT_EQ(result[buffer[i]], 0);
         result[buffer[i]] = 1;
     }
 }
 
+TEST(TypelessStreamTest, MapNode) {
+    using namespace typeless;
+
+    auto node = MapHead([](int a) {
+        return (uint32_t) a * 2;
+    });
+    auto nodechain = MapNode(node, [](uint32_t a) {
+        return (uint64_t) (a + 1);
+    });
+    auto nodechain2 = MapNode(nodechain, [](uint64_t a) {
+        return TestHolder((int) a);
+    });
+
+    int value = 2;
+    EXPECT_EQ(4, node(value));
+    EXPECT_EQ(5, nodechain(value));
+    auto res = nodechain2(value);
+    EXPECT_EQ(res.getValue(), 5);
+}
