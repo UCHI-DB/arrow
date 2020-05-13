@@ -1,4 +1,4 @@
-CREATE EXTERNAL TABLE lineitem (
+CREATE EXTERNAL TABLE part (
                                    p_partkey INT,
                                    p_name VARBINARY(20),
                                    p_mfgr VARBINARY(20),
