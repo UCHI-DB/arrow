@@ -41,6 +41,94 @@ namespace lqf {
         using namespace q19;
 
         void executeQ19() {
+            ExecutionGraph graph;
+
+            auto lineitem = graph.add(
+                    new TableNode(ParquetTable::Open(LineItem::path, {LineItem::PARTKEY, LineItem::QUANTITY,
+                                                                      LineItem::SHIPMODE, LineItem::SHIPINSTRUCT,
+                                                                      LineItem::EXTENDEDPRICE, LineItem::DISCOUNT})),
+                    {});
+            auto part = graph.add(new TableNode(
+                    ParquetTable::Open(Part::path, {Part::PARTKEY, Part::BRAND, Part::CONTAINER, Part::SIZE})), {});
+
+            auto lineitemBaseFilter = graph.add(
+                    new ColFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPINSTRUCT,
+                                                                      bind(&ByteArrayDictEq::build,
+                                                                           shipmentInst)),
+                                   new SboostPredicate<ByteArrayType>(LineItem::SHIPMODE,
+                                                                      bind(&ByteArrayDictMultiEq::build,
+                                                                           [](const ByteArray &val) {
+                                                                               return val == shipMode1 ||
+                                                                                      val == shipMode2;
+                                                                           }))}), {lineitem});
+
+            auto lineitemQtyFilter1 = graph.add(new ColFilter(new SboostPredicate<Int32Type>(
+                    LineItem::QUANTITY, bind(&Int32DictBetween::build, 1, 11))), {lineitem});
+
+            auto lineitemQtyFilter2 = graph.add(new ColFilter(new SboostPredicate<Int32Type>(
+                    LineItem::QUANTITY, bind(&Int32DictBetween::build, 10, 20))),
+                                                {lineitem});
+
+            auto lineitemQtyFilter3 = graph.add(new ColFilter(new SboostPredicate<Int32Type>(
+                    LineItem::QUANTITY, bind(&Int32DictBetween::build, 20, 30))), {lineitem});
+
+            auto lineitemBaseMat = graph.add(new FilterMat(), {lineitemBaseFilter});
+
+            auto validLineitem1 = graph.add(new FilterAnd(2), {lineitemQtyFilter1, lineitemBaseMat});
+            auto validLineitem2 = graph.add(new FilterAnd(2), {lineitemQtyFilter2, lineitemBaseMat});
+            auto validLineitem3 = graph.add(new FilterAnd(2), {lineitemQtyFilter3, lineitemBaseMat});
+
+            auto partFilter1 = graph.add(new ColFilter(
+                    {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand1)),
+                     new SboostPredicate<Int32Type>(Part::SIZE, bind(&Int32DictBetween::build, 1, 5)),
+                     new SboostPredicate<ByteArrayType>(Part::CONTAINER, bind(&ByteArrayDictMultiEq::build,
+                                                                              [](const ByteArray &val) {
+                                                                                  return val == ByteArray("SM CASE") ||
+                                                                                         val == ByteArray("SM BOX") ||
+                                                                                         val == ByteArray("SM PACK") ||
+                                                                                         val == ByteArray("SM PKG");
+                                                                              }))}), {part});
+
+            auto partFilter2 = graph.add(new ColFilter(
+                    {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand2)),
+                     new SboostPredicate<Int32Type>(Part::SIZE, bind(&Int32DictBetween::build, 1, 10)),
+                     new SboostPredicate<ByteArrayType>(Part::CONTAINER, bind(&ByteArrayDictMultiEq::build,
+                                                                              [](const ByteArray &val) {
+                                                                                  return val == ByteArray("MED BAG") ||
+                                                                                         val == ByteArray("MED BOX") ||
+                                                                                         val == ByteArray("MED PACK") ||
+                                                                                         val == ByteArray("MED PKG");
+                                                                              }))}), {part});
+
+            auto partFilter3 = graph.add(new ColFilter(
+                    {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand3)),
+                     new SboostPredicate<Int32Type>(Part::SIZE, bind(&Int32DictBetween::build, 1, 15)),
+                     new SboostPredicate<ByteArrayType>(Part::CONTAINER, bind(&ByteArrayDictMultiEq::build,
+                                                                              [](const ByteArray &val) {
+                                                                                  return val == ByteArray("LG CASE") ||
+                                                                                         val == ByteArray("LG BOX") ||
+                                                                                         val == ByteArray("LG PACK") ||
+                                                                                         val == ByteArray("LG PKG");
+                                                                              }))}), {part});
+
+            auto itemOnPart1 = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+                                         {validLineitem1, partFilter1});
+            auto itemOnPart2 = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+                                         {validLineitem2, partFilter2});
+            auto itemOnPart3 = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+                                         {validLineitem3, partFilter3});
+
+            auto funion = graph.add(new FilterUnion(3), {itemOnPart1, itemOnPart2, itemOnPart3});
+
+            auto sumagg = graph.add(new SimpleAgg({1}, []() { return vector<AggField *>{new PriceField()}; }),
+                                    {funion});
+
+            graph.add(new Printer(PBEGIN PD(0) PEND), {sumagg});
+
+            graph.execute();
+        }
+
+        void executeQ19Backup() {
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::PARTKEY, LineItem::QUANTITY,
                                                                 LineItem::SHIPMODE, LineItem::SHIPINSTRUCT,
                                                                 LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
@@ -73,9 +161,9 @@ namespace lqf {
             auto lineitemBase = fmat.mat(*lineitemBaseFilter.filter(*lineitem));
 
             FilterAnd fand(3);
-            auto validLineitem1 = fand.execute(vector<Table*>{qtyLineitem1.get(), lineitemBase.get()});
-            auto validLineitem2 = fand.execute(vector<Table*>{qtyLineitem2.get(), lineitemBase.get()});
-            auto validLineitem3 = fand.execute(vector<Table*>{qtyLineitem3.get(), lineitemBase.get()});
+            auto validLineitem1 = fand.execute(vector<Table *>{qtyLineitem1.get(), lineitemBase.get()});
+            auto validLineitem2 = fand.execute(vector<Table *>{qtyLineitem2.get(), lineitemBase.get()});
+            auto validLineitem3 = fand.execute(vector<Table *>{qtyLineitem3.get(), lineitemBase.get()});
 
             ColFilter partFilter1(
                     {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand1)),
@@ -123,7 +211,8 @@ namespace lqf {
             auto itemWithPart3 = itemOnPartJoin3.join(*validLineitem3, *validPart3);
 
             FilterUnion funion(3);
-            auto unioneditem = funion.execute(vector<Table*>{itemWithPart1.get(), itemWithPart2.get(), itemWithPart3.get()});
+            auto unioneditem = funion.execute(
+                    vector<Table *>{itemWithPart1.get(), itemWithPart2.get(), itemWithPart3.get()});
 
 
             SimpleAgg sumagg({1}, []() { return vector<AggField *>{new PriceField()}; });

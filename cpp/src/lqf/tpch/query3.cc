@@ -31,6 +31,73 @@ namespace lqf {
         using namespace q3;
 
         void executeQ3() {
+            ExecutionGraph graph;
+
+            auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
+            auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERKEY, Orders::ORDERDATE,
+                                                                Orders::SHIPPRIORITY});
+            auto lineItemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::ORDERKEY, LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
+
+            auto customer = graph.add(new TableNode(customerTable), {});
+            auto order = graph.add(new TableNode(orderTable), {});
+            auto lineitem = graph.add(new TableNode(lineItemTable), {});
+
+            auto custFilter = graph.add(new ColFilter(
+                    new SboostPredicate<ByteArrayType>(Customer::MKTSEGMENT, bind(&ByteArrayDictEq::build, segment))),
+                                        {customer});
+//
+            auto orderFilter = graph.add(new ColFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
+                                                                                          bind(&ByteArrayDictLess::build,
+                                                                                               date))), {order});
+
+            auto orderOnCustFilterJoin = graph.add(new HashFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY),
+                                                   {orderFilter, custFilter});
+
+            // TODO Which is faster? First filter lineitem then join, or filter join then filter
+            auto lineItemFilter = graph.add(new ColFilter(
+                    new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(&ByteArrayDictGreater::build, date))),
+                                            {lineitem});
+
+            auto orderItemJoin = graph.add(new HashJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new RowBuilder(
+                    {JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT), JRR(Orders::ORDERDATE),
+                     JRR(Orders::SHIPPRIORITY)}, true)), {lineItemFilter, orderOnCustFilterJoin});
+            // ORDERKEY EXTENDEDPRICE DISCOUNT ORDERDATE SHIPPRIORITY
+
+            function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
+                int orderkey = data[0].asInt();
+                int shipdate = data[3].asInt();
+                int priority = data[4].asInt();
+                uint64_t key = 0;
+                key += static_cast<uint64_t>(orderkey) << 32;
+                key += shipdate << 5;
+                key += priority;
+                return key;
+            };
+            function<vector<AggField *>()> aggFields = []() {
+                return vector<AggField *>{new PriceField()};
+            };
+            auto orderItemAgg = graph.add(
+                    new HashAgg(vector<uint32_t>{1, 1, 1, 1}, {AGI(0), AGI(3), AGI(4)}, aggFields, hasher),
+                    {orderItemJoin});
+//            orderItemAgg.useVertical();
+
+            auto comparator = [](DataRow *a, DataRow *b) {
+                return SDGE(3) || (SDE(3) && SILE(2));
+            };
+            auto sort = graph.add(new TopN(10, comparator), {orderItemAgg});
+
+            auto orderdateDict = orderTable->LoadDictionary<ByteArrayType>(Orders::ORDERDATE);
+            auto shippriorityDict = orderTable->LoadDictionary<ByteArrayType>(Orders::SHIPPRIORITY);
+            auto oddictp = orderdateDict.get();
+            auto spdictp = shippriorityDict.get();
+
+            graph.add(new Printer(PBEGIN PI(0) PDICT(oddictp, 1) PDICT(spdictp, 2) PD(3) PEND), {sort});
+
+            graph.execute();
+        }
+
+        void executeQ3_Backup() {
 
             auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
             auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERKEY, Orders::ORDERDATE,
@@ -49,7 +116,7 @@ namespace lqf {
             HashFilterJoin orderOnCustFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY);
             filteredOrderTable = orderOnCustFilterJoin.join(*filteredOrderTable, *filteredCustTable);
 
-            // TODO Which is faster? First filter lineitem then join, or filter join then filter
+            // Direct Join Lineitem and Order is faster than using lineitem to filter order, then use order to filter lineitem
 
             ColFilter lineItemFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
                                                                          bind(&ByteArrayDictGreater::build, date))});
@@ -88,7 +155,7 @@ namespace lqf {
             auto shippriorityDict = orderTable->LoadDictionary<ByteArrayType>(Orders::SHIPPRIORITY);
             auto oddictp = orderdateDict.get();
             auto spdictp = shippriorityDict.get();
-            Printer printer(PBEGIN PI(0) PDICT(oddictp, 1) PDICT(spdictp,2) PD(3) PEND);
+            Printer printer(PBEGIN PI(0) PDICT(oddictp, 1) PDICT(spdictp, 2) PD(3) PEND);
 
             printer.print(*result);
         }

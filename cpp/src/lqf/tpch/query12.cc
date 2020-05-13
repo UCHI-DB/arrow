@@ -53,6 +53,65 @@ namespace lqf {
         using namespace q12;
 
         void executeQ12() {
+            ExecutionGraph graph;
+
+            auto lineitem = graph.add(new TableNode(ParquetTable::Open(LineItem::path,
+                                                                       {LineItem::RECEIPTDATE, LineItem::SHIPMODE,
+                                                                        LineItem::COMMITDATE,
+                                                                        LineItem::SHIPDATE, LineItem::ORDERKEY})), {});
+            auto order = graph.add(
+                    new TableNode(ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERPRIORITY})), {});
+
+            auto lineitemFilter = graph.add(new ColFilter(
+                    {new SboostPredicate<ByteArrayType>(LineItem::RECEIPTDATE,
+                                                        bind(&ByteArrayDictRangele::build,
+                                                             dateFrom, dateTo)),
+                     new SboostPredicate<ByteArrayType>(LineItem::SHIPMODE,
+                                                        bind(&ByteArrayDictMultiEq::build,
+                                                             [=](const ByteArray &data) {
+                                                                 return data == mode1 ||
+                                                                        data == mode2;
+                                                             }))}), {lineitem});
+
+            auto lineItemAgainFilter = graph.add(new RowFilter([](DataRow &row) {
+                auto &commitDate = row[LineItem::COMMITDATE].asByteArray();
+                auto &shipDate = row[LineItem::SHIPDATE].asByteArray();
+                auto &receiptDate = row[LineItem::RECEIPTDATE].asByteArray();
+                return commitDate < receiptDate && shipDate < commitDate;
+            }), {lineitemFilter});
+
+            function<uint64_t(DataRow &)> hasher = [](DataRow &row) {
+                return (row[LineItem::ORDERKEY].asInt() << 3) + row(LineItem::SHIPMODE).asInt();
+            };
+
+            auto lineitemAgg_obj = new HashAgg(vector<uint32_t>({1, 1, 1}),
+                                               {AGI(LineItem::ORDERKEY), AGR(LineItem::SHIPMODE)},
+                                               []() { return vector<AggField *>({new agg::Count()}); }, hasher);
+            lineitemAgg_obj->useVertical();
+            auto lineitemAgg = graph.add(lineitemAgg_obj, {lineItemAgainFilter});
+            // ORDER_KEY, SHIPMODE, COUNT
+
+            auto orderFilter = graph.add(new HashFilterJoin(Orders::ORDERKEY, 0), {order, lineitemAgg});
+
+            auto join = graph.add(new HashColumnJoin(0, Orders::ORDERKEY,
+                                                     new ColumnBuilder({JL(1), JL(2), JRR(Orders::ORDERPRIORITY)})),
+                                  {lineitemAgg, orderFilter});
+            // SHIPMODE, COUNT, ORDERPRIORITY
+
+            auto finalAgg = graph.add(new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(0)}, []() {
+                return vector<AggField *>{new OrderHighPriorityField(), new OrderLowPriorityField()};
+            }, COL_HASHER(0)), {join});
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SILE(0);
+            };
+            auto sort = graph.add(new SmallSort(comparator), {finalAgg});
+
+            graph.add(new Printer(PBEGIN PI(0) PI(1) PI(2) PEND), {sort});
+            graph.execute();
+        }
+
+        void executeQ12Backup() {
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::RECEIPTDATE, LineItem::SHIPMODE, LineItem::COMMITDATE,
                                                 LineItem::SHIPDATE, LineItem::ORDERKEY});
@@ -87,9 +146,12 @@ namespace lqf {
             // ORDER_KEY, SHIPMODE, COUNT
             auto agglineitem = lineitemAgg.agg(*validDateLineitem);
 
+            HashFilterJoin orderFilterJoin(Orders::ORDERKEY, 0);
+            auto filteredOrder = orderFilterJoin.join(*order, *agglineitem);
+
             HashColumnJoin join(0, Orders::ORDERKEY, new ColumnBuilder({JL(1), JL(2), JRR(Orders::ORDERPRIORITY)}));
             // SHIPMODE, COUNT, ORDERPRIORITY
-            auto itemwithorder = join.join(*agglineitem, *order);
+            auto itemwithorder = join.join(*agglineitem, *filteredOrder);
 
             HashAgg finalAgg(vector<uint32_t>{1, 1, 1}, {AGI(0)}, []() {
                 return vector<AggField *>{new OrderHighPriorityField(), new OrderLowPriorityField()};

@@ -46,6 +46,12 @@ namespace lqf {
         ss << mappingKey << "." << ppblock->index();
         auto resultKey = ss.str();
 
+        unique_lock<mutex> result_key_lock(write_lock);
+        auto result = result_locks_.emplace(resultKey, make_shared<mutex>());
+        auto result_lock = result.first->second;
+        result_key_lock.unlock();
+
+        lock_guard<mutex> lock_for_result_exec(*result_lock);
         auto found = result_.find(resultKey);
         if (found != result_.end()) {
             return (*(found->second))[&predicate];

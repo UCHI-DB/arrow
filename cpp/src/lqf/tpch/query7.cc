@@ -41,6 +41,107 @@ namespace lqf {
         using namespace q7;
 
         void executeQ7() {
+            auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
+            vector<uint32_t> nation_col_offset({0, 2});
+            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_offset](DataRow &dr) {
+                auto row = new MemDataRow(nation_col_offset);
+                (*row)[0] = dr[Nation::NAME].asByteArray();
+                return unique_ptr<MemDataRow>(row);
+            };
+            auto matNation = HashMat(Nation::NATIONKEY, snapshot).mat(*nationTable);
+
+            unordered_map<string, int32_t> nation_mapping;
+            nationTable->blocks()->foreach([&nation_mapping](const shared_ptr<Block> &block) {
+                auto rows = block->rows();
+                auto block_size = block->size();
+                for (uint32_t i = 0; i < block_size; ++i) {
+                    DataRow &row = rows->next();
+                    stringstream ks;
+                    ks << row[Nation::NAME].asByteArray();
+                    nation_mapping[ks.str()] = row[Nation::NATIONKEY].asInt();
+                }
+            });
+
+            int nationKey1 = nation_mapping[nation1];
+            int nationKey2 = nation_mapping[nation2];
+
+            auto customerTable = ParquetTable::Open(Customer::path, {Customer::NATIONKEY, Customer::CUSTKEY});
+            auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY});
+            auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERKEY});
+            auto lineitemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::SHIPDATE,
+                                                     LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
+
+            ExecutionGraph graph;
+
+            auto customer = graph.add(new TableNode(customerTable), {});
+            auto supplier = graph.add(new TableNode(supplierTable), {});
+            auto order = graph.add(new TableNode(orderTable), {});
+            auto lineitem = graph.add(new TableNode(lineitemTable), {});
+            auto nation = graph.add(new TableNode(matNation), {});
+
+            function<bool(int32_t)> nation_key_pred = [=](int32_t key) {
+                return key == nationKey1 || key == nationKey2;
+            };
+
+            auto validCustomerFilter = graph.add(
+                    new ColFilter(new SboostPredicate<Int32Type>(Customer::NATIONKEY,
+                                                                 bind(&Int32DictMultiEq::build, nation_key_pred))),
+                    {customer});
+
+            auto validSupplierFilter = graph.add(new ColFilter(new SboostPredicate<Int32Type>(Customer::NATIONKEY,
+                                                                                              bind(&Int32DictMultiEq::build,
+                                                                                                   nation_key_pred))),
+                                                 {supplier});
+
+            auto orderWithNationJoin = graph.add(
+                    new HashJoin(Orders::CUSTKEY, Customer::CUSTKEY,
+                                 new RowBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)})),
+                    {order, validCustomerFilter});
+            // ORDERKEY, NATIONKEY
+
+            auto lineitemFilter = graph.add(
+                    new ColFilter(new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
+                                                                     bind(&ByteArrayDictBetween::build, dateFrom,
+                                                                          dateTo))),
+                    {lineitem});
+
+            auto itemWithNationJoin = graph.add(
+                    new HashJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new Q7ItemWithNationBuilder()),
+                    {lineitemFilter, validSupplierFilter});
+            // ORDERKEY, NATIONKEY, YEAR, PRICE
+
+            auto itemWithOrderJoin = graph.add(
+                    new HashJoin(0, 0, new RowBuilder({JL(1), JR(1), JL(2), JL(3)}),
+                                 [](DataRow &left, DataRow &right) {
+                                     return left[1].asInt() != right[0].asInt();
+                                 }), {itemWithNationJoin, orderWithNationJoin});
+            // Customer::NATIONKEY, Supplier::NATIONKEY, YEAR, PRICE
+
+            function<uint64_t(DataRow &)> indexer = [](DataRow &input) {
+                return (input[0].asInt() << 16) + (input[1].asInt() << 11) + input[2].asInt();
+            };
+            auto pagg = new HashAgg(vector<uint32_t>({1, 1, 1, 1}), {AGI(0), AGI(1), AGI(2)},
+                                    []() { return vector<AggField *>({new DoubleSum(3)}); }, indexer);
+            pagg->useVertical();
+            auto agg = graph.add(pagg, {itemWithOrderJoin});
+
+            auto joinNation1 = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JRS(1), JL(1), JL(2), JL(3)})),
+                                         {agg, nation});
+            auto joinNation2 = graph.add(new HashColumnJoin(1, 0, new ColumnBuilder({JLS(0), JRS(1), JL(2), JL(3)})),
+                                         {joinNation1, nation});
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SBLE(0) || (SBE(0) && SBLE(1)) || (SBE(0) && SBE(1) && SILE(2));
+            };
+            auto sort = graph.add(new SmallSort(comparator), {joinNation2});
+
+            graph.add(new Printer(PBEGIN PB(0) PB(1) PI(2) PD(3) PEND), {sort});
+
+            graph.execute();
+        }
+
+        void executeQ7Backup() {
 
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
             vector<uint32_t> nation_col_offset({0, 2});

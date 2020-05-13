@@ -36,7 +36,30 @@ namespace lqf {
         using namespace q6;
 
         void executeQ6() {
+            auto lineitemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::SHIPDATE, LineItem::DISCOUNT, LineItem::QUANTITY,
+                                                     LineItem::EXTENDEDPRICE});
+            ExecutionGraph graph;
 
+            auto lineitem = graph.add(new TableNode(lineitemTable),{});
+
+            auto filter = graph.add(new ColFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
+                                                                 bind(&ByteArrayDictRangele::build, dateFrom,
+                                                                      dateTo)),
+                              new SboostPredicate<DoubleType>(LineItem::DISCOUNT,
+                                                              bind(&DoubleDictBetween::build, discountFrom,
+                                                                   discountTo)),
+                              new SboostPredicate<Int32Type>(LineItem::QUANTITY,
+                                                             bind(&Int32DictLess::build, quantity))
+                             }),{lineitem});
+
+            auto agg = graph.add(new SimpleAgg(vector<uint32_t>({1}), []() { return vector<AggField *>({new PriceField()}); }),{filter});
+
+            graph.add(new Printer(PBEGIN PD(0) PEND),{agg});
+            graph.execute();
+        }
+
+        void executeQ6Backup() {
             auto lineitemTable = ParquetTable::Open(LineItem::path,
                                                     {LineItem::SHIPDATE, LineItem::DISCOUNT, LineItem::QUANTITY,
                                                      LineItem::EXTENDEDPRICE});

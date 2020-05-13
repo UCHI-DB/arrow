@@ -13,7 +13,7 @@ int main() {
     auto start = high_resolution_clock::now();
 
     // Call the function,
-    lqf::tpch::executeQ3();
+    lqf::tpch::executeQ21();
 
     // Get ending timepoint
     auto stop = high_resolution_clock::now();

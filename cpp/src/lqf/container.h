@@ -303,7 +303,7 @@ namespace lqf {
                     size_++;
                     if (size_ >= limit()) {
                         // TODO What error?
-                        throw std::invalid_argument("hash set is full");
+                        throw std::invalid_argument("hash map is full");
                     }
                 }
             }

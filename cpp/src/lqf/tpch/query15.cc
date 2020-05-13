@@ -35,6 +35,45 @@ namespace lqf {
         using namespace q15;
 
         void executeQ15() {
+            ExecutionGraph graph;
+
+            auto lineitem = graph.add(new TableNode(
+                    ParquetTable::Open(LineItem::path, {LineItem::SUPPKEY, LineItem::SHIPDATE, LineItem::EXTENDEDPRICE,
+                                                        LineItem::DISCOUNT})), {});
+            auto supplier = graph.add(new TableNode(
+                    ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NAME, Supplier::ADDRESS,
+                                                        Supplier::PHONE})), {});
+
+            auto lineitemDateFilter = graph.add(
+                    new ColFilter(new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
+                                                                     bind(&ByteArrayDictRangele::build, dateFrom,
+                                                                          dateTo))), {lineitem});
+
+            auto suppkeyAgg = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::SUPPKEY)},
+                                                    []() { return vector<AggField *>{new PriceField()}; },
+                                                    COL_HASHER(LineItem::SUPPKEY)), {lineitemDateFilter});
+            // SUPPKEY, REVENUE
+
+            auto maxAgg_obj = new SimpleAgg(vector<uint32_t>{1, 1},
+                                            []() { return vector<AggField *>{new DoubleRecordingMax(1, 0)}; });
+            maxAgg_obj->useRecording();
+            auto maxAgg = graph.add(maxAgg_obj, {suppkeyAgg});
+            // SUPPKEY, REV
+
+            auto join = graph.add(
+                    new HashJoin(Supplier::SUPPKEY, 0,
+                                 new RowBuilder(
+                                         {JLS(Supplier::NAME), JLS(Supplier::ADDRESS), JLS(Supplier::PHONE), JR(1)},
+                                         true, false)), {supplier,maxAgg});
+
+            auto sort = graph.add(new SmallSort([](DataRow *a, DataRow *b) { return SILE(0); }),{join});
+
+            graph.add(new Printer(PBEGIN PI(0) PB(1) PB(2) PB(3) PD(4) PEND),{sort});
+
+            graph.execute();
+        }
+
+        void executeQ15Backup() {
 
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::SUPPKEY, LineItem::SHIPDATE, LineItem::EXTENDEDPRICE,

@@ -41,6 +41,10 @@ namespace lqf {
     SimplePredicate::SimplePredicate(uint32_t index, function<bool(const DataField &)> pred)
             : ColPredicate(index), predicate_(pred) {}
 
+    void SimplePredicate::predicate(function<bool(const DataField &)> f) {
+        this->predicate_ = f;
+    }
+
     shared_ptr<Bitmap> SimplePredicate::filterBlock(Block &block, Bitmap &skip) {
         auto result = make_shared<SimpleBitmap>(block.limit());
 
@@ -75,6 +79,10 @@ namespace lqf {
     }
 
     ColFilter::~ColFilter() { predicates_.clear(); }
+
+    ColPredicate *ColFilter::predicate(uint32_t index) {
+        return predicates_[index].get();
+    }
 
     shared_ptr<Table> ColFilter::filter(Table &input) {
         for (auto &pred: predicates_) {

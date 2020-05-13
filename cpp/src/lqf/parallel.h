@@ -46,6 +46,7 @@ namespace lqf {
             atomic<uint32_t> ready_counter_;
             // Flag that this node has no heavy computation and does not block execution
             bool trivial_;
+            bool triggered_ = false;
         public:
             Node(const uint32_t num_input, const bool trivial = false);
 
@@ -67,6 +68,15 @@ namespace lqf {
             unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override {
                 return unique_ptr<NodeOutput>(new TypedOutput<T>(content_));
             }
+        };
+
+        // Add custom condition before and after a node execution
+        class NestedNode : public Node {
+        protected:
+            unique_ptr<Node> inner_;
+        public:
+            NestedNode(Node *inner, uint32_t num_input, bool trivial = false)
+                    : Node(num_input, trivial), inner_(unique_ptr<Node>(inner)) {}
         };
 
         class ExecutionGraph {

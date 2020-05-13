@@ -42,36 +42,36 @@ namespace lqf {
         using namespace q14;
 
         void executeQ14() {
-
-            auto lineitem = ParquetTable::Open(LineItem::path,
-                                               {LineItem::SHIPDATE, LineItem::PARTKEY, LineItem::EXTENDEDPRICE,
-                                                LineItem::DISCOUNT});
-            auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE});
+            ExecutionGraph graph;
+            auto lineitem = graph.add(new TableNode(ParquetTable::Open(LineItem::path,
+                                                                       {LineItem::SHIPDATE, LineItem::PARTKEY,
+                                                                        LineItem::EXTENDEDPRICE,
+                                                                        LineItem::DISCOUNT})), {});
+            auto part = graph.add(new TableNode(ParquetTable::Open(Part::path, {Part::PARTKEY, Part::TYPE})), {});
 
             function<bool(const ByteArray &)> filter = [](const ByteArray &val) {
                 const char *begin = (const char *) val.ptr;
                 return lqf::util::strnstr(begin, prefix, val.len) == begin;
             };
-            ColFilter partFilter({new SboostPredicate<ByteArrayType>(Part::TYPE,
-                                                                     bind(&ByteArrayDictMultiEq::build, filter))});
-            auto validPart = partFilter.filter(*part);
+            auto partFilter = graph.add(
+                    new ColFilter(new SboostPredicate<ByteArrayType>(
+                            Part::TYPE, bind(&ByteArrayDictMultiEq::build, filter))), {part});
 
-            ColFilter lineitemShipdateFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
-                                                                                 bind(&ByteArrayDictRangele::build,
-                                                                                      dateFrom, dateTo))});
-            auto validLineitem = lineitemShipdateFilter.filter(*lineitem);
+            auto lineitemShipdateFilter = graph.add(
+                    new ColFilter(new SboostPredicate<ByteArrayType>(
+                            LineItem::SHIPDATE, bind(&ByteArrayDictRangele::build, dateFrom, dateTo))),
+                    {lineitem});
 
-            HashJoin join(LineItem::PARTKEY, Part::PARTKEY, new ItemBuilder());
-            join.useOuter();
-            auto lineitemWithPartType = join.join(*validLineitem, *validPart);
+            auto join_obj = new HashJoin(LineItem::PARTKEY, Part::PARTKEY, new ItemBuilder());
+            join_obj->useOuter();
+            auto join = graph.add(join_obj, {lineitemShipdateFilter, partFilter});
 
-            SimpleAgg simpleAgg(vector<uint32_t>{1, 1},
-                                []() { return vector<AggField *>{new DoubleSum(0), new DoubleSum(1)}; });
-            auto result = simpleAgg.agg(*lineitemWithPartType);
+            auto simpleAgg = graph.add(
+                    new SimpleAgg(vector<uint32_t>{1, 1},
+                                  []() { return vector<AggField *>{new DoubleSum(0), new DoubleSum(1)}; }), {join});
 
-            Printer printer(PBEGIN PD(0) PD(1) PEND);
-            printer.print(*result);
+            graph.add(new Printer(PBEGIN PD(0) PD(1) PEND), {simpleAgg});
+            graph.execute();
         }
-
     }
 }

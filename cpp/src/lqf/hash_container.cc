@@ -11,6 +11,9 @@ namespace lqf {
         HashPredicate<DTYPE>::HashPredicate():min_(DTYPE::max), max_(DTYPE::min) {}
 
         template<typename DTYPE>
+        HashPredicate<DTYPE>::HashPredicate(uint32_t size):content_(size), min_(DTYPE::max), max_(DTYPE::min) {}
+
+        template<typename DTYPE>
         void HashPredicate<DTYPE>::add(ktype val) {
             // Update range
             ktype current;
@@ -49,6 +52,9 @@ namespace lqf {
 
         template<typename DTYPE>
         HashContainer<DTYPE>::HashContainer() : hashmap_(), min_(DTYPE::max), max_(DTYPE::min) {}
+
+        template<typename DTYPE>
+        HashContainer<DTYPE>::HashContainer(uint32_t size) : hashmap_(size), min_(DTYPE::max), max_(DTYPE::min) {}
 
         template<typename DTYPE>
         void HashContainer<DTYPE>::add(ktype key, unique_ptr<MemDataRow> dataRow) {
@@ -124,8 +130,10 @@ namespace lqf {
         template
         class HashMemBlock<Hash64Container>;
 
-        shared_ptr<Int32Predicate> HashBuilder::buildHashPredicate(Table &input, uint32_t keyIndex) {
-            Hash32Predicate *pred = new Hash32Predicate();
+        shared_ptr<Int32Predicate>
+        HashBuilder::buildHashPredicate(Table &input, uint32_t keyIndex, uint32_t expect_size) {
+            Hash32Predicate *pred = (expect_size != 0xFFFFFFFF) ? new Hash32Predicate(expect_size)
+                                                                : new Hash32Predicate();
             shared_ptr<Int32Predicate> retval = shared_ptr<Int32Predicate>(pred);
 
             function<void(const shared_ptr<Block> &)> processor =
@@ -136,7 +144,7 @@ namespace lqf {
                             return;
                         } else {
                             auto hashcontblock = dynamic_pointer_cast<HashMemBlock<Hash32Container>>(block);
-                            if(hashcontblock) {
+                            if (hashcontblock) {
                                 retval = hashcontblock->content();
                                 return;
                             }
@@ -164,7 +172,7 @@ namespace lqf {
                             return;
                         } else {
                             auto hashcblock = dynamic_pointer_cast<HashMemBlock<Hash64Container>>(block);
-                            if(hashcblock) {
+                            if (hashcblock) {
                                 retval = hashcblock->content();
                                 return;
                             }

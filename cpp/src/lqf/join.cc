@@ -93,13 +93,13 @@ namespace lqf {
     using namespace join;
     using namespace hashcontainer;
 
-    Join::Join():Node(2) {}
+    Join::Join() : Node(2) {}
 
     unique_ptr<NodeOutput> Join::execute(const vector<NodeOutput *> &inputs) {
-        auto left = static_cast<TableOutput*>(inputs[0]);
-        auto right = static_cast<TableOutput*>(inputs[1]);
+        auto left = static_cast<TableOutput *>(inputs[0]);
+        auto right = static_cast<TableOutput *>(inputs[1]);
 
-        auto result = join(*(left->get()),*(right->get()));
+        auto result = join(*(left->get()), *(right->get()));
         return unique_ptr<TableOutput>(new TableOutput(result));
     }
 
@@ -180,12 +180,12 @@ namespace lqf {
         resultblock->resize(counter);
     }
 
-    HashFilterJoin::HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex) : leftKeyIndex_(leftKeyIndex),
-                                                                                    rightKeyIndex_(rightKeyIndex) {}
+    HashFilterJoin::HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size)
+            : leftKeyIndex_(leftKeyIndex), rightKeyIndex_(rightKeyIndex), expect_size_(expect_size) {}
 
 
     shared_ptr<Table> HashFilterJoin::join(Table &left, Table &right) {
-        predicate_ = HashBuilder::buildHashPredicate(right, rightKeyIndex_);
+        predicate_ = HashBuilder::buildHashPredicate(right, rightKeyIndex_, expect_size_);
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashFilterJoin::probe, this, _1);
         return make_shared<TableView>(left.colSize(), left.blocks()->map(prober));

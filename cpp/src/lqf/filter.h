@@ -58,6 +58,8 @@ namespace lqf {
 
         ~SimplePredicate() {}
 
+        void predicate(function<bool(const DataField&)>);
+
         shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) override;
     };
 
@@ -295,6 +297,8 @@ namespace lqf {
         ColFilter(initializer_list<ColPredicate *>);
 
         virtual ~ColFilter();
+
+        ColPredicate* predicate(uint32_t);
 
         shared_ptr<Table> filter(Table &input) override;
     };

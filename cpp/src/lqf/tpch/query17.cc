@@ -35,6 +35,48 @@ namespace lqf {
         using namespace q17;
 
         void executeQ17() {
+            ExecutionGraph graph;
+
+            auto part = graph.add(
+                    new TableNode(ParquetTable::Open(Part::path, {Part::BRAND, Part::CONTAINER, Part::PARTKEY})), {});
+            auto lineitem = graph.add(new TableNode(ParquetTable::Open(LineItem::path,
+                                                                       {LineItem::PARTKEY, LineItem::QUANTITY,
+                                                                        LineItem::EXTENDEDPRICE})), {});
+
+            auto partFilter = graph.add(
+                    new ColFilter(
+                            {new SboostPredicate<ByteArrayType>(Part::BRAND, bind(&ByteArrayDictEq::build, brand)),
+                             new SboostPredicate<ByteArrayType>(Part::CONTAINER,
+                                                                bind(&ByteArrayDictEq::build, container))}),
+                    {part});
+
+            auto lineitemFilter = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+                                            {lineitem, partFilter});
+            auto lineitemMat = graph.add(new FilterMat(), {lineitemFilter});
+
+            auto avgquantity = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::PARTKEY)},
+                                                     []() {
+                                                         return vector<AggField *>{new IntAvg(LineItem::QUANTITY)};
+                                                     },
+                                                     COL_HASHER(LineItem::PARTKEY)), {lineitemMat});
+            // PARTKEY, AVG_QTY
+
+            auto withAvgJoin = graph.add(
+                    new HashJoin(LineItem::PARTKEY, 0, new RowBuilder({JL(LineItem::EXTENDEDPRICE), JR(1),}),
+                                 [](DataRow &left, DataRow &right) {
+                                     return left[LineItem::QUANTITY].asInt() < 0.2 * right[0].asDouble();
+                                 }), {lineitemMat, avgquantity});
+
+            auto sumagg = graph.add(
+                    new SimpleAgg(vector<uint32_t>({1}), []() { return vector<AggField *>{new YearSumField()}; }),
+                    {withAvgJoin});
+
+            graph.add(new Printer(PBEGIN PD(0) PEND),{sumagg});
+
+            graph.execute();
+        }
+
+        void executeQ17Backup() {
 
             auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::CONTAINER, Part::PARTKEY});
             auto lineitem = ParquetTable::Open(LineItem::path,

@@ -245,7 +245,7 @@ namespace lqf {
     public:
         Agg(const vector<uint32_t> &output_col_size, bool vertical = false);
 
-        unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+        virtual unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> agg(Table &input);
 

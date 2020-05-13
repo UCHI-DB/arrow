@@ -91,57 +91,91 @@ namespace lqf {
         }
         using namespace q21;
 
-        void executeQ21_Backup() {
-            auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS});
-            auto lineitem = ParquetTable::Open(LineItem::path,
-                                               {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::RECEIPTDATE,
-                                                LineItem::COMMITDATE});
-            auto supplier = ParquetTable::Open(Supplier::path,
-                                               {Supplier::SUPPKEY, Supplier::NATIONKEY, Supplier::NAME});
+        void executeQ21() {
+            ExecutionGraph graph;
+            auto order = graph.add(new TableNode(
+                    ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS})), {});
+            auto lineitem = graph.add(new TableNode(
+                    ParquetTable::Open(LineItem::path, {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::RECEIPTDATE,
+                                                        LineItem::COMMITDATE})), {});
+            auto supplier = graph.add(new TableNode(
+                    ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY, Supplier::NAME})), {});
 
+            auto orderFilter = graph.add(new ColFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERSTATUS,
+                                                                                          bind(&ByteArrayDictEq::build,
+                                                                                               status))), {order});
+//            auto validorder = orderFilter.filter(*order);
+            auto lineWithOrderJoin = graph.add(new HashFilterJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000),
+                                               {lineitem, orderFilter});
+            auto linewithorder = graph.add(new FilterMat(), {lineWithOrderJoin});
+//            auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
 
-            ColFilter orderFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERSTATUS,
-                                                                     bind(&ByteArrayDictEq::build, status)));
-            auto validorder = orderFilter.filter(*order);
-
-            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY);
-            auto l1withorder = lineWithOrderJoin.join(*lineitem, *validorder);
-
-            RowFilter linedateFilter([](DataRow &row) {
+            auto linedateFilter = graph.add(new RowFilter([](DataRow &row) {
                 return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
-            });
-            auto l1 = linedateFilter.filter(*l1withorder);
+            }), {linewithorder});
+            auto l1withdate = graph.add(new FilterMat(), {linedateFilter});
 
-            ItemJoin itemExistJoin;
+            auto supplierNationFilter = graph.add(new ColFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
+                                                                                               bind(&Int32DictEq::build,
+                                                                                                    3))), {supplier});
+            auto validSupplier = graph.add(new FilterMat(), {supplierNationFilter});
+//            auto validSupplier = mat.mat(*supplierNationFilter.filter(*supplier));
+
+            auto l1withsupplierJoin = graph.add(new HashFilterJoin(LineItem::SUPPKEY, Supplier::SUPPKEY),
+                                                {l1withdate, validSupplier});
+//            auto l1withsupplier = l1withsupplierJoin.join(*l1withdate, *validSupplier);
+
+            auto l1agg = graph.add(
+                    new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::ORDERKEY), AGI(LineItem::SUPPKEY)},
+                                []() { return vector<AggField *>{new Count()}; },
+                                COL_HASHER2(LineItem::ORDERKEY, LineItem::SUPPKEY)), {l1withsupplierJoin});
+            // ORDERKEY, SUPPKEY, COUNT
+//            auto l1agged = l1agg.agg(*l1withsupplier);
+
+            // Exist Query
+            auto l1exist = graph.add(
+                    new HashExistJoin(LineItem::ORDERKEY, 0,
+                                      new RowBuilder({JR(0), JR(1), JR(2)}),
+                                      [](DataRow &left, DataRow &right) {
+                                          return left[LineItem::SUPPKEY].asInt() != right[1].asInt();
+                                      }), {linewithorder, l1agg});
+//            auto l1exist = existJoin.join(*linewithorder, *l1agged);
+
+            // Non-Exist Query
+            auto l1valid = graph.add(
+                    new HashNotExistJoin(LineItem::ORDERKEY, 0,
+                                         new RowBuilder({JR(0), JR(1), JR(2)}),
+                                         [](DataRow &left, DataRow &right) {
+                                             return left[LineItem::SUPPKEY].asInt() !=
+                                                    right[1].asInt();
+                                         }), {l1withdate, l1exist});
+            // ORDERKEY, SUPPKEY, COUNT
+//            auto l1valid = notExistJoin.join(*l1withdate, *l1exist);
+
+            auto suppsum = graph.add(new HashAgg(vector<uint32_t>{1, 1}, {AGI(1)},
+                                                 []() { return vector<AggField *>{new IntSum(2)}; }, COL_HASHER(1)),
+                                     {l1valid});
             // SUPPKEY, COUNT
-            auto ordersuppkey = itemExistJoin.join(*lineitem, *l1);
+//            auto suppsum = countagg.agg(*l1valid);
 
-            HashAgg countAgg(vector<uint32_t>{1, 1}, {AGI(0)},
-                             []() { return vector<AggField *>{new IntSum(1)}; },
-                             COL_HASHER(0));
-            countAgg.useVertical();
-            // SUPPKEY, COUNT
-            auto agged = countAgg.agg(*ordersuppkey);
-
-            ColFilter supplierNationFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
-                                                                          bind(&Int32DictEq::build, 3)));
-            auto validSupplier = supplierNationFilter.filter(*supplier);
-
-            HashJoin lineitemSupplierFilter(0, Supplier::SUPPKEY, new RowBuilder({JL(1), JRS(Supplier::NAME)}));
-            // COUNT SUPPNAME
-            auto supplierWithCount = lineitemSupplierFilter.join(*agged, *validSupplier);
+            auto supplierWithCount = graph.add(
+                    new HashJoin(Supplier::SUPPKEY, 0, new RowBuilder({JLS(Supplier::NAME), JR(1)})),
+                    {validSupplier, suppsum});
+            // SUPPNAME, COUNT
+//            auto supplierWithCount = lineitemSupplierFilter.join(*validSupplier, *suppsum);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SIGE(0) || (SIE(0) && SBLE(1));
+                return SIGE(1) || (SIE(1) && SBLE(0));
             };
-            TopN topn(100, comparator);
-            auto sorted = topn.sort(*supplierWithCount);
+            auto topn = graph.add(new TopN(100, comparator), {supplierWithCount});
+//            auto sorted = topn.sort(*supplierWithCount);
 
-            Printer printer(PBEGIN PI(0) PB(1) PEND);
-            printer.print(*sorted);
+            graph.add(new Printer(PBEGIN PI(1) PB(0) PEND), {topn});
+
+            graph.execute();
         }
 
-        void executeQ21() {
+        void executeQ21Backup() {
             auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS});
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::RECEIPTDATE,
@@ -155,13 +189,13 @@ namespace lqf {
                                                                      bind(&ByteArrayDictEq::build, status)));
             auto validorder = orderFilter.filter(*order);
 
-            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY);
+            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000);
             auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
 
             RowFilter linedateFilter([](DataRow &row) {
                 return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
             });
-            auto l1withdate = linedateFilter.filter(*linewithorder);
+            auto l1withdate = mat.mat(*linedateFilter.filter(*linewithorder));
 
             ColFilter supplierNationFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
                                                                           bind(&Int32DictEq::build, 3)));
@@ -193,14 +227,14 @@ namespace lqf {
             // ORDERKEY, SUPPKEY, COUNT
             auto l1valid = notExistJoin.join(*l1withdate, *l1exist);
 
-            HashAgg countagg(vector<uint32_t>{1,1},{AGI(1)},
-                    [](){ return vector<AggField*>{new IntSum(2)};}, COL_HASHER(1));
+            HashAgg countagg(vector<uint32_t>{1, 1}, {AGI(1)},
+                             []() { return vector<AggField *>{new IntSum(2)}; }, COL_HASHER(1));
             // SUPPKEY, COUNT
             auto suppsum = countagg.agg(*l1valid);
 
             HashJoin lineitemSupplierFilter(Supplier::SUPPKEY, 0, new RowBuilder({JLS(Supplier::NAME), JR(1)}));
             // SUPPNAME, COUNT
-            auto supplierWithCount = lineitemSupplierFilter.join(*validSupplier,*suppsum);
+            auto supplierWithCount = lineitemSupplierFilter.join(*validSupplier, *suppsum);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SIGE(1) || (SIE(1) && SBLE(0));

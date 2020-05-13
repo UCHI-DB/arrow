@@ -34,6 +34,8 @@ namespace lqf {
         public:
             HashPredicate();
 
+            HashPredicate(uint32_t size);
+
             void add(ktype);
 
             bool test(ktype) override;
@@ -63,6 +65,8 @@ namespace lqf {
 
         public:
             HashContainer();
+
+            HashContainer(uint32_t size);
 
             void add(ktype key, unique_ptr<MemDataRow> dataRow);
 
@@ -96,7 +100,7 @@ namespace lqf {
 
         class HashBuilder {
         public:
-            static shared_ptr<Int32Predicate> buildHashPredicate(Table &input, uint32_t);
+            static shared_ptr<Int32Predicate> buildHashPredicate(Table &input, uint32_t, uint32_t expect_size = 0xFFFFFFFF);
 
             static shared_ptr<Int64Predicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 

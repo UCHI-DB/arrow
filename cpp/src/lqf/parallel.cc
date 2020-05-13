@@ -15,7 +15,8 @@ namespace lqf {
 
         bool Node::feed() {
             auto current_count = ++ready_counter_;
-            return current_count == num_input_;
+            triggered_ = current_count == num_input_;
+            return triggered_;
         }
 
         uint32_t ExecutionGraph::add(Node *target, initializer_list<uint32_t> upstream) {

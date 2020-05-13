@@ -18,7 +18,7 @@
 namespace lqf {
     namespace tpch {
 
-        namespace q13{
+        namespace q13 {
             class CustCountBuilder : public RowBuilder {
             public:
                 CustCountBuilder() : RowBuilder({JR(1)}, true) {}
@@ -37,6 +37,49 @@ namespace lqf {
         using namespace q13;
 
         void executeQ13() {
+            ExecutionGraph graph;
+
+            auto customer = graph.add(new TableNode(ParquetTable::Open(Customer::path, {Customer::CUSTKEY})), {});
+            auto order = graph.add(new TableNode(ParquetTable::Open(Orders::path, {Orders::COMMENT, Orders::CUSTKEY})),
+                                   {});
+
+            auto orderCommentFilter = graph.add(
+                    new ColFilter(new SimplePredicate(Orders::COMMENT, [](const DataField &input) {
+                        ByteArray &value = input.asByteArray();
+                        const char *begin = (const char *) value.ptr;
+                        char *index = lqf::util::strnstr(begin, "special", value.len);
+                        if (index != NULL) {
+                            return NULL == lqf::util::strnstr(index, "requests", value.len - (index - begin) - 7);
+                        }
+                        return true;
+                    })), {order});
+
+            auto orderCustAgg = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(Orders::CUSTKEY)},
+                                                      []() { return vector<AggField *>{new agg::Count()}; },
+                                                      COL_HASHER(Orders::CUSTKEY)), {orderCommentFilter});
+            // CUSTKEY, COUNT
+
+            auto join_obj = new HashJoin(Customer::CUSTKEY, 0, new CustCountBuilder());
+            join_obj->useOuter();
+            auto join = graph.add(join_obj, {customer, orderCustAgg});
+            // CUSTKEY, COUNT
+
+            auto countAgg = graph.add(
+                    new HashAgg(vector<uint32_t>{1, 1}, {AGI(1)}, []() { return vector<AggField *>{new agg::Count()}; },
+                                COL_HASHER(1)), {join});
+            // COUNT, DIST
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SIGE(1) || (SIE(1) && SIGE(0));
+            };
+
+            auto sort = graph.add(new SmallSort(comparator), {countAgg});
+
+            graph.add(new Printer(PBEGIN PI(0) PI(1) PEND), {sort});
+            graph.execute();
+        }
+
+        void executeQ13Backup() {
             auto customer = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
             auto order = ParquetTable::Open(Orders::path, {Orders::COMMENT, Orders::CUSTKEY});
 

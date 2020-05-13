@@ -45,6 +45,39 @@ namespace lqf {
                     return unique_ptr<MemDataRow>(result);
                 }
             };
+
+            class AvgAgg : public NestedNode {
+            public:
+                AvgAgg(SimpleAgg *inner) : NestedNode(inner, 1) {}
+
+                unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
+                    auto inneragg = dynamic_cast<SimpleAgg *>(inner_.get());
+                    auto input0 = static_cast<TableOutput *>(input[0]);
+                    auto result = inneragg->agg(*(input0->get()));
+                    double avg = (*(*result->blocks()->collect())[0]->rows())[0][0].asDouble();
+                    return unique_ptr<TypedOutput<double>>(new TypedOutput(avg));
+                }
+            };
+
+            class AvgFilter : public NestedNode {
+            public:
+                AvgFilter(ColFilter *inner) : NestedNode(inner, 2) {}
+
+                unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
+                    auto avg = static_cast<TypedOutput<double> *>(input[0])->get();
+
+                    auto innerfilter = dynamic_cast<ColFilter *>(inner_.get());
+                    auto pred = dynamic_cast<SimplePredicate *>(innerfilter->predicate(0));
+
+                    pred->predicate([=](const DataField &field) {
+                        return field.asDouble() > avg;
+                    });
+
+                    auto input0 = static_cast<TableOutput *>(input[1]);
+                    auto result = innerfilter->filter(*(input0->get()));
+                    return unique_ptr<TableOutput>(new TableOutput(result));
+                }
+            };
         }
 
         using namespace q22;
@@ -64,6 +97,59 @@ namespace lqf {
         }
 
         void executeQ22() {
+            ExecutionGraph graph;
+            auto customer = graph.add(new TableNode(
+                    ParquetTable::Open(Customer::path, {Customer::PHONE, Customer::ACCTBAL, Customer::CUSTKEY})), {});
+            auto order = graph.add(new TableNode(ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::CUSTKEY})),
+                                   {});
+
+            auto custFilter = graph.add(new ColFilter(new SimplePredicate(Customer::PHONE, [](const DataField &field) {
+                ByteArray &val = field.asByteArray();
+                return phones.find(string((const char *) val.ptr, 2)) != phones.end();
+            })), {customer});
+            auto matCust = graph.add(new FilterMat(), {custFilter});
+//            auto validCust = FilterMat().mat(*custFilter.filter(*customer));
+
+            auto avgagg = graph.add(new AvgAgg(
+                    new SimpleAgg(vector<uint32_t>{1}, []() { return vector<AggField *>{new PositiveAvg()}; })),
+                                    {matCust});
+//            auto avgCust = avgagg.agg(*validCust);
+//            double avg = (*(*avgCust->blocks()->collect())[0]).rows()->next()[0].asDouble();
+
+
+            auto avgFilter = graph.add(
+                    new AvgFilter(new ColFilter(new SimplePredicate(Customer::ACCTBAL, [=](const DataField &field) {
+                        return field.asDouble() > 0;
+                    }))), {avgagg, matCust});
+//            auto filteredCust = avgFilter.filter(*validCust);
+//            cout << filteredCust->size() << endl;
+
+            auto notExistJoin = graph.add(new HashNotExistJoin(Orders::CUSTKEY, 0, new PhoneBuilder()),
+                                          {order, avgFilter});
+            // PHONE, ACCTBAL
+//            auto noorderCust = notExistJoin.join(*order, *filteredCust);
+
+            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
+                ByteArray &val = input[0].asByteArray();
+                return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
+            };
+            auto agg = graph.add(new HashAgg(vector<uint32_t>{2, 1, 1}, {AGB(0)},
+                                             []() { return vector<AggField *>{new DoubleSum(1), new Count()}; },
+                                             hasher), {notExistJoin});
+//            auto result = agg.agg(*noorderCust);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SBLE(0);
+            };
+            auto sorter = graph.add(new SmallSort(comparator), {agg});
+//            auto sorted = sorter.sort(*result);
+
+            graph.add(new Printer(PBEGIN PB(0) PD(1) PI(2) PEND), {sorter});
+//            printer.print(*sorted);
+            graph.execute();
+        }
+
+        void executeQ22Backup() {
             auto customer = ParquetTable::Open(Customer::path, {Customer::PHONE, Customer::ACCTBAL, Customer::CUSTKEY});
             auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::CUSTKEY});
 

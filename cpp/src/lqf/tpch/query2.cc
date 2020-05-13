@@ -22,7 +22,7 @@ namespace lqf {
         using namespace sboost;
         using namespace parallel;
 
-        void executeQ2_graph() {
+        void executeQ2() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -214,7 +214,7 @@ namespace lqf {
             printer.print(*result);
         }
 
-        void executeQ2() {
+        void executeQ2_Debug() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,

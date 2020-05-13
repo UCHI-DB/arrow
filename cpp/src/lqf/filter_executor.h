@@ -22,6 +22,8 @@ namespace lqf {
         unordered_map<string, unique_ptr<unordered_map<ColPredicate *, shared_ptr<Bitmap>>>> result_;
         mutex write_lock;
 
+        unordered_map<string, shared_ptr<mutex>> result_locks_;
+
         string makeKey(Table &, uint32_t);
 
     public:

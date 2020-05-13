@@ -54,7 +54,82 @@ namespace lqf {
         using namespace q8;
 
         void executeQ8() {
+            ExecutionGraph graph;
 
+            auto region = graph.add(new TableNode(ParquetTable::Open(Region::path, {Region::NAME, Region::REGIONKEY})),
+                                    {});
+            auto nationTable = ParquetTable::Open(Nation::path, {Nation::REGIONKEY, Nation::NAME, Nation::NATIONKEY});
+            auto nation = graph.add(new TableNode(nationTable), {});
+            auto customer = graph.add(
+                    new TableNode(ParquetTable::Open(Customer::path, {Customer::NATIONKEY, Customer::CUSTKEY})), {});
+            auto order = graph.add(new TableNode(
+                    ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERDATE, Orders::ORDERKEY})), {});
+            auto lineitem = graph.add(
+                    new TableNode(ParquetTable::Open(LineItem::path,
+                                                     {LineItem::ORDERKEY, LineItem::PARTKEY, LineItem::DISCOUNT,
+                                                      LineItem::EXTENDEDPRICE, LineItem::SUPPKEY})),
+                    {});
+            auto part = graph.add(new TableNode(ParquetTable::Open(Part::path, {Part::TYPE, Part::PARTKEY})), {});
+            auto supplier = graph.add(
+                    new TableNode(ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATIONKEY})), {});
+
+            auto regionFilter = graph.add(new ColFilter({new SimplePredicate(Region::NAME, [=](const DataField &input) {
+                return input.asByteArray() == regionName;
+            })}), {region});
+
+            auto nationFilter = graph.add(new HashFilterJoin(Nation::REGIONKEY, Region::REGIONKEY),
+                                          {nation, regionFilter});
+
+            auto customerFilter = graph.add(new HashFilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
+                                            {customer, nationFilter});
+
+            auto orderDateFilter = graph.add(new ColFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
+                                                                                              bind(&ByteArrayDictBetween::build,
+                                                                                                   dateFrom,
+                                                                                                   dateTo))), {order});
+
+            auto orderCustFilter = graph.add(new HashFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY),
+                                             {orderDateFilter, customerFilter});
+
+            auto partFilter = graph.add(new ColFilter(
+                    new SboostPredicate<ByteArrayType>(Part::TYPE, bind(&ByteArrayDictEq::build, partType))), {part});
+
+            auto lineitemOnPartFilter = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+                                                 {lineitem, partFilter});
+
+            auto orderJoin = graph.add(new HashJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new OrderJoinBuilder()),
+                                       {lineitemOnPartFilter, orderCustFilter});
+            // YEAR PRICE SUPPKEY
+
+            auto itemWithSupplierJoin = graph.add(
+                    new HashColumnJoin(2, Supplier::SUPPKEY,
+                                       new ColumnBuilder({JL(0), JL(1), JR(Supplier::NATIONKEY)})),
+                    {orderJoin, supplier});
+            // YEAR PRICE NATIONKEY
+
+            int nationKey2 = KeyFinder(Nation::NATIONKEY, [=](DataRow &row) {
+                return row[Nation::NAME].asByteArray() == nationName;
+            }).find(*nationTable);
+
+            auto agg = graph.add(new HashAgg(vector<uint32_t>({1, 1, 1}), {AGI(0)},
+                                             [=]() {
+                                                 return vector<AggField *>(
+                                                         {new agg::DoubleSum(1), new NationFilterField(nationKey2)});
+                                             }, COL_HASHER(0)),
+                                 {itemWithSupplierJoin});
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SILE(0);
+            };
+
+            auto sort = graph.add(new SmallSort(comparator),{agg});
+
+            graph.add(new Printer(PBEGIN PI(0) PD(1) PD(2) PEND),{sort});
+
+            graph.execute();
+        }
+
+        void executeQ8Backup() {
             auto region = ParquetTable::Open(Region::path, {Region::NAME, Region::REGIONKEY});
             auto nation = ParquetTable::Open(Nation::path, {Nation::REGIONKEY, Nation::NAME, Nation::NATIONKEY});
             auto customer = ParquetTable::Open(Customer::path, {Customer::NATIONKEY, Customer::CUSTKEY});

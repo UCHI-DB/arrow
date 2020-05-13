@@ -49,68 +49,70 @@ namespace lqf {
         using namespace q9;
         using namespace powerjoin;
 
-        void executeQ9Backup() {
-            auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::NAME});
-            auto partsupp = ParquetTable::Open(PartSupp::path,
-                                               {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
-            auto lineitem = ParquetTable::Open(LineItem::path,
-                                               {LineItem::PARTKEY, LineItem::DISCOUNT, LineItem::EXTENDEDPRICE,
-                                                LineItem::QUANTITY, LineItem::SUPPKEY, LineItem::ORDERKEY});
-            auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERDATE});
-            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY});
-            auto nation = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
+        void executeQ9() {
+            ExecutionGraph graph;
 
-            ColFilter partFilter({new SimplePredicate(Part::NAME, [](const DataField &field) {
+            auto part = graph.add(new TableNode(ParquetTable::Open(Part::path, {Part::PARTKEY, Part::NAME})), {});
+            auto partsupp = graph.add(new TableNode(
+                    ParquetTable::Open(PartSupp::path, {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST})),
+                                      {});
+            auto lineitem = graph.add(new TableNode(ParquetTable::Open(LineItem::path,
+                                                                       {LineItem::PARTKEY, LineItem::DISCOUNT,
+                                                                        LineItem::EXTENDEDPRICE,
+                                                                        LineItem::QUANTITY, LineItem::SUPPKEY,
+                                                                        LineItem::ORDERKEY})), {});
+            auto order = graph.add(
+                    new TableNode(ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERDATE})), {});
+            auto supplier = graph.add(
+                    new TableNode(ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY})), {});
+            auto nationTable = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
+            auto nation = graph.add(new TableNode(nationTable), {});
+
+            auto partFilter = graph.add(new ColFilter({new SimplePredicate(Part::NAME, [](const DataField &field) {
                 auto &ref = field.asByteArray();
                 return lqf::util::strnstr((const char *) ref.ptr, "green", ref.len);
-            })});
-            auto validPart = partFilter.filter(*part);
+            })}), {part});
 
-            HashFilterJoin itemPartJoin(LineItem::PARTKEY, Part::PARTKEY);
-            auto validLineitem = itemPartJoin.join(*lineitem, *validPart);
+            auto itemPartJoin = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY), {lineitem, partFilter});
 
-            HashJoin itemOrderJoin(Orders::ORDERKEY, LineItem::ORDERKEY, new ItemWithOrderBuilder());
+            auto itemOrderJoin = graph.add(
+                    new HashJoin(Orders::ORDERKEY, LineItem::ORDERKEY, new ItemWithOrderBuilder()),
+                    {itemPartJoin, order});
             // PARTKEY SUPPKEY PRICE_DISCOUNT QUANTITY YEAR
-            auto orderLineitem = itemOrderJoin.join(*validLineitem, *order);
 
-            cout << orderLineitem->size() << endl;
-            cout << partsupp->size() << endl;
-
-            PowerHashJoin ps2lJoin(COL_HASHER2(PartSupp::PARTKEY, PartSupp::SUPPKEY), COL_HASHER2(0, 1),
-                                   new ItemWithRevBuilder());
+            auto ps2lJoin = graph.add(
+                    new PowerHashJoin(COL_HASHER2(PartSupp::PARTKEY, PartSupp::SUPPKEY), COL_HASHER2(0, 1),
+                                      new ItemWithRevBuilder()), {partsupp, itemOrderJoin});
             // SUPPKEY, ORDER_YEAR, REV
-            auto itemWithRev = ps2lJoin.join(*partsupp, *orderLineitem);
-
-            cout << itemWithRev->size() << endl;
 
             // ORDER_YEAR, REV, NATIONKEY
-            HashColumnJoin suppJoin(0, Supplier::SUPPKEY, new ColumnBuilder({JL(1), JL(2), JR(Supplier::NATIONKEY)}));
-            auto itemWithNation = suppJoin.join(*itemWithRev, *supplier);
+            auto suppJoin = graph.add(new HashColumnJoin(0, Supplier::SUPPKEY,
+                                                         new ColumnBuilder({JL(1), JL(2), JR(Supplier::NATIONKEY)})),
+                                      {ps2lJoin, supplier});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 return (static_cast<uint64_t>(input[0].asInt()) << 32) + input[2].asInt();
             };
-            HashAgg agg(vector<uint32_t>{1, 1, 1}, {AGI(2), AGI(0)},
-                        []() { return vector<AggField *>({new agg::DoubleSum(1)}); }, hasher, true);
-            // NATIONKEY, ORDERYEAR, SUM
-            auto result = agg.agg(*itemWithNation);
 
-            HashJoin withNationJoin(0, Nation::NATIONKEY,
-                                    new RowBuilder({JL(1), JRS(Nation::NAME), JL(2)}, false, true));
+            auto agg = graph.add(new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(2), AGI(0)},
+                                             []() { return vector<AggField *>({new agg::DoubleSum(1)}); }, hasher,
+                                             true), {suppJoin});
+            // NATIONKEY, ORDERYEAR, SUM
+
+            auto withNationJoin = graph.add(new HashJoin(0, Nation::NATIONKEY,
+                                    new RowBuilder({JL(1), JRS(Nation::NAME), JL(2)}, false, true)),{agg,nation});
             // ORDERYEAR, NATION, REV
-            result = withNationJoin.join(*result, *nation);
 
             function<bool(DataRow *, DataRow *)> comp = [](DataRow *a, DataRow *b) {
                 return SBLE(1) || (SBE(1) && SILE(0));
             };
-            SmallSort sort(comp);
-            result = sort.sort(*result);
+            auto sort = graph.add(new SmallSort(comp),{withNationJoin});
 
-            auto printer = Printer::Make(PBEGIN PI(0) PB(1) PD(2) PEND);
-            printer->print(*result);
+            graph.add(new Printer(PBEGIN PI(0) PB(1) PD(2) PEND),{sort});
+            graph.execute();
         }
 
-        void executeQ9() {
+        void executeQ9Backup() {
             auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::NAME});
             auto partsupp = ParquetTable::Open(PartSupp::path,
                                                {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});

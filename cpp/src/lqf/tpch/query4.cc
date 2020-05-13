@@ -22,6 +22,50 @@ namespace lqf {
         using namespace q4;
 
         void executeQ4() {
+            ExecutionGraph graph;
+
+            auto orderTable = ParquetTable::Open(Orders::path,
+                                                 {Orders::ORDERDATE, Orders::ORDERKEY, Orders::ORDERPRIORITY});
+            auto lineitemTable = ParquetTable::Open(LineItem::path,
+                                                    {LineItem::ORDERKEY, LineItem::RECEIPTDATE, LineItem::COMMITDATE});
+
+            auto order = graph.add(new TableNode(orderTable), {});
+            auto lineitem = graph.add(new TableNode(lineitemTable), {});
+
+            auto orderFilter = graph.add(new ColFilter(
+                    new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
+                                                       bind(&ByteArrayDictRangele::build, dateFrom, dateTo))),
+                                         {order});
+
+            auto lineItemFilter = graph.add(new RowFilter([](DataRow &datarow) {
+                return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
+            }), {lineitem});
+
+            auto existJoin = graph.add(new HashFilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY),
+                                       {orderFilter, lineItemFilter});
+
+            function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
+                return row(Orders::ORDERPRIORITY).asInt();
+            };
+
+            auto agg = graph.add(new HashAgg(vector<uint32_t>{1, 1}, {AGR(Orders::ORDERPRIORITY)}, []() {
+                return vector<AggField *>{new agg::Count()};
+            }, indexer), {existJoin});
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return (*a)[0].asInt() < (*b)[0].asInt();
+            };
+            auto sort = graph.add(new SmallSort(comparator), {agg});
+
+            auto opdict = orderTable->LoadDictionary<ByteArrayType>(Orders::ORDERPRIORITY);
+            auto opdictp = opdict.get();
+
+            graph.add(new Printer(PBEGIN PDICT(opdictp, 0) PI(1) PEND),{sort});
+
+            graph.execute();
+        }
+
+        void executeQ4Backup() {
 
             auto orderTable = ParquetTable::Open(Orders::path,
                                                  {Orders::ORDERDATE, Orders::ORDERKEY, Orders::ORDERPRIORITY});

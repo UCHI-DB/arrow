@@ -136,10 +136,11 @@ namespace lqf {
     protected:
         uint32_t leftKeyIndex_;
         uint32_t rightKeyIndex_;
+        uint32_t expect_size_;
         shared_ptr<Int32Predicate> predicate_;
         bool anti_ = false;
     public:
-        HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex);
+        HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = 0xFFFFFFFF);
 
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
