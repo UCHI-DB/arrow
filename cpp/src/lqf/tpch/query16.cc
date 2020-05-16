@@ -67,7 +67,7 @@ namespace lqf {
                         return false;
                     })), {supplier});
 
-            auto psSupplierFilter_obj = new HashFilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            auto psSupplierFilter_obj = new FilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             psSupplierFilter_obj->useAnti();
             auto psSupplierFilter = graph.add(psSupplierFilter_obj, {partsupp, supplierFilter});
 
@@ -131,7 +131,7 @@ namespace lqf {
             })});
             auto validSupplier = supplierFilter.filter(*supplier);
 
-            HashFilterJoin psSupplierFilter(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            FilterJoin psSupplierFilter(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             psSupplierFilter.useAnti();
             auto validps = psSupplierFilter.join(*partsupp, *validSupplier);
 

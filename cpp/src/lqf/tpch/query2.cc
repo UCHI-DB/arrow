@@ -57,7 +57,7 @@ namespace lqf {
                 return q2::region == (field.asByteArray());
             })}), {region});
 
-            auto nrJoin = graph.add(new HashFilterJoin(Nation::REGIONKEY, Region::REGIONKEY), {nation, regionFilter});
+            auto nrJoin = graph.add(new FilterJoin(Nation::REGIONKEY, Region::REGIONKEY), {nation, regionFilter});
 
             vector<uint32_t> hash_offset{0, 2};
             auto nationMat = graph.add(new HashMat(Nation::NATIONKEY, [&hash_offset](DataRow &datarow) {
@@ -66,7 +66,7 @@ namespace lqf {
                 return unique_ptr<MemDataRow>(row);
             }), {nrJoin});
 
-            auto snJoin = graph.add(new HashFilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY), {supplier, nationMat});
+            auto snJoin = graph.add(new FilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY), {supplier, nationMat});
 //            auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
 
 
@@ -78,10 +78,10 @@ namespace lqf {
 //            auto matSupplier = filterMat.mat(*filteredSupplier);
 
             // Sequence of these two joins
-            auto pspJoin = graph.add(new HashFilterJoin(PartSupp::PARTKEY, Part::PARTKEY), {partsupp, partMat});
+            auto pspJoin = graph.add(new FilterJoin(PartSupp::PARTKEY, Part::PARTKEY), {partsupp, partMat});
 //            auto filteredPs = pspJoin.join(*partSuppTable, *matPart);
 
-            auto pssJoin = graph.add(new HashFilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY), {pspJoin, supplierMat});
+            auto pssJoin = graph.add(new FilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY), {pspJoin, supplierMat});
 //            auto filteredPss = pssJoin.join(*filteredPs, *matSupplier);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); };
@@ -152,7 +152,7 @@ namespace lqf {
                                                                           typePred))});
             auto filteredPart = partFilter.filter(*partTable);
 
-            HashFilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
+            FilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
             vector<uint32_t> hash_offset{0, 2};
@@ -163,7 +163,7 @@ namespace lqf {
             });
             auto memNationTable = nationMat.mat(*filteredNation);
 
-            HashFilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
+            FilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
 
 
@@ -173,10 +173,10 @@ namespace lqf {
             auto matSupplier = filterMat.mat(*filteredSupplier);
 
             // Sequence of these two joins
-            HashFilterJoin pspJoin(PartSupp::PARTKEY, Part::PARTKEY);
+            FilterJoin pspJoin(PartSupp::PARTKEY, Part::PARTKEY);
             auto filteredPs = pspJoin.join(*partSuppTable, *matPart);
 
-            HashFilterJoin pssJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            FilterJoin pssJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto filteredPss = pssJoin.join(*filteredPs, *matSupplier);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); };

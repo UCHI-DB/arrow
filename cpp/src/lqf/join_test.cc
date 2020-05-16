@@ -741,7 +741,7 @@ TEST(HashFilterJoinTest, Join) {
     (*rows)[4][1] = 4;
 
 
-    HashFilterJoin join(0, 0);
+    FilterJoin join(0, 0);
 
     auto joined = join.join(*left, *right);
     auto blocks = joined->blocks()->collect();

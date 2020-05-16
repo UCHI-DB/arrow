@@ -91,7 +91,7 @@ namespace lqf {
             auto lineitemAgg = graph.add(lineitemAgg_obj, {lineItemAgainFilter});
             // ORDER_KEY, SHIPMODE, COUNT
 
-            auto orderFilter = graph.add(new HashFilterJoin(Orders::ORDERKEY, 0), {order, lineitemAgg});
+            auto orderFilter = graph.add(new FilterJoin(Orders::ORDERKEY, 0), {order, lineitemAgg});
 
             auto join = graph.add(new HashColumnJoin(0, Orders::ORDERKEY,
                                                      new ColumnBuilder({JL(1), JL(2), JRR(Orders::ORDERPRIORITY)})),
@@ -146,7 +146,7 @@ namespace lqf {
             // ORDER_KEY, SHIPMODE, COUNT
             auto agglineitem = lineitemAgg.agg(*validDateLineitem);
 
-            HashFilterJoin orderFilterJoin(Orders::ORDERKEY, 0);
+            FilterJoin orderFilterJoin(Orders::ORDERKEY, 0);
             auto filteredOrder = orderFilterJoin.join(*order, *agglineitem);
 
             HashColumnJoin join(0, Orders::ORDERKEY, new ColumnBuilder({JL(1), JL(2), JRR(Orders::ORDERPRIORITY)}));

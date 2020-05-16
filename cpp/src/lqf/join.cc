@@ -180,19 +180,24 @@ namespace lqf {
         resultblock->resize(counter);
     }
 
-    HashFilterJoin::HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size)
-            : leftKeyIndex_(leftKeyIndex), rightKeyIndex_(rightKeyIndex), expect_size_(expect_size) {}
+    FilterJoin::FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size, bool useBitmap)
+            : leftKeyIndex_(leftKeyIndex), rightKeyIndex_(rightKeyIndex), expect_size_(expect_size),
+              useBitmap_(useBitmap) {}
 
 
-    shared_ptr<Table> HashFilterJoin::join(Table &left, Table &right) {
-        predicate_ = HashBuilder::buildHashPredicate(right, rightKeyIndex_, expect_size_);
+    shared_ptr<Table> FilterJoin::join(Table &left, Table &right) {
+        if (useBitmap_) {
+            predicate_ = HashBuilder::buildBitmapPredicate(right, rightKeyIndex_, expect_size_);
+        } else {
+            predicate_ = HashBuilder::buildHashPredicate(right, rightKeyIndex_, expect_size_);
+        }
 
-        function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashFilterJoin::probe, this, _1);
+        function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&FilterJoin::probe, this, _1);
         return make_shared<TableView>(left.colSize(), left.blocks()->map(prober));
     }
 
 
-    shared_ptr<Block> HashFilterJoin::probe(const shared_ptr<Block> &leftBlock) {
+    shared_ptr<Block> FilterJoin::probe(const shared_ptr<Block> &leftBlock) {
         auto col = leftBlock->col(leftKeyIndex_);
         auto bitmap = make_shared<SimpleBitmap>(leftBlock->limit());
         uint32_t size = leftBlock->size();

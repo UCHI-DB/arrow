@@ -132,15 +132,17 @@ namespace lqf {
         void probe(MemTable *, const shared_ptr<Block> &) override;
     };
 
-    class HashFilterJoin : public Join {
+    class FilterJoin : public Join {
     protected:
         uint32_t leftKeyIndex_;
         uint32_t rightKeyIndex_;
         uint32_t expect_size_;
         shared_ptr<Int32Predicate> predicate_;
         bool anti_ = false;
+        bool useBitmap_;
     public:
-        HashFilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = 0xFFFFFFFF);
+        FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = 0xFFFFFFFF,
+                   bool useBitmap = true);
 
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 

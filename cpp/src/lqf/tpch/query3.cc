@@ -51,7 +51,7 @@ namespace lqf {
                                                                                           bind(&ByteArrayDictLess::build,
                                                                                                date))), {order});
 
-            auto orderOnCustFilterJoin = graph.add(new HashFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY),
+            auto orderOnCustFilterJoin = graph.add(new FilterJoin(Orders::CUSTKEY, Customer::CUSTKEY),
                                                    {orderFilter, custFilter});
 
             // TODO Which is faster? First filter lineitem then join, or filter join then filter
@@ -113,7 +113,7 @@ namespace lqf {
                                                                       bind(&ByteArrayDictLess::build, date))});
             auto filteredOrderTable = orderFilter.filter(*orderTable);
 
-            HashFilterJoin orderOnCustFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY);
+            FilterJoin orderOnCustFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY);
             filteredOrderTable = orderOnCustFilterJoin.join(*filteredOrderTable, *filteredCustTable);
 
             // Direct Join Lineitem and Order is faster than using lineitem to filter order, then use order to filter lineitem

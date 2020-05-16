@@ -188,10 +188,8 @@ namespace lqf {
             return retval;
         }
 
-        shared_ptr<Int32Predicate> HashBuilder::buildBitmapPredicate(Table &input, uint32_t keyIndex) {
-            ParquetTable &ptable = (ParquetTable &) input;
-
-            auto predicate = new BitmapPredicate(ptable.size());
+        shared_ptr<Int32Predicate> HashBuilder::buildBitmapPredicate(Table &input, uint32_t keyIndex,uint32_t expect_size) {
+            auto predicate = new BitmapPredicate(expect_size);
             function<void(const shared_ptr<Block> &)> processor = [=](const shared_ptr<Block> &block) {
                 auto col = block->col(keyIndex);
                 auto block_size = block->size();

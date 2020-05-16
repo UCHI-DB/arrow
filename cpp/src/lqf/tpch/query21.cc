@@ -105,7 +105,7 @@ namespace lqf {
                                                                                           bind(&ByteArrayDictEq::build,
                                                                                                status))), {order});
 //            auto validorder = orderFilter.filter(*order);
-            auto lineWithOrderJoin = graph.add(new HashFilterJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000),
+            auto lineWithOrderJoin = graph.add(new FilterJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000),
                                                {lineitem, orderFilter});
             auto linewithorder = graph.add(new FilterMat(), {lineWithOrderJoin});
 //            auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
@@ -121,7 +121,7 @@ namespace lqf {
             auto validSupplier = graph.add(new FilterMat(), {supplierNationFilter});
 //            auto validSupplier = mat.mat(*supplierNationFilter.filter(*supplier));
 
-            auto l1withsupplierJoin = graph.add(new HashFilterJoin(LineItem::SUPPKEY, Supplier::SUPPKEY),
+            auto l1withsupplierJoin = graph.add(new FilterJoin(LineItem::SUPPKEY, Supplier::SUPPKEY),
                                                 {l1withdate, validSupplier});
 //            auto l1withsupplier = l1withsupplierJoin.join(*l1withdate, *validSupplier);
 
@@ -189,7 +189,7 @@ namespace lqf {
                                                                      bind(&ByteArrayDictEq::build, status)));
             auto validorder = orderFilter.filter(*order);
 
-            HashFilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000);
+            FilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000);
             auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
 
             RowFilter linedateFilter([](DataRow &row) {
@@ -201,7 +201,7 @@ namespace lqf {
                                                                           bind(&Int32DictEq::build, 3)));
             auto validSupplier = mat.mat(*supplierNationFilter.filter(*supplier));
 
-            HashFilterJoin l1withsupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY);
+            FilterJoin l1withsupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY);
             auto l1withsupplier = l1withsupplierJoin.join(*l1withdate, *validSupplier);
 
             HashAgg l1agg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::ORDERKEY), AGI(LineItem::SUPPKEY)},

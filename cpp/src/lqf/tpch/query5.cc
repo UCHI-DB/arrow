@@ -57,7 +57,7 @@ namespace lqf {
                 return df.asByteArray() == q5::region;
             })), {region});
 
-            auto nationFilterJoin = graph.add(new HashFilterJoin(Nation::REGIONKEY, Region::REGIONKEY),
+            auto nationFilterJoin = graph.add(new FilterJoin(Nation::REGIONKEY, Region::REGIONKEY),
                                               {nation, regionFilter});
 
             vector<uint32_t> nation_col_offset{0, 2};
@@ -68,10 +68,10 @@ namespace lqf {
             };
             auto matNation = graph.add(new HashMat(Nation::NATIONKEY, snapshot), {nationFilterJoin});
 
-            auto custNationFilter = graph.add(new HashFilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
+            auto custNationFilter = graph.add(new FilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
                                               {customer, matNation});
 
-            auto suppNationFilter = graph.add(new HashFilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY),
+            auto suppNationFilter = graph.add(new FilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY),
                                               {supplier, matNation});
 
             auto orderFilter = graph.add(new ColFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
@@ -134,7 +134,7 @@ namespace lqf {
             })});
             auto validRegion = regionFilter.filter(*regionTable);
 
-            HashFilterJoin nationFilterJoin(Nation::REGIONKEY, Region::REGIONKEY);
+            FilterJoin nationFilterJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto validNation = nationFilterJoin.join(*nationTable, *validRegion);
 
             vector<uint32_t> nation_col_offset{0, 2};
@@ -145,10 +145,10 @@ namespace lqf {
             };
             auto matNation = HashMat(Nation::NATIONKEY, snapshot).mat(*validNation);
 
-            HashFilterJoin custNationFilter(Customer::NATIONKEY, Nation::NATIONKEY);
+            FilterJoin custNationFilter(Customer::NATIONKEY, Nation::NATIONKEY);
             auto validCustomer = custNationFilter.join(*customerTable, *matNation);
 
-            HashFilterJoin suppNationFilter(Supplier::NATIONKEY, Nation::NATIONKEY);
+            FilterJoin suppNationFilter(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto validSupplier = suppNationFilter.join(*supplierTable, *matNation);
 
             ColFilter orderFilter({new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,

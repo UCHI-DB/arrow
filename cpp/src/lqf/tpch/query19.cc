@@ -111,11 +111,11 @@ namespace lqf {
                                                                                          val == ByteArray("LG PKG");
                                                                               }))}), {part});
 
-            auto itemOnPart1 = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+            auto itemOnPart1 = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY),
                                          {validLineitem1, partFilter1});
-            auto itemOnPart2 = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+            auto itemOnPart2 = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY),
                                          {validLineitem2, partFilter2});
-            auto itemOnPart3 = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+            auto itemOnPart3 = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY),
                                          {validLineitem3, partFilter3});
 
             auto funion = graph.add(new FilterUnion(3), {itemOnPart1, itemOnPart2, itemOnPart3});
@@ -201,13 +201,13 @@ namespace lqf {
                                                                               }))});
             auto validPart3 = partFilter3.filter(*part);
 
-            HashFilterJoin itemOnPartJoin1(LineItem::PARTKEY, Part::PARTKEY);
+            FilterJoin itemOnPartJoin1(LineItem::PARTKEY, Part::PARTKEY);
             auto itemWithPart1 = itemOnPartJoin1.join(*validLineitem1, *validPart1);
 
-            HashFilterJoin itemOnPartJoin2(LineItem::PARTKEY, Part::PARTKEY);
+            FilterJoin itemOnPartJoin2(LineItem::PARTKEY, Part::PARTKEY);
             auto itemWithPart2 = itemOnPartJoin2.join(*validLineitem2, *validPart2);
 
-            HashFilterJoin itemOnPartJoin3(LineItem::PARTKEY, Part::PARTKEY);
+            FilterJoin itemOnPartJoin3(LineItem::PARTKEY, Part::PARTKEY);
             auto itemWithPart3 = itemOnPartJoin3.join(*validLineitem3, *validPart3);
 
             FilterUnion funion(3);

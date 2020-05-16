@@ -73,7 +73,7 @@ namespace lqf {
                 return lqf::util::strnstr((const char *) ref.ptr, "green", ref.len);
             })}), {part});
 
-            auto itemPartJoin = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY), {lineitem, partFilter});
+            auto itemPartJoin = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY), {lineitem, partFilter});
 
             auto itemOrderJoin = graph.add(
                     new HashJoin(Orders::ORDERKEY, LineItem::ORDERKEY, new ItemWithOrderBuilder()),
@@ -131,7 +131,7 @@ namespace lqf {
 
             FilterMat filterMat;
 
-            HashFilterJoin itemPartJoin(LineItem::PARTKEY, Part::PARTKEY);
+            FilterJoin itemPartJoin(LineItem::PARTKEY, Part::PARTKEY);
             auto validLineitem = filterMat.mat(*itemPartJoin.join(*lineitem, *validPart));
 
             // Use the lineitem to make three filter maps

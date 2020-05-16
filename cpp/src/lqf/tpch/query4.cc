@@ -21,7 +21,7 @@ namespace lqf {
         using namespace sboost;
         using namespace q4;
 
-        void executeQ4() {
+        void executeQ4_Graph() {
             ExecutionGraph graph;
 
             auto orderTable = ParquetTable::Open(Orders::path,
@@ -41,7 +41,7 @@ namespace lqf {
                 return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
             }), {lineitem});
 
-            auto existJoin = graph.add(new HashFilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY),
+            auto existJoin = graph.add(new FilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY),
                                        {orderFilter, lineItemFilter});
 
             function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
@@ -60,12 +60,12 @@ namespace lqf {
             auto opdict = orderTable->LoadDictionary<ByteArrayType>(Orders::ORDERPRIORITY);
             auto opdictp = opdict.get();
 
-            graph.add(new Printer(PBEGIN PDICT(opdictp, 0) PI(1) PEND),{sort});
+            graph.add(new Printer(PBEGIN PDICT(opdictp, 0) PI(1) PEND), {sort});
 
             graph.execute();
         }
 
-        void executeQ4Backup() {
+        void executeQ4() {
 
             auto orderTable = ParquetTable::Open(Orders::path,
                                                  {Orders::ORDERDATE, Orders::ORDERKEY, Orders::ORDERPRIORITY});
@@ -77,12 +77,14 @@ namespace lqf {
                                                         bind(&ByteArrayDictRangele::build, dateFrom, dateTo))});
             auto filteredOrderTable = orderFilter.filter(*orderTable);
 
+//            cout << filteredOrderTable->size() << endl;
+
             RowFilter lineItemFilter([](DataRow &datarow) {
                 return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
             });
             auto filteredLineItemTable = lineItemFilter.filter(*lineitemTable);
 
-            HashFilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY);
+            FilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY,30000000,true);
             auto existOrderTable = existJoin.join(*filteredOrderTable, *filteredLineItemTable);
 
             function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
@@ -105,6 +107,7 @@ namespace lqf {
             auto opdictp = opdict.get();
             Printer printer(PBEGIN PDICT(opdictp, 0) PI(1) PEND);
             printer.print(*sorted);
+
         }
     }
 }

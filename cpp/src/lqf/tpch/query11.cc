@@ -79,10 +79,10 @@ namespace lqf {
                         return field.asByteArray() == nationChosen;
                     })}), {nation});
 
-            auto validSupplierJoin = graph.add(new HashFilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY),
+            auto validSupplierJoin = graph.add(new FilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY),
                                                {supplier, nationNameFilter});
 
-            auto validPsJoin = graph.add(new HashFilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY),
+            auto validPsJoin = graph.add(new FilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY),
                                          {partsupp, validSupplierJoin});
 
             auto matPs = graph.add(new FilterMat(), {validPsJoin});
@@ -116,10 +116,10 @@ namespace lqf {
             })});
             auto validNation = nationNameFilter.filter(*nation);
 
-            HashFilterJoin validSupplierJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
+            FilterJoin validSupplierJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto validSupplier = validSupplierJoin.join(*supplier, *validNation);
 
-            HashFilterJoin validPsJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            FilterJoin validPsJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto validps = FilterMat().mat(*validPsJoin.join(*partsupp, *validSupplier));
 
             function<vector<AggField *>()> agg_fields = []() { return vector<AggField *>{new CostField()}; };

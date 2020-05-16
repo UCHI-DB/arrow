@@ -57,10 +57,10 @@ namespace lqf {
                         return lqf::util::strnstr(start, "forest", val.len) == start;
                     })), {part});
 
-            auto partfilterPs = graph.add(new HashFilterJoin(PartSupp::PARTKEY, Part::PARTKEY), {partsupp, partFilter});
+            auto partfilterPs = graph.add(new FilterJoin(PartSupp::PARTKEY, Part::PARTKEY), {partsupp, partFilter});
 //            auto validps = partfilterPs.join(*partsupp, *validpart);
 
-            auto suppFilterPs = graph.add(new HashFilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY),
+            auto suppFilterPs = graph.add(new FilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY),
                                           {partfilterPs, matSupplier});
 //            auto validpsWithSupp = suppFilterPs.join(*validps, *validSupplier);
             auto matPs = graph.add(new FilterMat(), {suppFilterPs});
@@ -100,7 +100,7 @@ namespace lqf {
             // SUPPKEY
 //            auto suppkeys = psFilterItem2.join(*matPs, *agglineitem);
 
-            auto finalFilter = graph.add(new HashFilterJoin(Supplier::SUPPKEY, 0), {matSupplier, psFilterItem2});
+            auto finalFilter = graph.add(new FilterJoin(Supplier::SUPPKEY, 0), {matSupplier, psFilterItem2});
 //            auto supplierResult = finalFilter.join(*validSupplier, *suppkeys);
 
             vector<uint32_t> col_size{2, 2};
@@ -148,10 +148,10 @@ namespace lqf {
                     }));
             auto validpart = partFilter.filter(*part);
 
-            HashFilterJoin partfilterPs(PartSupp::PARTKEY, Part::PARTKEY);
+            FilterJoin partfilterPs(PartSupp::PARTKEY, Part::PARTKEY);
             auto validps = partfilterPs.join(*partsupp, *validpart);
 
-            HashFilterJoin suppFilterPs(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            FilterJoin suppFilterPs(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto validpsWithSupp = suppFilterPs.join(*validps, *validSupplier);
             auto matPs = fmat.mat(*validpsWithSupp);
 
@@ -186,7 +186,7 @@ namespace lqf {
             // SUPPKEY
             auto suppkeys = psFilterItem2.join(*matPs, *agglineitem);
 
-            HashFilterJoin finalFilter(Supplier::SUPPKEY, 0);
+            FilterJoin finalFilter(Supplier::SUPPKEY, 0);
             auto supplierResult = finalFilter.join(*validSupplier, *suppkeys);
 
             vector<uint32_t> col_size{2, 2};

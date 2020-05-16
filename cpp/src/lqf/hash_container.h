@@ -104,7 +104,7 @@ namespace lqf {
 
             static shared_ptr<Int64Predicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 
-            static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t);
+            static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t, uint32_t);
 
             static shared_ptr<Hash32Container>
             buildContainer(Table &input, uint32_t, function<unique_ptr<MemDataRow>(DataRow &)>);

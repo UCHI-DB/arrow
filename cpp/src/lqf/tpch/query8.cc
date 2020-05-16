@@ -77,10 +77,10 @@ namespace lqf {
                 return input.asByteArray() == regionName;
             })}), {region});
 
-            auto nationFilter = graph.add(new HashFilterJoin(Nation::REGIONKEY, Region::REGIONKEY),
+            auto nationFilter = graph.add(new FilterJoin(Nation::REGIONKEY, Region::REGIONKEY),
                                           {nation, regionFilter});
 
-            auto customerFilter = graph.add(new HashFilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
+            auto customerFilter = graph.add(new FilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
                                             {customer, nationFilter});
 
             auto orderDateFilter = graph.add(new ColFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
@@ -88,13 +88,13 @@ namespace lqf {
                                                                                                    dateFrom,
                                                                                                    dateTo))), {order});
 
-            auto orderCustFilter = graph.add(new HashFilterJoin(Orders::CUSTKEY, Customer::CUSTKEY),
+            auto orderCustFilter = graph.add(new FilterJoin(Orders::CUSTKEY, Customer::CUSTKEY),
                                              {orderDateFilter, customerFilter});
 
             auto partFilter = graph.add(new ColFilter(
                     new SboostPredicate<ByteArrayType>(Part::TYPE, bind(&ByteArrayDictEq::build, partType))), {part});
 
-            auto lineitemOnPartFilter = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+            auto lineitemOnPartFilter = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY),
                                                  {lineitem, partFilter});
 
             auto orderJoin = graph.add(new HashJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new OrderJoinBuilder()),
@@ -146,10 +146,10 @@ namespace lqf {
             })});
             auto validRegion = regionFilter.filter(*region);
 
-            HashFilterJoin nationFilter(Nation::REGIONKEY, Region::REGIONKEY);
+            FilterJoin nationFilter(Nation::REGIONKEY, Region::REGIONKEY);
             auto validNation = nationFilter.join(*nation, *validRegion);
 
-            HashFilterJoin customerFilter(Customer::NATIONKEY, Nation::NATIONKEY);
+            FilterJoin customerFilter(Customer::NATIONKEY, Nation::NATIONKEY);
             auto validCust = customerFilter.join(*customer, *validNation);
 
             ColFilter orderDateFilter({new SboostPredicate<ByteArrayType>(Orders::ORDERDATE,
@@ -157,14 +157,14 @@ namespace lqf {
                                                                                dateTo))});
             auto validOrder = orderDateFilter.filter(*order);
 
-            HashFilterJoin orderCustFilter(Orders::CUSTKEY, Customer::CUSTKEY);
+            FilterJoin orderCustFilter(Orders::CUSTKEY, Customer::CUSTKEY);
             validOrder = orderCustFilter.join(*validOrder, *validCust);
 
             ColFilter partFilter(
                     {new SboostPredicate<ByteArrayType>(Part::TYPE, bind(&ByteArrayDictEq::build, partType))});
             auto validPart = partFilter.filter(*part);
 
-            HashFilterJoin lineitemOnPartFilter(LineItem::PARTKEY, Part::PARTKEY);
+            FilterJoin lineitemOnPartFilter(LineItem::PARTKEY, Part::PARTKEY);
             auto validLineitem = lineitemOnPartFilter.join(*lineitem, *validPart);
 
 

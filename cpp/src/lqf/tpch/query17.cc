@@ -50,7 +50,7 @@ namespace lqf {
                                                                 bind(&ByteArrayDictEq::build, container))}),
                     {part});
 
-            auto lineitemFilter = graph.add(new HashFilterJoin(LineItem::PARTKEY, Part::PARTKEY),
+            auto lineitemFilter = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY),
                                             {lineitem, partFilter});
             auto lineitemMat = graph.add(new FilterMat(), {lineitemFilter});
 
@@ -88,7 +88,7 @@ namespace lqf {
                                                                      bind(&ByteArrayDictEq::build, container))});
             auto validPart = partFilter.filter(*part);
 
-            HashFilterJoin lineitemFilter(LineItem::PARTKEY, Part::PARTKEY);
+            FilterJoin lineitemFilter(LineItem::PARTKEY, Part::PARTKEY);
             auto validlineitem = FilterMat().mat(*lineitemFilter.join(*lineitem, *validPart));
 
             HashAgg avgquantity(vector<uint32_t>({1, 1}), {AGI(LineItem::PARTKEY)},
