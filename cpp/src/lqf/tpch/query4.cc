@@ -21,7 +21,7 @@ namespace lqf {
         using namespace sboost;
         using namespace q4;
 
-        void executeQ4_Graph() {
+        void executeQ4() {
             ExecutionGraph graph;
 
             auto orderTable = ParquetTable::Open(Orders::path,
@@ -41,7 +41,7 @@ namespace lqf {
                 return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
             }), {lineitem});
 
-            auto existJoin = graph.add(new FilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY),
+            auto existJoin = graph.add(new FilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 30000000, true),
                                        {orderFilter, lineItemFilter});
 
             function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
@@ -65,7 +65,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ4() {
+        void executeQ4_Backup() {
 
             auto orderTable = ParquetTable::Open(Orders::path,
                                                  {Orders::ORDERDATE, Orders::ORDERKEY, Orders::ORDERPRIORITY});
@@ -84,7 +84,7 @@ namespace lqf {
             });
             auto filteredLineItemTable = lineItemFilter.filter(*lineitemTable);
 
-            FilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY,30000000,true);
+            FilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 30000000, true);
             auto existOrderTable = existJoin.join(*filteredOrderTable, *filteredLineItemTable);
 
             function<uint64_t(DataRow &)> indexer = [](DataRow &row) {

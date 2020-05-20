@@ -40,7 +40,7 @@ namespace lqf {
         }
         using namespace q19;
 
-        void executeQ19() {
+        void executeQ19_Graph() {
             ExecutionGraph graph;
 
             auto lineitem = graph.add(
@@ -128,7 +128,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ19Backup() {
+        void executeQ19() {
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::PARTKEY, LineItem::QUANTITY,
                                                                 LineItem::SHIPMODE, LineItem::SHIPINSTRUCT,
                                                                 LineItem::EXTENDEDPRICE, LineItem::DISCOUNT});
@@ -160,7 +160,7 @@ namespace lqf {
             FilterMat fmat;
             auto lineitemBase = fmat.mat(*lineitemBaseFilter.filter(*lineitem));
 
-            FilterAnd fand(3);
+            FilterAnd fand(2);
             auto validLineitem1 = fand.execute(vector<Table *>{qtyLineitem1.get(), lineitemBase.get()});
             auto validLineitem2 = fand.execute(vector<Table *>{qtyLineitem2.get(), lineitemBase.get()});
             auto validLineitem3 = fand.execute(vector<Table *>{qtyLineitem3.get(), lineitemBase.get()});

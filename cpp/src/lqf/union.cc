@@ -48,7 +48,7 @@ namespace lqf {
     }
 
     shared_ptr<Table> FilterAnd::execute(const vector<Table *> &tables) {
-        vector<shared_ptr<Bitmap>> storage;
+        vector<shared_ptr<Bitmap>> storage(100, nullptr);
         ParquetTable *owner;
         function<void(const shared_ptr<Block> &)> processor = [&storage, &owner](
                 const shared_ptr<Block> &block) {

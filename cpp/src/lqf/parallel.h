@@ -40,6 +40,7 @@ namespace lqf {
         class Node {
             friend ExecutionGraph;
         protected:
+            string name_;
             // index in the execution graph
             uint32_t index_;
             uint32_t num_input_;
@@ -47,8 +48,12 @@ namespace lqf {
             // Flag that this node has no heavy computation and does not block execution
             bool trivial_;
             bool triggered_ = false;
+
         public:
             Node(const uint32_t num_input, const bool trivial = false);
+
+            // Name of the node
+            inline void name(const string& n) { name_ = n; };
 
             // One of its ancestor is ready
             bool feed();

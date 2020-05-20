@@ -125,7 +125,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ2_sequential() {
+        void executeQ2Backup() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -152,6 +152,7 @@ namespace lqf {
                                                                           typePred))});
             auto filteredPart = partFilter.filter(*partTable);
 
+
             FilterJoin nrJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
@@ -165,7 +166,6 @@ namespace lqf {
 
             FilterJoin snJoin(Supplier::NATIONKEY, Nation::NATIONKEY);
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
-
 
 
             FilterMat filterMat;
@@ -214,7 +214,7 @@ namespace lqf {
             printer.print(*result);
         }
 
-        void executeQ2_Debug() {
+        void executeQ2Debug() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -245,6 +245,8 @@ namespace lqf {
             auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
             cout << filteredSupplier->size() << endl;
 */
+
+            cout << partTable->numBlocks() << endl;
             function<bool(const ByteArray &)> typePred = [](const ByteArray &input) {
                 return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 5), q2::type, 5);
             };
@@ -255,9 +257,8 @@ namespace lqf {
                                                                      bind(sboost::ByteArrayDictMultiEq::build,
                                                                           typePred))});
             auto filteredPart = partFilter.filter(*partTable);
-            filteredPart->blocks()->foreach([](const shared_ptr<Block> &block) {
-                cout << block->size() << endl;
-            });
+
+            cout << filteredPart->size() << endl;
 /*
             FilterMat filterMat;
             auto matPart = filterMat.mat(*filteredPart);

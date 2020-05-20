@@ -142,7 +142,7 @@ namespace lqf {
         bool useBitmap_;
     public:
         FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = 0xFFFFFFFF,
-                   bool useBitmap = true);
+                   bool useBitmap = false);
 
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 

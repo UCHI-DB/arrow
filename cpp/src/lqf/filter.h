@@ -58,7 +58,7 @@ namespace lqf {
 
         ~SimplePredicate() {}
 
-        void predicate(function<bool(const DataField&)>);
+        void predicate(function<bool(const DataField &)>);
 
         shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) override;
     };
@@ -298,7 +298,7 @@ namespace lqf {
 
         virtual ~ColFilter();
 
-        ColPredicate* predicate(uint32_t);
+        ColPredicate *predicate(uint32_t);
 
         shared_ptr<Table> filter(Table &input) override;
     };
@@ -320,9 +320,13 @@ namespace lqf {
     class MapFilter : public Filter {
     private:
         uint32_t key_index_;
-        IntPredicate<Int32> &filter_;
+        IntPredicate<Int32> *map_;
     public:
+        MapFilter(uint32_t);
+
         MapFilter(uint32_t key_index, IntPredicate<Int32> &);
+
+        void setMap(IntPredicate<Int32> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
     };
@@ -330,9 +334,13 @@ namespace lqf {
     class PowerMapFilter : public Filter {
     private:
         function<uint64_t(DataRow &)> key_maker_;
-        IntPredicate<Int64> &filter_;
+        IntPredicate<Int64> *map_;
     public:
+        PowerMapFilter(function<uint64_t(DataRow &)>);
+
         PowerMapFilter(function<uint64_t(DataRow &)>, IntPredicate<Int64> &);
+
+        void setMap(IntPredicate<Int64> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
     };

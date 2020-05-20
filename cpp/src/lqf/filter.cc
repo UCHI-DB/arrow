@@ -136,30 +136,42 @@ namespace lqf {
         return -1;
     }
 
-    MapFilter::MapFilter(uint32_t key_index, IntPredicate<Int32> &filter)
-            : key_index_(key_index), filter_(filter) {}
+    MapFilter::MapFilter(uint32_t key_index) : key_index_(key_index) {}
+
+    MapFilter::MapFilter(uint32_t key_index, IntPredicate<Int32> &map)
+            : key_index_(key_index), map_(&map) {}
+
+    void MapFilter::setMap(IntPredicate<Int32> &map) {
+        map_ = &map;
+    }
 
     shared_ptr<Bitmap> MapFilter::filterBlock(Block &input) {
         auto col = input.col(key_index_);
         auto bitmap = make_shared<SimpleBitmap>(input.limit());
         auto block_size = input.size();
         for (uint32_t i = 0; i < block_size; ++i) {
-            if (filter_.test(col->next().asInt())) {
+            if (map_->test(col->next().asInt())) {
                 bitmap->put(i);
             }
         }
         return bitmap;
     }
 
-    PowerMapFilter::PowerMapFilter(function<uint64_t(DataRow &)> key_maker, IntPredicate<Int64> &filter)
-            : key_maker_(key_maker), filter_(filter) {}
+    PowerMapFilter::PowerMapFilter(function<uint64_t(DataRow &)> key_maker) : key_maker_(key_maker) {}
+
+    PowerMapFilter::PowerMapFilter(function<uint64_t(DataRow &)> key_maker, IntPredicate<Int64> &map)
+            : key_maker_(key_maker), map_(&map) {}
+
+    void PowerMapFilter::setMap(IntPredicate<Int64> &map) {
+        map_ = &map;
+    }
 
     shared_ptr<Bitmap> PowerMapFilter::filterBlock(Block &input) {
         auto rows = input.rows();
         auto bitmap = make_shared<SimpleBitmap>(input.limit());
         auto block_size = input.size();
         for (uint32_t i = 0; i < block_size; ++i) {
-            if (filter_.test(key_maker_(rows->next()))) {
+            if (map_->test(key_maker_(rows->next()))) {
                 bitmap->put(i);
             }
         }

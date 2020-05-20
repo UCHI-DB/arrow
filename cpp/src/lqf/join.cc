@@ -186,6 +186,9 @@ namespace lqf {
 
 
     shared_ptr<Table> FilterJoin::join(Table &left, Table &right) {
+#ifdef LQF_NODE_TIMING
+        auto start = high_resolution_clock::now();
+#endif
         if (useBitmap_) {
             predicate_ = HashBuilder::buildBitmapPredicate(right, rightKeyIndex_, expect_size_);
         } else {
@@ -193,6 +196,11 @@ namespace lqf {
         }
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&FilterJoin::probe, this, _1);
+#ifdef LQF_NODE_TIMING
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        cout << "Filter Join " << name_ << " Time taken: " << duration.count() << " microseconds" << endl;
+#endif
         return make_shared<TableView>(left.colSize(), left.blocks()->map(prober));
     }
 
@@ -242,7 +250,6 @@ namespace lqf {
 
             auto writerows = memblock->rows();
             auto writecount = 0;
-
 
             auto bitmapite = exist->iterator();
             while (bitmapite->hasNext()) {

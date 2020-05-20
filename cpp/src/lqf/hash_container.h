@@ -39,6 +39,12 @@ namespace lqf {
             void add(ktype);
 
             bool test(ktype) override;
+
+            inline uint32_t size() { return content_.size(); }
+
+            inline ktype max() { return max_.load(); }
+
+            inline ktype min() { return min_.load(); }
         };
 
         using Hash32Predicate = HashPredicate<Int32>;
@@ -46,7 +52,7 @@ namespace lqf {
 
         class BitmapPredicate : public Int32Predicate {
         private:
-            SimpleBitmap bitmap_;
+            ConcurrentBitmap bitmap_;
         public:
             BitmapPredicate(uint32_t max);
 

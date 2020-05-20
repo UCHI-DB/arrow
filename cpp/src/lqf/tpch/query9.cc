@@ -45,6 +45,78 @@ namespace lqf {
                     target[2] = left[2].asDouble() - left[3].asInt() * right[0].asDouble(); // REV
                 }
             };
+
+            class ItemProcessorOutput : public NodeOutput {
+            public:
+                HashPredicate<Int32> orderkeys_;
+                HashPredicate<Int32> suppkeys_;
+                HashPredicate<Int64> partsuppkeys_;
+            };
+
+            class ItemProcessor : public Node {
+            public:
+                ItemProcessor() : Node(1) {}
+
+                unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
+                    auto lineitem = static_cast<TableOutput *>(input[0])->get();
+                    auto output = new ItemProcessorOutput();
+                    lineitem->blocks()->foreach([output](const shared_ptr<Block> &block) {
+                        auto rows = block->rows();
+                        auto block_size = block->size();
+                        for (uint32_t i = 0; i < block_size; ++i) {
+                            DataRow &row = rows->next();
+                            output->orderkeys_.add(row[LineItem::ORDERKEY].asInt());
+                            int suppkey = row[LineItem::SUPPKEY].asInt();
+                            int partkey = row[LineItem::PARTKEY].asInt();
+                            output->suppkeys_.add(suppkey);
+                            output->partsuppkeys_.add((static_cast<uint64_t>(partkey) << 32) + suppkey);
+                        }
+                    });
+                    return unique_ptr<NodeOutput>(output);
+                }
+            };
+
+            class OrderFilter : public NestedNode {
+            public:
+                OrderFilter(MapFilter *inner) : NestedNode(inner, 2, true) {}
+
+                unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
+                    auto filter = dynamic_cast<MapFilter *>(inner_.get());
+                    auto table = static_cast<TableOutput *>(input[0])->get();
+                    auto map = static_cast<ItemProcessorOutput *>(input[1]);
+                    filter->setMap(map->orderkeys_);
+                    auto output = filter->filter(*table);
+                    return unique_ptr<NodeOutput>(new TableOutput(output));
+                }
+            };
+
+            class SupplierFilter : public NestedNode {
+            public:
+                SupplierFilter(MapFilter *inner) : NestedNode(inner, 2, true) {}
+
+                unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
+                    auto filter = dynamic_cast<MapFilter *>(inner_.get());
+                    auto table = static_cast<TableOutput *>(input[0])->get();
+                    auto map = static_cast<ItemProcessorOutput *>(input[1]);
+                    filter->setMap(map->suppkeys_);
+                    auto output = filter->filter(*table);
+                    return unique_ptr<NodeOutput>(new TableOutput(output));
+                }
+            };
+
+            class PartSuppFilter : public NestedNode {
+            public:
+                PartSuppFilter(PowerMapFilter *inner) : NestedNode(inner, 2, true) {}
+
+                unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
+                    auto filter = dynamic_cast<PowerMapFilter *>(inner_.get());
+                    auto table = static_cast<TableOutput *>(input[0])->get();
+                    auto map = static_cast<ItemProcessorOutput *>(input[1]);
+                    filter->setMap(map->partsuppkeys_);
+                    auto output = filter->filter(*table);
+                    return unique_ptr<NodeOutput>(new TableOutput(output));
+                }
+            };
         };
         using namespace q9;
         using namespace powerjoin;
@@ -68,47 +140,57 @@ namespace lqf {
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
             auto nation = graph.add(new TableNode(nationTable), {});
 
-            auto partFilter = graph.add(new ColFilter({new SimplePredicate(Part::NAME, [](const DataField &field) {
+            auto partFilter = graph.add(new ColFilter(new SimplePredicate(Part::NAME, [](const DataField &field) {
                 auto &ref = field.asByteArray();
                 return lqf::util::strnstr((const char *) ref.ptr, "green", ref.len);
-            })}), {part});
+            })), {part});
 
             auto itemPartJoin = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY), {lineitem, partFilter});
+            auto validItem = graph.add(new FilterMat(), {itemPartJoin});
+
+            // Use the lineitem to make three filter maps
+            auto itemProcessor = graph.add(new ItemProcessor(), {validItem});
+
+            auto orderFilter = graph.add(new OrderFilter(new MapFilter(Orders::ORDERKEY)), {order, itemProcessor});
 
             auto itemOrderJoin = graph.add(
-                    new HashJoin(Orders::ORDERKEY, LineItem::ORDERKEY, new ItemWithOrderBuilder()),
-                    {itemPartJoin, order});
+                    new HashJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new ItemWithOrderBuilder()),
+                    {validItem, orderFilter});
             // PARTKEY SUPPKEY PRICE_DISCOUNT QUANTITY YEAR
 
-            auto ps2lJoin = graph.add(
-                    new PowerHashJoin(COL_HASHER2(PartSupp::PARTKEY, PartSupp::SUPPKEY), COL_HASHER2(0, 1),
-                                      new ItemWithRevBuilder()), {partsupp, itemOrderJoin});
+            auto pskey_maker = COL_HASHER2(PartSupp::PARTKEY, PartSupp::SUPPKEY);
+            auto itemkey_maker = COL_HASHER2(0, 1);
+
+            auto psFilter = graph.add(new PartSuppFilter(new PowerMapFilter(pskey_maker)), {partsupp, itemProcessor});
+
+            auto ps2lJoin = graph.add(new PowerHashJoin(itemkey_maker, pskey_maker, new ItemWithRevBuilder()),
+                                      {itemOrderJoin, psFilter});
             // SUPPKEY, ORDER_YEAR, REV
+
+            auto suppFilter = graph.add(new SupplierFilter(new MapFilter(Supplier::SUPPKEY)),
+                                        {supplier, itemProcessor});
 
             // ORDER_YEAR, REV, NATIONKEY
             auto suppJoin = graph.add(new HashColumnJoin(0, Supplier::SUPPKEY,
                                                          new ColumnBuilder({JL(1), JL(2), JR(Supplier::NATIONKEY)})),
-                                      {ps2lJoin, supplier});
-
-            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
-                return (static_cast<uint64_t>(input[0].asInt()) << 32) + input[2].asInt();
-            };
+                                      {ps2lJoin, suppFilter});
 
             auto agg = graph.add(new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(2), AGI(0)},
-                                             []() { return vector<AggField *>({new agg::DoubleSum(1)}); }, hasher,
-                                             true), {suppJoin});
+                                             []() { return vector<AggField *>({new agg::DoubleSum(1)}); },
+                                             COL_HASHER2(0, 2), true), {suppJoin});
             // NATIONKEY, ORDERYEAR, SUM
 
             auto withNationJoin = graph.add(new HashJoin(0, Nation::NATIONKEY,
-                                    new RowBuilder({JL(1), JRS(Nation::NAME), JL(2)}, false, true)),{agg,nation});
+                                                         new RowBuilder({JL(1), JRS(Nation::NAME), JL(2)}, false,
+                                                                        true)), {agg, nation});
             // ORDERYEAR, NATION, REV
 
             function<bool(DataRow *, DataRow *)> comp = [](DataRow *a, DataRow *b) {
                 return SBLE(1) || (SBE(1) && SILE(0));
             };
-            auto sort = graph.add(new SmallSort(comp),{withNationJoin});
+            auto sort = graph.add(new SmallSort(comp), {withNationJoin});
 
-            graph.add(new Printer(PBEGIN PI(0) PB(1) PD(2) PEND),{sort});
+            graph.add(new Printer(PBEGIN PI(0) PB(1) PD(2) PEND), {sort});
             graph.execute();
         }
 
@@ -123,10 +205,10 @@ namespace lqf {
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY});
             auto nation = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
 
-            ColFilter partFilter({new SimplePredicate(Part::NAME, [](const DataField &field) {
+            ColFilter partFilter(new SimplePredicate(Part::NAME, [](const DataField &field) {
                 auto &ref = field.asByteArray();
                 return lqf::util::strnstr((const char *) ref.ptr, "green", ref.len);
-            })});
+            }));
             auto validPart = partFilter.filter(*part);
 
             FilterMat filterMat;
@@ -150,11 +232,14 @@ namespace lqf {
                     partsuppkeys.add((static_cast<uint64_t>(partkey) << 32) + suppkey);
                 }
             });
+//            cout << orderkeys.size() << "," << orderkeys.max() << endl;
+//            cout << suppkeys.size() << "," << suppkeys.size() << endl;
+//            cout << partsuppkeys.size() << endl;
 
             MapFilter orderFilter(Orders::ORDERKEY, orderkeys);
             auto filteredOrders = orderFilter.filter(*order);
 
-            HashJoin itemOrderJoin(Orders::ORDERKEY, LineItem::ORDERKEY, new ItemWithOrderBuilder());
+            HashJoin itemOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new ItemWithOrderBuilder());
             // PARTKEY SUPPKEY PRICE_DISCOUNT QUANTITY YEAR
             auto orderLineitem = itemOrderJoin.join(*validLineitem, *filteredOrders);
 

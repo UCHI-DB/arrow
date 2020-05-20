@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include "container.h"
+#include "bitmap.h"
 #include "threadpool.h"
 
 using namespace lqf;
@@ -19,14 +20,17 @@ protected:
     vector<int32_t> values;
 
     int32_t total;
+
+    int32_t LIMIT = 1000000;
 public:
 
     SetWriteBenchmark() {
         executor = Executor::Make(25);
         srand(time(NULL));
 
-        for (int i = 0; i < 1000000; ++i) {
-            values.push_back(rand() % 1000);
+        values.clear();
+        for (int i = 0; i < LIMIT; ++i) {
+            values.push_back(rand() % LIMIT);
         }
     }
 
@@ -38,11 +42,11 @@ public:
 BENCHMARK_F(SetWriteBenchmark, Int32)(benchmark::State &state) {
     for (auto _ : state) {
         //run your benchmark
-        auto chs32_ = new PhaseConcurrentHashSet<Int32>();
+        auto chs32_ = new PhaseConcurrentHashSet<Int32>(LIMIT);
         vector<function<int()>> tasks;
         function<int(int)> task = [this, chs32_](int input) {
-            for (int i = 0; i < 100000; ++i) {
-                chs32_->add(values[input * 100000 + i]);
+            for (int i = 0; i < LIMIT / 10; ++i) {
+                chs32_->add(values[input * (LIMIT / 10) + i]);
             }
             return input;
         };
@@ -60,8 +64,8 @@ BENCHMARK_F(SetWriteBenchmark, Int64)(benchmark::State &state) {
         auto chs64_ = new PhaseConcurrentHashSet<Int64>();
         vector<function<int()>> tasks;
         function<int(int)> task = [chs64_, this](int input) {
-            for (int i = 0; i < 100000; ++i) {
-                chs64_->add(values[input * 100000 + i]);
+            for (int i = 0; i < LIMIT / 10; ++i) {
+                chs64_->add(values[input * (LIMIT / 10) + i]);
             }
             return input;
         };
@@ -69,6 +73,47 @@ BENCHMARK_F(SetWriteBenchmark, Int64)(benchmark::State &state) {
             tasks.push_back(bind(task, i));
         }
         executor->invokeAll(tasks);
+        total = chs64_->size();
+        delete chs64_;
+    }
+}
+
+BENCHMARK_F(SetWriteBenchmark, Int32Bitmap)(benchmark::State &state) {
+    for (auto _ : state) {
+        auto chs64_ = new ConcurrentBitmap(LIMIT);
+        vector<function<int()>> tasks;
+        function<int(int)> task = [chs64_, this](int input) {
+            for (int i = 0; i < LIMIT / 10; ++i) {
+                chs64_->put(values[input * (LIMIT / 10) + i]);
+            }
+            return input;
+        };
+        for (int i = 0; i < 10; ++i) {
+            tasks.push_back(bind(task, i));
+        }
+        executor->invokeAll(tasks);
+        total = chs64_->size();
+        delete chs64_;
+    }
+}
+
+BENCHMARK_F(SetWriteBenchmark, Int32SingleThread)(benchmark::State &state) {
+    for (auto _ : state) {
+        auto chs32_ = new PhaseConcurrentHashSet<Int32>();
+        for (auto &val: values) {
+            chs32_->add(val);
+        }
+        total = chs32_->size();
+        delete chs32_;
+    }
+}
+
+BENCHMARK_F(SetWriteBenchmark, Int64SingleThread)(benchmark::State &state) {
+    for (auto _ : state) {
+        auto chs64_ = new PhaseConcurrentHashSet<Int64>();
+        for (auto &val: values) {
+            chs64_->add(val);
+        }
         total = chs64_->size();
         delete chs64_;
     }
@@ -254,7 +299,7 @@ BENCHMARK_F(MapWriteBenchmark, StlInt64)(benchmark::State &state) {
     for (auto _ : state) {
         unordered_map<int64_t, DemoObject *> map;
         for (uint32_t i = 0; i < limit; ++i) {
-            map[i] = new DemoObject{0,0};
+            map[i] = new DemoObject{0, 0};
         }
         blackhole = map.size();
     }

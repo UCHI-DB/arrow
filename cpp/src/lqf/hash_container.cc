@@ -17,12 +17,11 @@ namespace lqf {
         void HashPredicate<DTYPE>::add(ktype val) {
             // Update range
             ktype current;
-            do {
-                current = min_.load();
-            } while (!min_.compare_exchange_strong(current, std::min(val, current)));
-            do {
-                current = max_.load();
-            } while (!max_.compare_exchange_strong(current, std::max(val, current)));
+            current = min_.load();
+            while (val < current && !min_.compare_exchange_strong(current, val));
+
+            current = max_.load();
+            while (val > current && !max_.compare_exchange_strong(current, val));
             content_.add(val);
         }
 
@@ -59,12 +58,12 @@ namespace lqf {
         template<typename DTYPE>
         void HashContainer<DTYPE>::add(ktype key, unique_ptr<MemDataRow> dataRow) {
             ktype current;
-            do {
-                current = min_.load();
-            } while (!min_.compare_exchange_strong(current, std::min(key, current)));
-            do {
-                current = max_.load();
-            } while (!max_.compare_exchange_strong(current, std::max(key, current)));
+
+            current = min_.load();
+            while (key < current && !min_.compare_exchange_strong(current, key));
+
+            current = max_.load();
+            while (key > current && !max_.compare_exchange_strong(current, key));
             hashmap_.put(key, dataRow.release());
         }
 
@@ -188,7 +187,8 @@ namespace lqf {
             return retval;
         }
 
-        shared_ptr<Int32Predicate> HashBuilder::buildBitmapPredicate(Table &input, uint32_t keyIndex,uint32_t expect_size) {
+        shared_ptr<Int32Predicate>
+        HashBuilder::buildBitmapPredicate(Table &input, uint32_t keyIndex, uint32_t expect_size) {
             auto predicate = new BitmapPredicate(expect_size);
             function<void(const shared_ptr<Block> &)> processor = [=](const shared_ptr<Block> &block) {
                 auto col = block->col(keyIndex);

@@ -46,7 +46,7 @@ namespace lqf {
 
         using namespace q1;
 
-        void executeQ1_Backup() {
+        void executeQ1Backup() {
             auto lineItemTable = ParquetTable::Open(LineItem::path,
                                                     {LineItem::SHIPDATE, LineItem::QUANTITY, LineItem::EXTENDEDPRICE,
                                                      LineItem::DISCOUNT, LineItem::TAX, LineItem::RETURNFLAG,
