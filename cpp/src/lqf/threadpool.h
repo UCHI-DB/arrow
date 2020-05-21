@@ -89,8 +89,8 @@ namespace lqf {
                 vector<future<T>> futures;
                 for (auto t: tasks) {
                     auto res = new CallTask<T>(t);
-                    submit(unique_ptr<CallTask<T>>(res));
                     futures.push_back(res->getFuture());
+                    submit(unique_ptr<CallTask<T>>(res));
                 }
                 unique_ptr<vector<T>> result = unique_ptr<vector<T>>(new vector<T>());
                 for (auto &future:futures) {
