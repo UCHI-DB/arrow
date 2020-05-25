@@ -447,7 +447,7 @@ namespace lqf {
     template<typename T>
     class StreamSource {
     public:
-        virtual ~StreamSource();
+        virtual ~StreamSource() = default;
 
         virtual bool hasNext() = 0;
 
