@@ -27,7 +27,7 @@ namespace lqf {
 
     class BitmapIterator {
     public:
-        virtual ~BitmapIterator() = 0;
+        virtual ~BitmapIterator() = default;
 
         virtual void moveTo(uint64_t pos) = 0;
 
@@ -47,7 +47,7 @@ namespace lqf {
     public :
         SimpleBitmapIterator(uint64_t *content, uint64_t content_size, uint64_t bit_size);
 
-        virtual ~SimpleBitmapIterator();
+        virtual ~SimpleBitmapIterator() = default;
 
         virtual void moveTo(uint64_t pos) override;
 
@@ -63,7 +63,7 @@ namespace lqf {
     public :
         FullBitmapIterator(uint64_t size);
 
-        virtual ~FullBitmapIterator();
+        virtual ~FullBitmapIterator() = default;
 
         virtual void moveTo(uint64_t pos) override;
 

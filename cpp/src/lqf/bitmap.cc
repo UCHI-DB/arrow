@@ -26,8 +26,6 @@ namespace lqf {
         return value_ != 0;
     }
 
-    BitmapIterator::~BitmapIterator() {}
-
     SimpleBitmapIterator::SimpleBitmapIterator(uint64_t *content, uint64_t content_size, uint64_t num_bits) {
         this->content_ = content;
         this->content_size_ = content_size;
@@ -40,8 +38,6 @@ namespace lqf {
             }
         }
     }
-
-    SimpleBitmapIterator::~SimpleBitmapIterator() {}
 
     void SimpleBitmapIterator::moveTo(uint64_t pos) {
         pointer_ = pos >> 6;
