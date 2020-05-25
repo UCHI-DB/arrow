@@ -32,6 +32,8 @@ namespace lqf {
 
         FilterExecutor();
 
+        virtual ~FilterExecutor() = default;
+
         void reset();
 
         void reg(Table &, ColPredicate &);
@@ -48,6 +50,8 @@ namespace lqf {
         vector<unique_ptr<RawAccessor<DTYPE>>> &content_;
     public:
         PackedRawAccessor(vector<unique_ptr<RawAccessor<DTYPE>>> &content);
+
+        virtual ~PackedRawAccessor() = default;
 
         void init(uint64_t size) override;
 

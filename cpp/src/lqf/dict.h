@@ -25,6 +25,9 @@ namespace lqf {
 
         void *generic_buffer_;
     public:
+
+        virtual ~DictionaryBase() = default;
+
         inline uint32_t size() {
             return size_;
         }

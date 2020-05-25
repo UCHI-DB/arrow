@@ -78,16 +78,12 @@ namespace lqf {
         return SIZES[num_fields];
     }
 
-    DataRow::~DataRow() {}
-
     MemDataRow MemDataRow::EMPTY = MemDataRow(0);
 
     MemDataRow::MemDataRow(uint8_t num_fields)
             : MemDataRow(OFFSETS[num_fields]) {}
 
     MemDataRow::MemDataRow(const vector<uint32_t> &offset) : data_(offset.back(), 0x0), offset_(offset) {}
-
-    MemDataRow::~MemDataRow() {}
 
     unique_ptr<DataRow> MemDataRow::snapshot() {
         MemDataRow *mdr = new MemDataRow(offset_);
@@ -130,8 +126,6 @@ namespace lqf {
     }
 
     MemBlock::MemBlock(uint32_t size, uint32_t row_size) : MemBlock(size, row_size, OFFSETS[row_size]) {}
-
-    MemBlock::~MemBlock() {}
 
     uint64_t MemBlock::size() {
         return size_;
@@ -263,8 +257,6 @@ namespace lqf {
     }
 
     MemvBlock::MemvBlock(uint32_t size, uint32_t num_fields) : MemvBlock(size, SIZES[num_fields]) {}
-
-    MemvBlock::~MemvBlock() {}
 
     uint64_t MemvBlock::size() {
         return size_;
@@ -476,8 +468,6 @@ namespace lqf {
     MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)
             : inner_(inner), mask_(mask) {}
 
-    MaskedBlock::~MaskedBlock() {}
-
     uint64_t MaskedBlock::size() {
         return mask_->cardinality();
     }
@@ -547,8 +537,6 @@ namespace lqf {
     ParquetBlock::ParquetBlock(ParquetTable *owner, shared_ptr<RowGroupReader> rowGroup, uint32_t index,
                                uint64_t columns) : Block(index), owner_(owner), rowGroup_(rowGroup), index_(index),
                                                    columns_(columns) {}
-
-    ParquetBlock::~ParquetBlock() {}
 
     Table *ParquetBlock::owner() {
         return this->owner_;
@@ -762,8 +750,6 @@ namespace lqf {
         return Open(filename, ccs);
     }
 
-    ParquetTable::~ParquetTable() {}
-
     using namespace std::placeholders;
 
     unique_ptr<Stream<shared_ptr<Block>>> ParquetTable::blocks() {
@@ -803,8 +789,6 @@ namespace lqf {
             : inner_(inner), masks_(masks) {
         masks_.resize(inner_->numBlocks());
     }
-
-    MaskedTable::~MaskedTable() {}
 
     using namespace std::placeholders;
 
@@ -851,8 +835,6 @@ namespace lqf {
             col_offset_.push_back(col_offset_.back() + col_size_[k]);
         }
     }
-
-    MemTable::~MemTable() {}
 
     shared_ptr<Block> MemTable::allocate(uint32_t num_rows) {
         shared_ptr<Block> block;

@@ -52,7 +52,7 @@ namespace lqf {
         public:
             JoinBuilder(initializer_list<int32_t>, bool needkey, bool vertical);
 
-            virtual ~JoinBuilder() {}
+            virtual ~JoinBuilder() = default;
 
             inline bool useVertical() { return vertical_; }
 
@@ -70,6 +70,8 @@ namespace lqf {
         public:
             RowBuilder(initializer_list<int32_t>, bool needkey = false, bool vertical = false);
 
+            virtual ~RowBuilder() = default;
+
             virtual void build(DataRow &, DataRow &, DataRow &, int32_t key);
         };
 
@@ -77,6 +79,8 @@ namespace lqf {
         class ColumnBuilder : public JoinBuilder {
         public:
             ColumnBuilder(initializer_list<int32_t>);
+
+            virtual ~ColumnBuilder() = default;
 
             inline const vector<uint32_t> &rightColSize() { return right_col_size_; }
 
@@ -95,6 +99,8 @@ namespace lqf {
     public:
         Join();
 
+        virtual ~Join() = default;
+
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         virtual shared_ptr<Table> join(Table &, Table &) = 0;
@@ -111,7 +117,7 @@ namespace lqf {
         HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
                       JoinBuilder *builder);
 
-        virtual ~HashBasedJoin() {}
+        virtual ~HashBasedJoin() = default;
 
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
@@ -124,6 +130,8 @@ namespace lqf {
     public:
         HashJoin(uint32_t, uint32_t, RowBuilder *,
                  function<bool(DataRow &, DataRow &)> pred = nullptr);
+
+        virtual ~HashJoin() = default;
 
     protected:
         RowBuilder *rowBuilder_;
@@ -143,6 +151,8 @@ namespace lqf {
     public:
         FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = 0xFFFFFFFF,
                    bool useBitmap = false);
+
+        virtual ~FilterJoin() = default;
 
         virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
@@ -176,6 +186,8 @@ namespace lqf {
         HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
                       function<bool(DataRow &, DataRow &)> pred = nullptr);
 
+        virtual ~HashExistJoin() = default;
+
         shared_ptr<Table> join(Table &, Table &) override;
 
     protected:
@@ -190,6 +202,8 @@ namespace lqf {
     public:
         HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *rowBuilder,
                          function<bool(DataRow &, DataRow &)> pred = nullptr);
+
+        virtual ~HashNotExistJoin() = default;
 
         shared_ptr<Table> join(Table &, Table &) override;
 
@@ -208,6 +222,8 @@ namespace lqf {
     class HashColumnJoin : public HashBasedJoin {
     public:
         HashColumnJoin(uint32_t, uint32_t, ColumnBuilder *);
+
+        virtual ~HashColumnJoin() = default;
 
     protected:
         ColumnBuilder *columnBuilder_;
@@ -229,6 +245,8 @@ namespace lqf {
             PowerHashBasedJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>,
                                JoinBuilder *, function<bool(DataRow &, DataRow &)> pred = nullptr);
 
+            virtual ~PowerHashBasedJoin() = default;
+
             virtual shared_ptr<Table> join(Table &left, Table &right) override;
 
             inline void useOuter() { outer_ = true; }
@@ -242,6 +260,8 @@ namespace lqf {
             PowerHashJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>, RowBuilder *,
                           function<bool(DataRow &, DataRow &)> pred = nullptr);
 
+            virtual ~PowerHashJoin() = default;
+
         protected:
             RowBuilder *rowBuilder_;
 
@@ -251,6 +271,8 @@ namespace lqf {
         class PowerHashColumnJoin : public PowerHashBasedJoin {
         public:
             PowerHashColumnJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>, ColumnBuilder *);
+
+            virtual ~PowerHashColumnJoin() = default;
 
         protected:
             ColumnBuilder *columnBuilder_;
@@ -266,6 +288,8 @@ namespace lqf {
             bool anti_ = false;
         public:
             PowerHashFilterJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>);
+
+            virtual ~PowerHashFilterJoin() = default;
 
             virtual shared_ptr<Table> join(Table &left, Table &right) override;
 

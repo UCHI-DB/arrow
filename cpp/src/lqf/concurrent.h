@@ -18,6 +18,8 @@ namespace lqf {
             uint32_t count_ = 0; // Initialized as locked.
 
         public:
+            virtual ~Semaphore() = default;
+
             void notify();
 
             void notify(uint32_t num);

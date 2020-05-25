@@ -25,7 +25,11 @@ namespace lqf {
                 : size_(size), data_(), creator_(creator), comparator_(comp) {
         }
 
-        ~Heap() { }// TODO Dispose elements
+        ~Heap() {
+            for (auto &d:data_) {
+                delete d;
+            }
+        };
 
         vector<ELEM_PNT> &content() {
             return data_;

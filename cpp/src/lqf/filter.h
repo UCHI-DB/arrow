@@ -32,6 +32,8 @@ namespace lqf {
     public:
         Filter();
 
+        virtual ~Filter() = default;
+
         virtual shared_ptr<Table> filter(Table &input);
 
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
@@ -43,7 +45,7 @@ namespace lqf {
     public:
         ColPredicate(uint32_t);
 
-        virtual ~ColPredicate();
+        virtual ~ColPredicate() = default;
 
         inline uint32_t index() { return index_; }
 
@@ -56,7 +58,7 @@ namespace lqf {
     public:
         SimplePredicate(uint32_t, function<bool(const DataField &)>);
 
-        ~SimplePredicate() {}
+        ~SimplePredicate() = default;
 
         void predicate(function<bool(const DataField &)>);
 
@@ -70,9 +72,9 @@ namespace lqf {
         protected:
             unique_ptr<RawAccessor<DTYPE>> inner_;
         public:
-            Not(unique_ptr<RawAccessor<DTYPE>>
+            Not(unique_ptr<RawAccessor<DTYPE>> inner);
 
-                inner);
+            virtual ~Not() = default;
 
             void init(uint64_t) override;
 
@@ -82,11 +84,7 @@ namespace lqf {
 
             shared_ptr<Bitmap> result() override;
 
-            static unique_ptr<RawAccessor<DTYPE>> build(
-
-                    function<unique_ptr<RawAccessor<DTYPE>>()
-
-                    >);
+            static unique_ptr<RawAccessor<DTYPE>> build(function<unique_ptr<RawAccessor<DTYPE>>()>);
         };
 
         using Int32Not = Not<Int32Type>;
@@ -101,6 +99,8 @@ namespace lqf {
         public:
             SboostPredicate(uint32_t index, function<unique_ptr<RawAccessor<DTYPE>>()> accbuilder)
                     : ColPredicate(index), builder_(accbuilder) {}
+
+            virtual ~SboostPredicate() = default;
 
             shared_ptr<Bitmap> filterBlock(Block &block, Bitmap &) override;
 
@@ -123,6 +123,8 @@ namespace lqf {
         public:
             DictEq(const T &target);
 
+            virtual ~DictEq() = default;
+
             void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
@@ -143,6 +145,8 @@ namespace lqf {
         public:
             DictLess(const T &target);
 
+            virtual ~DictLess() = default;
+
             void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
@@ -162,6 +166,8 @@ namespace lqf {
             int rawTarget_;
         public:
             DictGreater(const T &target);
+
+            virtual ~DictGreater() = default;
 
             void dict(Dictionary<DTYPE> &dict) override;
 
@@ -185,6 +191,8 @@ namespace lqf {
         public:
             DictBetween(const T &lower, const T &upper);
 
+            virtual ~DictBetween() = default;
+
             void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
@@ -207,6 +215,8 @@ namespace lqf {
         public:
             DictRangele(const T &lower, const T &upper);
 
+            virtual ~DictRangele() = default;
+
             void dict(Dictionary<DTYPE> &dict) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
@@ -227,7 +237,7 @@ namespace lqf {
         public:
             DictMultiEq(function<bool(const T &)> pred);
 
-            virtual ~DictMultiEq();
+            virtual ~DictMultiEq() = default;
 
             void dict(Dictionary<DTYPE> &dict) override;
 
@@ -247,6 +257,8 @@ namespace lqf {
         public:
             DeltaEq(const int target);
 
+            virtual ~DeltaEq() = default;
+
             void dict(Int32Dictionary &) override;
 
             void scanPage(uint64_t numEntry, const uint8_t *data,
@@ -260,6 +272,8 @@ namespace lqf {
             const int target_;
         public:
             DeltaLess(const int target);
+
+            virtual ~DeltaLess() = default;
 
             void dict(Int32Dictionary &) override;
 
@@ -275,6 +289,8 @@ namespace lqf {
             const int upper_;
         public:
             DeltaBetween(const int lower, const int upper);
+
+            virtual ~DeltaBetween() = default;
 
             void dict(Int32Dictionary &) override;
 
@@ -312,7 +328,7 @@ namespace lqf {
     public:
         RowFilter(function<bool(DataRow &)> pred);
 
-        virtual ~RowFilter() {}
+        virtual ~RowFilter() = default;
     };
 
     using namespace hashcontainer;
@@ -325,6 +341,8 @@ namespace lqf {
         MapFilter(uint32_t);
 
         MapFilter(uint32_t key_index, IntPredicate<Int32> &);
+
+        virtual ~MapFilter() = default;
 
         void setMap(IntPredicate<Int32> &);
 
@@ -340,6 +358,8 @@ namespace lqf {
 
         PowerMapFilter(function<uint64_t(DataRow &)>, IntPredicate<Int64> &);
 
+        virtual ~PowerMapFilter() = default;
+
         void setMap(IntPredicate<Int64> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &input) override;
@@ -354,6 +374,8 @@ namespace lqf {
 
     public:
         KeyFinder(uint32_t key_index, function<bool(DataRow &)>);
+
+        virtual ~KeyFinder() = default;
 
         int32_t find(Table &);
     };

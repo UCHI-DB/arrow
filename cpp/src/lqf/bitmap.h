@@ -150,6 +150,8 @@ namespace lqf {
     public:
         ConcurrentBitmap(uint64_t);
 
+        virtual ~ConcurrentBitmap() = default;
+
         void put(uint64_t) override;
     };
 
@@ -157,7 +159,7 @@ namespace lqf {
     public:
         FullBitmap(uint64_t size);
 
-        virtual ~FullBitmap();
+        virtual ~FullBitmap() = default;
 
         bool check(uint64_t pos) override;
 

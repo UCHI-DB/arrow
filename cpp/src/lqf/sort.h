@@ -37,6 +37,8 @@ namespace lqf {
     public:
         SmallSort(function<bool(DataRow *, DataRow *)>, bool vertical = false);
 
+        virtual ~SmallSort() = default;
+
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> sort(Table &);
@@ -52,6 +54,8 @@ namespace lqf {
         SnapshotSort(const vector<uint32_t>, function<bool(DataRow *, DataRow *)>,
                      function<unique_ptr<MemDataRow>(DataRow &)>, bool vertical = false);
 
+        virtual ~SnapshotSort() = default;
+
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> sort(Table &);
@@ -65,6 +69,8 @@ namespace lqf {
         bool vertical_ = false;
     public:
         TopN(uint32_t, function<bool(DataRow *, DataRow *)>, bool vertical = false);
+
+        virtual ~TopN() = default;
 
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 

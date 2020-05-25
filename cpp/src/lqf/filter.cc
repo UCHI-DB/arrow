@@ -36,8 +36,6 @@ namespace lqf {
 
     ColPredicate::ColPredicate(uint32_t index) : index_(index) {}
 
-    ColPredicate::~ColPredicate() {}
-
     SimplePredicate::SimplePredicate(uint32_t index, function<bool(const DataField &)> pred)
             : ColPredicate(index), predicate_(pred) {}
 
@@ -344,10 +342,6 @@ namespace lqf {
 
         template<typename DTYPE>
         DictMultiEq<DTYPE>::DictMultiEq(function<bool(const T &)> pred) : predicate_(pred) {}
-
-        template<typename DTYPE>
-        DictMultiEq<DTYPE>::~DictMultiEq() {
-        }
 
         template<typename DTYPE>
         void DictMultiEq<DTYPE>::dict(Dictionary<DTYPE> &dict) {

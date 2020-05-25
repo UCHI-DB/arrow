@@ -93,9 +93,10 @@ namespace lqf {
 
         for (uint32_t i = 0; i < result_size; ++i) {
             (*resultRows)[i] = *(collector[i]);
-            delete collector[i];
         }
-
+        for (auto &item:collector) {
+            delete item;
+        }
         return resultTable;
     }
 
@@ -113,8 +114,8 @@ namespace lqf {
         collector_lock_.lock();
         auto content = heap.content();
         collector->insert(collector->end(), content.begin(), content.end());
+        // So heap will not delete these pointers as they have been moved
+        heap.content().clear();
         collector_lock_.unlock();
     }
-
-
 }

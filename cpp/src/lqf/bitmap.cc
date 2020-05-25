@@ -41,9 +41,7 @@ namespace lqf {
         }
     }
 
-    SimpleBitmapIterator::~SimpleBitmapIterator() {
-
-    }
+    SimpleBitmapIterator::~SimpleBitmapIterator() {}
 
     void SimpleBitmapIterator::moveTo(uint64_t pos) {
         pointer_ = pos >> 6;
@@ -258,10 +256,6 @@ namespace lqf {
 
     FullBitmap::FullBitmap(uint64_t size) {
         this->size_ = size;
-    }
-
-    FullBitmap::~FullBitmap() {
-
     }
 
     bool FullBitmap::check(uint64_t pos) {

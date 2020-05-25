@@ -38,6 +38,8 @@ namespace lqf {
         DataPointer pointer_;
         uint8_t size_;
 
+        virtual ~DataField() = default;
+
         inline int32_t asInt() const { return *pointer_.ival_; }
 
         inline double asDouble() const { return *pointer_.dval_; }
@@ -77,7 +79,7 @@ namespace lqf {
      */
     class DataRow {
     public:
-        virtual ~DataRow();
+        virtual ~DataRow() = default;
 
         virtual DataField &operator[](uint64_t i) = 0;
 
@@ -105,7 +107,7 @@ namespace lqf {
 
         MemDataRow(const vector<uint32_t> &offset);
 
-        virtual ~MemDataRow();
+        virtual ~MemDataRow() = default;
 
         DataField &operator[](uint64_t i) override;
 
@@ -153,6 +155,7 @@ namespace lqf {
     };
 
     class Table;
+
     ///
     /// Each block will be processed by a thread
     ///
@@ -165,6 +168,8 @@ namespace lqf {
         Block(uint32_t id) : id_(id) {}
 
         Block() : Block(rand_()) {}
+
+        virtual ~Block() = default;
 
         virtual Table *owner() { return nullptr; }
 
@@ -197,7 +202,7 @@ namespace lqf {
 
         MemBlock(uint32_t size, uint32_t row_size);
 
-        virtual ~MemBlock();
+        virtual ~MemBlock() = default;
 
         uint64_t size() override;
 
@@ -223,7 +228,7 @@ namespace lqf {
 
         MemvBlock(uint32_t size, uint32_t num_fields);
 
-        virtual ~MemvBlock();
+        virtual ~MemvBlock() = default;
 
         uint64_t size() override;
 
@@ -270,7 +275,7 @@ namespace lqf {
     public:
         RawAccessor() : offset_(0) {}
 
-        virtual ~RawAccessor() {}
+        virtual ~RawAccessor() = default;
 
         virtual void init(uint64_t size) {
             bitmap_ = make_shared<SimpleBitmap>(size);
@@ -305,7 +310,7 @@ namespace lqf {
     public:
         ParquetBlock(ParquetTable *, shared_ptr<RowGroupReader>, uint32_t, uint64_t);
 
-        virtual ~ParquetBlock();
+        virtual ~ParquetBlock() = default;
 
         uint64_t size() override;
 
@@ -330,7 +335,7 @@ namespace lqf {
     public:
         MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask);
 
-        virtual ~MaskedBlock();
+        virtual ~MaskedBlock() = default;
 
         uint64_t size() override;
 
@@ -370,7 +375,7 @@ namespace lqf {
     public:
         ParquetTable(const string &fileName, uint64_t columns = 0);
 
-        virtual ~ParquetTable();
+        virtual ~ParquetTable() = default;
 
         virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
@@ -404,7 +409,7 @@ namespace lqf {
 
         MaskedTable(ParquetTable *, vector<shared_ptr<Bitmap>> &);
 
-        virtual ~MaskedTable();
+        virtual ~MaskedTable() = default;
 
         virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
@@ -420,6 +425,8 @@ namespace lqf {
         unique_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
         TableView(const vector<uint32_t> &, unique_ptr<Stream<shared_ptr<Block>>>);
+
+        virtual ~TableView() = default;
 
         unique_ptr<Stream<shared_ptr<Block>>> blocks() override;
 
@@ -448,7 +455,7 @@ namespace lqf {
 
         static shared_ptr<MemTable> Make(const vector<uint32_t> col_size, bool vertical = false);
 
-        virtual ~MemTable();
+        virtual ~MemTable() = default;
 
         shared_ptr<Block> allocate(uint32_t num_rows);
 

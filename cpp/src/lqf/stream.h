@@ -37,7 +37,7 @@ namespace lqf {
         template<typename T>
         class EvalOp {
         public:
-            virtual ~EvalOp() {}
+            virtual ~EvalOp() = default;
 
             virtual T eval() = 0;
         };
@@ -51,6 +51,8 @@ namespace lqf {
             FilterOp(unique_ptr<EvalOp<T>> prev, function<bool(const T &)> f)
                     : previous_(prev), filter_(f) {}
 
+            virtual ~FilterOp() = default;
+
             inline T eval() override {
                 T result = previous_->eval();
                 return filter_(result) ? result : nullptr;
@@ -62,6 +64,8 @@ namespace lqf {
         public:
             TransformOp(unique_ptr<EvalOp<FROM>> from, function<TO(const FROM &)> f)
                     : previous_(move(from)), mapper_(f) {}
+
+            virtual ~TransformOp() = default;
 
             inline TO eval() override {
                 FROM from = previous_->eval();
@@ -79,6 +83,8 @@ namespace lqf {
             TYPE ref_;
         public:
             TrivialOp(const TYPE ref) : ref_(ref) {}
+
+            virtual ~TrivialOp() = default;
 
             inline TYPE eval() override {
                 return ref_;
@@ -105,7 +111,7 @@ namespace lqf {
 
             StreamEvaluator() : parallel_(false) {}
 
-            ~StreamEvaluator() {}
+            virtual ~StreamEvaluator() = default;
 
             template<typename T>
             shared_ptr<vector<T>> eval(vector<unique_ptr<EvalOp<T>>> &input) {
@@ -145,6 +151,8 @@ namespace lqf {
         class Stream : public enable_shared_from_this<Stream<VIEW>> {
         public:
             Stream() : evaluator_(nullptr) {}
+
+            virtual ~Stream() = default;
 
             template<typename NEXT>
             shared_ptr<Stream<NEXT>> map(function<NEXT(const VIEW &)> f) {
@@ -241,6 +249,8 @@ namespace lqf {
                 this->evaluator_ = eval;
             }
 
+            virtual ~MapStream() = default;
+
             bool _isEmpty() override {
                 return source_->_isEmpty();
             }
@@ -266,6 +276,8 @@ namespace lqf {
                     : source_(source), filter_(filter) {
                 this->evaluator_ = eval;
             }
+
+            virtual ~FilterStream() = default;
 
             bool _isEmpty() override {
                 return source_->isEmpty();
@@ -298,7 +310,7 @@ namespace lqf {
                 this->evaluator_ = make_shared<StreamEvaluator>();
             }
 
-            virtual ~VectorStream() {}
+            virtual ~VectorStream() = default;
 
             bool _isEmpty() override {
                 return position_ == data_.end();
@@ -324,6 +336,8 @@ namespace lqf {
                     : to_(to), step_(step), pointer_(from) {
                 this->evaluator_ = make_shared<StreamEvaluator>();
             }
+
+            virtual ~IntStream() = default;
 
             bool _isEmpty() override {
                 return pointer_ >= to_;
@@ -353,12 +367,16 @@ namespace lqf {
         class Mapper {
         public:
             virtual DST operator()(SRC in) = 0;
+
+            virtual ~Mapper() = default;
         };
 
         template<typename DST, typename SRC>
         class Cast : public Mapper<DST, SRC> {
         public:
             Cast() {}
+
+            virtual ~Cast() = default;
 
             DST operator()(SRC in) override {
                 return static_cast<DST>(in);
@@ -369,6 +387,8 @@ namespace lqf {
         class PointerCast : public Mapper<DST, SRC> {
         public:
             PointerCast() {}
+
+            virtual ~PointerCast() = default;
 
             DST operator()(SRC in) override {
                 return reinterpret_cast<DST>(in);
@@ -381,6 +401,8 @@ namespace lqf {
             vector<T> &content_;
         public:
             VectorGet(vector<T> &content) : content_(content) {}
+
+            virtual ~VectorGet() = default;
 
             T operator()(uint64_t in) override {
                 return content_[static_cast<int32_t>(in)];
@@ -396,6 +418,8 @@ namespace lqf {
             TransformMapper(unique_ptr<Mapper<IN, SRC>> inner, function<OUT(const IN &)> map)
                     : map_(map), inner_(move(inner)) {}
 
+            virtual ~TransformMapper() = default;
+
             OUT operator()(SRC in) override {
                 return map_((*inner_)(in));
             }
@@ -410,6 +434,8 @@ namespace lqf {
             EvalMapper(unique_ptr<Mapper<IN, SRC>> inner, function<void(const IN &)> map)
                     : map_(map), inner_(move(inner)) {}
 
+            virtual ~EvalMapper() = default;
+
             void operator()(SRC in) override {
                 map_((*inner_)(in));
             }
@@ -421,6 +447,8 @@ namespace lqf {
     template<typename T>
     class StreamSource {
     public:
+        virtual ~StreamSource();
+
         virtual bool hasNext() = 0;
 
         virtual T next() = 0;
@@ -435,7 +463,7 @@ namespace lqf {
 
         StreamEvaluator() : parallel_(false) {}
 
-        ~StreamEvaluator() {}
+        virtual ~StreamEvaluator() = default;
 
         template<typename T, typename SRC>
         unique_ptr<vector<T>> collect(StreamSource<SRC> *source, Mapper<T, SRC> *mapper) {
@@ -529,6 +557,8 @@ namespace lqf {
         StreamBase(Mapper<T, SRC> *mapper, unique_ptr<StreamSource<SRC>> source, unique_ptr<StreamEvaluator> eval)
                 : mapper_(unique_ptr<Mapper<T, SRC>>(mapper)), source_(move(source)), evaluator_(move(eval)) {}
 
+        virtual ~StreamBase() = default;
+
         template<typename TO>
         unique_ptr<StreamBase<TO, SRC>> map(function<TO(const T &)> mapmore) {
             return unique_ptr<StreamBase<TO, SRC>>(
@@ -597,6 +627,8 @@ namespace lqf {
     public:
         IntSource(int32_t from, int32_t to, int32_t step = 1) : pointer_(from), to_(to), step_(step) {}
 
+        virtual ~IntSource() = default;
+
         bool hasNext() override {
             return pointer_ < to_;
         }
@@ -614,6 +646,8 @@ namespace lqf {
                 : StreamBase(new Cast<int32_t, uint64_t>(), unique_ptr<IntSource>(new IntSource(from, to, step)),
                              unique_ptr<StreamEvaluator>(new StreamEvaluator())) {}
 
+        virtual ~IntStream() = default;
+
         static unique_ptr<IntStream> Make(int from, int to) {
             return unique_ptr<IntStream>(new IntStream(from, to));
         }
@@ -625,6 +659,8 @@ namespace lqf {
         VectorStream(vector<T> &source) :
                 Stream<T>(new VectorGet<T>(source), unique_ptr<IntSource>(new IntSource(0, source.size())),
                           unique_ptr<StreamEvaluator>(new StreamEvaluator())) {}
+
+        virtual ~VectorStream() = default;
     };
 
     namespace typeless {
@@ -645,6 +681,8 @@ namespace lqf {
             MapNode(PREV prev, MAPPER mapf)
                     : previous_(move(prev)), mapper_(mapf) {}
 
+            virtual ~MapNode() = default;
+
             template<typename IN>
             auto operator()(IN input) {
                 return mapper_(previous_(input));
@@ -658,6 +696,8 @@ namespace lqf {
         public:
             MapHead(MAPPER mapf) : mapper_(mapf) {}
 
+            virtual ~MapHead() = default;
+
             template<typename IN>
             auto operator()(IN input) {
                 return mapper_(input);
@@ -670,6 +710,8 @@ namespace lqf {
             MAPPER mapper_;
             SRC source_;
         public:
+            virtual ~Stream() = default;
+
             template<typename MAP>
             unique_ptr<Stream> map(MAP mapper) {
                 return nullptr;

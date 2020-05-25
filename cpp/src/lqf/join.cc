@@ -35,18 +35,18 @@ namespace lqf {
                 output_col_offsets_.push_back(output_col_offsets_.back() + output_col_size_.back());
                 if (is_right) {
                     if (is_raw) {
-                        right_read_raw_.push_back(pair<uint8_t, uint8_t>(index, right_counter));
+                        right_read_raw_.emplace_back(index, right_counter);
                     } else {
-                        right_read_inst_.push_back(pair<uint8_t, uint8_t>(index, right_counter));
+                        right_read_inst_.emplace_back(index, right_counter);
                     }
-                    right_write_inst_.push_back(pair<uint8_t, uint8_t>(right_counter++, i));
+                    right_write_inst_.emplace_back(right_counter++, i);
                     right_col_size_.push_back(output_col_size_.back());
                     right_col_offsets_.push_back(right_col_offsets_.back() + right_col_size_.back());
                 } else {
                     if (is_raw) {
-                        left_raw_.push_back(pair<uint8_t, uint8_t>(index, i));
+                        left_raw_.emplace_back(index, i);
                     } else {
-                        left_inst_.push_back(pair<uint8_t, uint8_t>(index, i));
+                        left_inst_.emplace_back(index, i);
                     }
                 }
                 ++i;

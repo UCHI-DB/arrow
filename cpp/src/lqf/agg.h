@@ -26,6 +26,8 @@ namespace lqf {
 
             AggField(uint32_t readIndex);
 
+            virtual ~AggField() = default;
+
             virtual void init() = 0;
 
             virtual void reduce(DataRow &) = 0;
@@ -41,6 +43,8 @@ namespace lqf {
             uint32_t keyIndex_;
         public:
             AggRecordingField(uint32_t rIndex, uint32_t kIndex);
+
+            virtual ~AggRecordingField() = default;
 
             vector<int32_t> &keys();
         };
@@ -160,6 +164,8 @@ namespace lqf {
         public:
             Avg(uint32_t rIndex);
 
+            virtual ~Avg() = default;
+
             void init() override;
 
             void reduce(DataRow &) override;
@@ -178,6 +184,8 @@ namespace lqf {
             unordered_set<T> values_;
         public:
             DistinctCount(uint32_t rIndex);
+
+            virtual ~DistinctCount() = default;
 
             void init() override;
 
@@ -199,6 +207,8 @@ namespace lqf {
             AggReducer(uint32_t numHeaders, vector<AggField *> fields);
 
             AggReducer(const vector<uint32_t> &, vector<AggField *> fields);
+
+            virtual ~AggReducer() = default;
 
             inline uint32_t header_size() { return header_size_; }
 
@@ -222,6 +232,8 @@ namespace lqf {
 
             AggRecordingReducer(vector<uint32_t> &, AggRecordingField *field);
 
+            virtual ~AggRecordingReducer() = default;
+
             void dump(MemDataRow &) override;
 
             uint32_t size() override;
@@ -232,7 +244,7 @@ namespace lqf {
     using namespace parallel;
 
     template<typename CORE>
-    class Agg :public Node {
+    class Agg : public Node {
     protected:
         vector<uint32_t> output_col_size_;
         bool vertical_;
@@ -244,6 +256,8 @@ namespace lqf {
 
     public:
         Agg(const vector<uint32_t> &output_col_size, bool vertical = false);
+
+        virtual ~Agg() = default;
 
         virtual unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
@@ -263,6 +277,8 @@ namespace lqf {
 
     public:
         DictAgg(const vector<uint32_t> &, initializer_list<pair<uint32_t, uint32_t>>);
+
+        virtual ~DictAgg() = default;
     };
 
     class CoreMaker {
@@ -283,6 +299,8 @@ namespace lqf {
 
     public:
         CoreMaker(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>);
+
+        virtual ~CoreMaker() = default;
 
         unique_ptr<AggReducer> initHeader(DataRow &row);
 
@@ -315,6 +333,8 @@ namespace lqf {
         HashAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
                 function<uint64_t(DataRow &)>, bool vertical = false);
 
+        virtual ~HashAgg() = default;
+
     protected:
         unique_ptr<HashCore> makeCore() override;
     };
@@ -325,6 +345,8 @@ namespace lqf {
     public:
         HashDictCore(function<uint64_t(DataRow &)> hasher,
                      function<unique_ptr<AggReducer>(DataRow &)> headerInit);
+
+        virtual ~HashDictCore() = default;
 
         void reduce(HashDictCore &another);
 
@@ -338,6 +360,8 @@ namespace lqf {
     public:
         HashDictAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
                     function<uint64_t(DataRow &)>, initializer_list<pair<uint32_t, uint32_t>>);
+
+        virtual ~HashDictAgg() = default;
 
     protected:
         unique_ptr<HashDictCore> makeCore() override;
@@ -367,6 +391,8 @@ namespace lqf {
     public:
         TableAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
                  uint32_t, function<uint32_t(DataRow &)>);
+
+        virtual ~TableAgg() = default;
 
     protected:
         unique_ptr<TableCore> makeCore() override;

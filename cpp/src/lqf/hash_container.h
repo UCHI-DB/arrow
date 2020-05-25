@@ -18,6 +18,8 @@ namespace lqf {
         class IntPredicate {
             using ktype = typename DTYPE::type;
         public:
+            virtual ~IntPredicate() = default;
+
             virtual bool test(ktype) = 0;
         };
 
@@ -35,6 +37,8 @@ namespace lqf {
             HashPredicate();
 
             HashPredicate(uint32_t size);
+
+            virtual ~HashPredicate() = default;
 
             void add(ktype);
 
@@ -56,6 +60,8 @@ namespace lqf {
         public:
             BitmapPredicate(uint32_t max);
 
+            virtual ~BitmapPredicate() = default;
+
             void add(int32_t);
 
             bool test(int32_t) override;
@@ -73,6 +79,8 @@ namespace lqf {
             HashContainer();
 
             HashContainer(uint32_t size);
+
+            virtual ~HashContainer() = default;
 
             void add(ktype key, unique_ptr<MemDataRow> dataRow);
 
@@ -101,12 +109,15 @@ namespace lqf {
         public:
             HashMemBlock(shared_ptr<CONTENT> predicate);
 
+            virtual ~HashMemBlock() = default;
+
             shared_ptr<CONTENT> content();
         };
 
         class HashBuilder {
         public:
-            static shared_ptr<Int32Predicate> buildHashPredicate(Table &input, uint32_t, uint32_t expect_size = 0xFFFFFFFF);
+            static shared_ptr<Int32Predicate>
+            buildHashPredicate(Table &input, uint32_t, uint32_t expect_size = 0xFFFFFFFF);
 
             static shared_ptr<Int64Predicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 

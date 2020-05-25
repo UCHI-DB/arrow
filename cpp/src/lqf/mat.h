@@ -23,6 +23,8 @@ namespace lqf {
     public:
         FilterMat();
 
+        virtual ~FilterMat() = default;
+
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 
         shared_ptr<Table> mat(Table &input);
@@ -34,6 +36,8 @@ namespace lqf {
         function<unique_ptr<MemDataRow>(DataRow &)> snapshoter_;
     public:
         HashMat(uint32_t, function<unique_ptr<MemDataRow>(DataRow &)>);
+
+        virtual ~HashMat() = default;
 
         unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
 

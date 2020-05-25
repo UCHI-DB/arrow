@@ -21,6 +21,8 @@ namespace lqf {
         /// Wrapper for the output from node
         ///
         class NodeOutput {
+        public:
+            virtual ~NodeOutput() = default;
         };
 
         template<typename T>
@@ -28,6 +30,8 @@ namespace lqf {
             const T output_;
         public:
             TypedOutput(const T output) : output_(move(output)) {};
+
+            virtual ~TypedOutput() = default;
 
             const T get() { return output_; }
         };
@@ -52,8 +56,10 @@ namespace lqf {
         public:
             Node(const uint32_t num_input, const bool trivial = false);
 
+            virtual ~Node() = default;
+
             // Name of the node
-            inline void name(const string& n) { name_ = n; };
+            inline void name(const string &n) { name_ = n; };
 
             // One of its ancestor is ready
             bool feed();
@@ -70,6 +76,8 @@ namespace lqf {
         public:
             WrapperNode(T content) : Node(0, true), content_(move(content)) {}
 
+            virtual ~WrapperNode() = default;
+
             unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override {
                 return unique_ptr<NodeOutput>(new TypedOutput<T>(content_));
             }
@@ -80,8 +88,9 @@ namespace lqf {
         protected:
             unique_ptr<Node> inner_;
         public:
-            NestedNode(Node *inner, uint32_t num_input, bool trivial = false)
-                    : Node(num_input, trivial), inner_(unique_ptr<Node>(inner)) {}
+            NestedNode(Node *inner, uint32_t num_input, bool trivial = false);
+
+            virtual ~NestedNode() = default;
         };
 
         class ExecutionGraph {
@@ -112,6 +121,9 @@ namespace lqf {
             void executeNodeSync(Node *);
 
         public:
+
+            virtual ~ExecutionGraph() = default;
+
             uint32_t add(Node *, initializer_list<uint32_t>);
 
             void execute(bool concurrent = true);

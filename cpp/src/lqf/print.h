@@ -36,7 +36,7 @@ namespace lqf {
     ///
     class PrintBuffer {
     protected:
-        uint8_t* data_;
+        uint8_t *data_;
         uint32_t data_pointer_;
         vector<uint32_t> data_type_;
         vector<uint32_t> output_width_;
@@ -45,6 +45,8 @@ namespace lqf {
         uint32_t num_lines_;
     public:
         PrintBuffer();
+
+        virtual ~PrintBuffer() = default;
 
         PrintBuffer &operator<<(const int32_t value);
 
@@ -60,7 +62,8 @@ namespace lqf {
     extern PrintBuffer pout;
 
     using namespace parallel;
-    class Printer:public Node {
+
+    class Printer : public Node {
     protected:
         uint64_t sum_;
 

@@ -590,7 +590,7 @@ namespace lqf {
 
     template<typename CORE>
     unique_ptr<NodeOutput> Agg<CORE>::execute(const vector<NodeOutput *> &input) {
-        auto input0 = static_cast<TableOutput*>(input[0]);
+        auto input0 = static_cast<TableOutput *>(input[0]);
         auto result = agg(*(input0->get()));
         return unique_ptr<TableOutput>(new TableOutput(result));
     }

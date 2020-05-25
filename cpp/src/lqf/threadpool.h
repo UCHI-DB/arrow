@@ -30,6 +30,8 @@ namespace lqf {
         public:
             Task(function<void()> runnable) : runnable_(runnable) {}
 
+            virtual ~Task() = default;
+
             inline void run() {
                 runnable_();
             }
@@ -43,6 +45,8 @@ namespace lqf {
         public:
             CallTask(function<T()> callable)
                     : Task(bind(&CallTask::call, this)), callable_(callable) {}
+
+            virtual ~CallTask() = default;
 
         protected:
             function<T()> callable_;
