@@ -132,6 +132,8 @@ namespace lqf {
 
     class DataRowIterator {
     public:
+        virtual ~DataRowIterator() = default;
+
         virtual DataRow &operator[](uint64_t idx) = 0;
 
         virtual DataRow &next() = 0;
@@ -143,6 +145,8 @@ namespace lqf {
 
     class ColumnIterator {
     public:
+        virtual ~ColumnIterator() = default;
+
         virtual DataField &next() = 0;
 
         virtual DataField &operator[](uint64_t idx) = 0;

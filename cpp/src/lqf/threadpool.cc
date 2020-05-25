@@ -37,6 +37,9 @@ namespace lqf {
         }
 
         void Executor::submit(unique_ptr<Task> task) {
+            if(shutdown_) {
+                return;
+            }
             fetch_task_.lock();
             tasks_.push(move(task));
             has_task_.notify();

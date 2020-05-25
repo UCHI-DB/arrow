@@ -111,11 +111,6 @@ namespace lqf {
         protected:
             void routine();
         };
-
-        class BatchExecutor : public Executor {
-        public:
-
-        };
     }
 }
 #endif //ARROW_THREADPOOL_H

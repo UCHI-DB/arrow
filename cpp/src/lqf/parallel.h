@@ -122,7 +122,7 @@ namespace lqf {
 
         public:
 
-            virtual ~ExecutionGraph() = default;
+            virtual ~ExecutionGraph();
 
             uint32_t add(Node *, initializer_list<uint32_t>);
 

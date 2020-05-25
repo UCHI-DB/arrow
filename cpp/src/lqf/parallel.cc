@@ -22,6 +22,10 @@ namespace lqf {
         NestedNode::NestedNode(Node *inner, uint32_t num_input, bool trivial)
                 : Node(num_input, trivial), inner_(unique_ptr<Node>(inner)) {}
 
+        ExecutionGraph::~ExecutionGraph() {
+            delete done_;
+        }
+
         uint32_t ExecutionGraph::add(Node *target, initializer_list<uint32_t> upstream) {
             auto index = nodes_.size();
             target->index_ = index;
