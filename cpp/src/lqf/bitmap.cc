@@ -87,10 +87,6 @@ namespace lqf {
         this->counter_ = 0;
     }
 
-    FullBitmapIterator::~FullBitmapIterator() {
-
-    }
-
     void FullBitmapIterator::moveTo(uint64_t pos) {
         this->counter_ = pos;
     }
