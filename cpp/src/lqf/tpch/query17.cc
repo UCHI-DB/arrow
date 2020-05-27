@@ -34,7 +34,7 @@ namespace lqf {
 
         using namespace q17;
 
-        void executeQ17() {
+        void executeQ17_Graph() {
             ExecutionGraph graph;
 
             auto part = graph.add(
@@ -76,7 +76,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ17Backup() {
+        void executeQ17() {
 
             auto part = ParquetTable::Open(Part::path, {Part::BRAND, Part::CONTAINER, Part::PARTKEY});
             auto lineitem = ParquetTable::Open(LineItem::path,

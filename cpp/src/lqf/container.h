@@ -26,6 +26,20 @@ namespace lqf {
 
         uint32_t ceil2(uint32_t);
 
+        template<typename T>
+        class ConcurrentVectorWrapper {
+        protected:
+            unique_ptr<vector<T>> content_;
+        public:
+            ConcurrentVectorWrapper() {
+                content_ = unique_ptr<vector<T>>(new vector<T>());
+            }
+
+            void push_back(T element) {
+
+            }
+        };
+
         template<typename DTYPE>
         class PhaseConcurrentHashSet {
             using type = typename DTYPE::type;

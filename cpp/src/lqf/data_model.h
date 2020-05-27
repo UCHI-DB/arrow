@@ -451,6 +451,8 @@ namespace lqf {
         vector<uint32_t> col_offset_;
 
         vector<shared_ptr<Block>> blocks_;
+
+        mutex write_lock_;
     protected:
         MemTable(const vector<uint32_t> col_size, bool vertical);
 

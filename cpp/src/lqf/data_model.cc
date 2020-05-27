@@ -842,11 +842,16 @@ namespace lqf {
             block = make_shared<MemvBlock>(num_rows, col_size_);
         else
             block = make_shared<MemBlock>(num_rows, row_size_, col_offset_);
+
+        std::unique_lock lock(write_lock_);
         blocks_.push_back(block);
+        lock.unlock();
+
         return block;
     }
 
     void MemTable::append(shared_ptr<Block> block) {
+        std::lock_guard lock(write_lock_);
         blocks_.push_back(block);
     }
 
