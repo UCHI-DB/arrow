@@ -82,7 +82,10 @@ add_arrow_lib(lqf
         )
 
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
-
+target_compile_options(lqf_objlib
+        PUBLIC
+        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:-fsanitize=address>>)
+add_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:-fsanitize=address>>)
 if(${LQF_PARALLEL})
     target_compile_definitions(lqf_objlib PUBLIC LQF_PARALLEL)
 endif()
