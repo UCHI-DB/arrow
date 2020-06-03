@@ -6,11 +6,13 @@
 #include "filter_executor.h"
 #include <sboost/encoding/rlehybrid.h>
 #include <functional>
+#include <sboost/sboost.h>
 #include <sboost/simd.h>
 #include <sboost/bitmap_writer.h>
 
 using namespace std;
 using namespace std::placeholders;
+using namespace sboost;
 using namespace sboost::encoding;
 
 namespace lqf {
@@ -109,6 +111,160 @@ namespace lqf {
                 result->put(rit->pos());
             }
         }
+        return result;
+    }
+
+    using namespace ::sboost::encoding::rlehybrid;
+
+    class PagedSegmentReader {
+    protected:
+        PageReader *page_reader_;
+        unique_ptr<SegmentReader> inpage_reader_;
+        shared_ptr<Page> current_page_;
+        shared_ptr<Page> next_page_;
+        uint32_t bit_width_;
+
+        void initInPageReader() {
+            auto datapage = static_pointer_cast<DataPage>(current_page_);
+            bit_width_ = datapage->data()[0];
+            inpage_reader_ = unique_ptr<SegmentReader>(
+                    new SegmentReader(datapage->data() + 1, bit_width_, datapage->num_values()));
+        }
+
+    public:
+        PagedSegmentReader(PageReader *page_reader) : page_reader_(page_reader) {
+            // Skip Dictionary Page
+            page_reader_->NextPage();
+
+            current_page_ = page_reader_->NextPage();
+            next_page_ = page_reader_->NextPage();
+            initInPageReader();
+        }
+
+        bool hasNext() {
+            bool currentPageNext = inpage_reader_->hasNext();
+            if (currentPageNext) {
+                return true;
+            }
+            return next_page_ != nullptr;
+        }
+
+        Segment next() {
+            if (inpage_reader_->hasNext()) {
+                return inpage_reader_->next();
+            }
+            current_page_ = move(next_page_);
+            next_page_ = page_reader_->NextPage();
+            initInPageReader();
+            return inpage_reader_->next();
+        }
+
+        uint32_t bitWidth() {
+            return bit_width_;
+        }
+    };
+
+    SboostRowFilter::SboostRowFilter(uint32_t col1, uint32_t col2)
+            : column1(col1), column2(col2) {}
+
+    /**
+     * Make sure the returned value is aligned
+     *
+     */
+    const uint8_t *align_buffer(const uint8_t *source, uint8_t *dest, uint32_t bit_width,
+                                uint32_t length, uint32_t entryoff) {
+        uint32_t num_bits = bit_width * entryoff;
+        uint32_t num_bytes = num_bits >> 3;
+        if ((num_bits & 0x7) == 0) {
+            return source + num_bytes;
+        }
+        uint64_t *source_view = (uint64_t *) (source + num_bytes);
+        uint64_t *dest_view = (uint64_t *) dest;
+        uint32_t offset = num_bits & 0x7;
+        uint32_t noffset = 64 - offset;
+        uint32_t pointer = num_bytes;
+        uint32_t counter = 0;
+        while (pointer < length) {
+            dest_view[counter] = (source_view[counter] << offset) | ((source_view[counter + 1]) >> noffset);
+            pointer += 8;
+            counter++;
+        }
+        return dest;
+    }
+
+    shared_ptr<Bitmap> SboostRowFilter::filterBlock(Block &block) {
+        auto parquetBlock = static_cast<ParquetBlock &>(block);
+        auto pages1 = parquetBlock.pages(column1);
+        auto pages2 = parquetBlock.pages(column2);
+
+        auto num_entry = block.size();
+        shared_ptr<SimpleBitmap> result = make_shared<SimpleBitmap>(num_entry);
+        BitmapWriter bitmapWriter(result->raw(), 0);
+
+        PagedSegmentReader sreader1(pages1.get());
+        PagedSegmentReader sreader2(pages2.get());
+
+        Segment seg1 = sreader1.next();
+        Segment seg2 = sreader2.next();
+        uint32_t remain1 = seg1.num_entry_;
+        uint32_t remain2 = seg2.num_entry_;
+
+        // Load PACKED data in buffer
+        uint8_t *align_buffer1 = (uint8_t *) aligned_alloc(64, sizeof(uint8_t) * 8192);
+        uint8_t *align_buffer2 = (uint8_t *) aligned_alloc(64, sizeof(uint8_t) * 8192);
+
+        uint32_t processed = 0;
+
+        auto bitwidth = sreader1.bitWidth();
+        ::sboost::BitpackCompare bpcompare(sreader1.bitWidth());
+
+        while (processed < num_entry) {
+            auto remain = std::min(remain1, remain2);
+            switch ((seg1.mode_ << 1) + seg2.mode_) {
+                case 0:   // left RLE, right RLE
+                    bitmapWriter.appendBits(seg1.value_ < seg2.value_, remain);
+                    break;
+                case 1: { // left RLE, right PACKED
+                    ::sboost::Bitpack bitpack(seg1.value_, bitwidth);
+                    // Align seg2 data
+                    auto buffer2_aligned = align_buffer(seg2.data_, align_buffer2, bitwidth,
+                                                        seg2.data_length_, seg2.num_entry_ - remain2);
+                    bitpack.greater(buffer2_aligned, remain, result->raw(), bitmapWriter.offset());
+                    bitmapWriter.moveForward(remain);
+                }
+                    break;
+                case 2: { // left PACKED, right RLE
+                    ::sboost::Bitpack bitpack(seg2.value_, bitwidth);
+                    // Align seg1 data
+                    auto buffer1_aligned = align_buffer(seg1.data_, align_buffer1, bitwidth,
+                                                        seg1.data_length_, seg1.num_entry_ - remain1);
+                    bitpack.less(buffer1_aligned, remain, result->raw(), bitmapWriter.offset());
+                    bitmapWriter.moveForward(remain);
+                }
+                    break;
+                case 3: // left PACKED, right PACKED
+                    auto buffer1_aligned = align_buffer(seg1.data_, align_buffer1, bitwidth,
+                                                        seg1.data_length_, seg1.num_entry_ - remain1);
+                    auto buffer2_aligned = align_buffer(seg2.data_, align_buffer2, bitwidth,
+                                                        seg2.data_length_, seg2.num_entry_ - remain2);
+                    bpcompare.less(buffer1_aligned, buffer2_aligned,
+                                   remain, result->raw(), bitmapWriter.offset());
+                    bitmapWriter.moveForward(remain);
+                    break;
+            }
+            processed += remain;
+            if (remain == remain1 && sreader1.hasNext()) {
+                seg1 = sreader1.next();
+                remain1 = seg1.num_entry_;
+            }
+            if (remain == remain2 && sreader2.hasNext()) {
+                seg2 = sreader2.next();
+                remain2 = seg2.num_entry_;
+            }
+        }
+        free(align_buffer1);
+        free(align_buffer2);
+
         return result;
     }
 

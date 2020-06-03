@@ -353,4 +353,59 @@ namespace sboost {
         }
     }
 
+    BitpackCompare::BitpackCompare(uint32_t bitWidth) {
+        this->bit_width_ = bitWidth;
+        this->extract_ = EXTRACT_64[bitWidth];
+        this->mask_ = _mm512_set1_epi64(MASKS_64[bitWidth]);
+        this->msbmask_ = _mm512_set1_epi64(EXTRACT_64[bitWidth]);
+    }
+
+    void BitpackCompare::less(const uint8_t *data1, const uint8_t *data2,
+                              uint32_t numEntry, uint64_t *res, uint32_t resoffset) {
+        uint64_t buffer1[] = {0, 0, 0, 0, 0, 0, 0, 0};
+        uint64_t buffer2[] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+        uint32_t counter = 0;
+        uint32_t byteindex = 0;
+        uint32_t bitoffset = 0;
+        uint32_t entryInBlock[] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+        uint32_t resindex = resoffset >> 6;
+        resoffset &= 0x3F;
+
+        while (counter < numEntry) {
+            // Load next block and align it
+            for (int i = 0; i < 8; i++) {
+                auto bytidx = byteindex;
+                auto bitoff = bitoffset;
+                buffer1[i] = loadNext(data1, bit_width_, &byteindex, &bitoffset, entryInBlock + i);
+                buffer2[i] = loadNext(data2, bit_width_, &bytidx, &bitoff, entryInBlock + i);
+                counter += entryInBlock[i];
+                if (counter > numEntry) {
+                    entryInBlock[i] -= counter - numEntry;
+                    counter = numEntry;
+                }
+            }
+            // Use SBoost algorithm to compare the loaded block
+            __m512i loaded1 = _mm512_setr_epi64(buffer1[0], buffer1[1], buffer1[2], buffer1[3],
+                                                buffer1[4], buffer1[5], buffer1[6], buffer1[7]);
+            __m512i loaded2 = _mm512_setr_epi64(buffer2[0], buffer2[1], buffer2[2], buffer2[3],
+                                                buffer2[4], buffer2[5], buffer2[6], buffer2[7]);
+
+            __m512i spanned = loaded2;
+            __m512i nspanned = _mm512_xor_si512(spanned, _mm512_set1_epi64(-1));
+            __m512i l2 = _mm512_and_si512(spanned, mask_);
+            __m512i g2 = _mm512_or_si512(spanned, msbmask_);
+
+            __m512i l = _mm512_sub_epi64(_mm512_or_si512(loaded1, msbmask_), l2);
+            __m512i r = _mm512_and_si512(_mm512_or_si512(loaded1, nspanned),
+                                         _mm512_or_si512(_mm512_and_si512(loaded1, nspanned), l));
+
+            // Use PEXT to collect result, use popcnt to count data
+            for (int i = 0; i < 8; i++) {
+                writeNext(res, ~_pext_u64(r[i], extract_) & ((1L << entryInBlock[i]) - 1),
+                          entryInBlock[i], &resindex, &resoffset);
+            }
+        }
+    }
 }

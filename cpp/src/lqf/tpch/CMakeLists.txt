@@ -33,7 +33,11 @@ add_lqf_benchmark(tpchquery_benchmark)
 add_executable(lqf-tpch-query-dev tpchquery_dev.cc)
 target_link_libraries(lqf-tpch-query-dev PUBLIC tpch_static)
 target_compile_options(lqf-tpch-query-dev PUBLIC ${LQF_SIMD_FLAGS})
-target_link_options(lqf-tpch-query-dev
-        PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:-fsanitize=address>>)
-target_link_options(lqf-tpch-query-dev PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:-fsanitize=address>>)
+target_compile_options(lqf-tpch-query-dev PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+target_link_options(lqf-tpch-query-dev PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+
+add_executable(lqf-threadsanitizer-exp threadsanitizer_exp.cc)
+target_link_libraries(lqf-threadsanitizer-exp PUBLIC tpch_static)
+target_compile_options(lqf-threadsanitizer-exp PUBLIC ${LQF_SIMD_FLAGS})
+target_compile_options(lqf-threadsanitizer-exp PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+target_link_options(lqf-threadsanitizer-exp PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)

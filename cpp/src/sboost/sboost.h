@@ -52,6 +52,21 @@ namespace sboost {
         void between(const uint8_t *data, uint32_t numEntry, uint64_t *res, uint32_t resoffset);
     };
 
+    class BitpackCompare {
+    protected:
+        uint32_t bit_width_;
+        uint64_t extract_;
+
+        __m512i mask_;
+        __m512i msbmask_;
+    public:
+        BitpackCompare(uint32_t bitWidth);
+
+        virtual ~BitpackCompare() = default;
+
+        void less(const uint8_t *left, const uint8_t *right, uint32_t numEntry, uint64_t *res, uint32_t resoffset);
+    };
+
     using namespace std;
 
     const auto ZERO = _mm256_set1_epi64x(0);

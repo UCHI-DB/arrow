@@ -121,6 +121,23 @@ TEST(SBoost, Equal512) {
     }
 }
 
+TEST(BitpackCompareTest, Less) {
+    uint32_t input1[] = {13, 22, 1, 9, 25, 17, 6, 22, 12, 31, 12, 21, 0, 5};
+    uint8_t bitpacked1[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    byteutils::bitpack(input1, 14, 5, bitpacked1);
+
+    uint32_t input2[] = {30, 10, 9, 29, 5, 17, 8, 2, 2, 8, 22, 10, 0, 9};
+    uint8_t bitpacked2[] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    byteutils::bitpack(input2, 14, 5, bitpacked2);
+
+    uint64_t result[] = {0, 0};
+
+    BitpackCompare compare(5);
+    compare.less(bitpacked1, bitpacked2, 14, result, 0);
+
+    EXPECT_EQ(0x244d, /* 10 0100 0100 1101*/  result[0]);
+}
+
 TEST(SDelta, Cumsum) {
 //    int32_t values[8] = {32432, 42442, 529532, 13442, 2525232, 3143243, 423432, 23232};
     int32_t values[8] = {1, 2, 3, 4, 5, 6, 7, 8};

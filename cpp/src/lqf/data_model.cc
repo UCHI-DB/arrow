@@ -667,6 +667,10 @@ namespace lqf {
         return accessor->result();
     }
 
+    unique_ptr<parquet::PageReader> ParquetBlock::pages(uint32_t col_index) {
+        return rowGroup_->GetColumnPageReader(col_index);
+    }
+
     class ParquetRowIterator : public DataRowIterator {
     private:
         vector<unique_ptr<ParquetColumnIterator>> columns_;

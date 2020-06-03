@@ -331,6 +331,24 @@ namespace lqf {
         virtual ~RowFilter() = default;
     };
 
+    /**
+     * Filter the data on column1 < column2
+     * The columns must use the same dictionary
+     */
+    class SboostRowFilter : public Filter {
+    protected:
+        uint32_t column1;
+
+        uint32_t column2;
+
+        virtual shared_ptr<Bitmap> filterBlock(Block &) override;
+
+    public:
+        SboostRowFilter(uint32_t, uint32_t);
+
+        virtual ~SboostRowFilter() = default;
+    };
+
     using namespace hashcontainer;
 
     class MapFilter : public Filter {

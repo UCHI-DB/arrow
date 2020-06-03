@@ -13,6 +13,37 @@ namespace sboost {
     namespace encoding {
         namespace rlehybrid {
 
+            SegmentReader::SegmentReader(const uint8_t *data, uint32_t bit_width, uint32_t num_entry)
+                    : data_(data), bit_width_(bit_width), num_entry_(num_entry),
+                      pointer_(0), counter_(0) {}
+
+            bool SegmentReader::hasNext() {
+                return counter_ < num_entry_;
+            }
+
+            Segment SegmentReader::next() {
+                uint32_t header = byteutils::readUnsignedVarInt(data_, &pointer_);
+                Segment segment;
+                segment.mode_ = (header & 1) == 0 ? RLE : PACKED;
+                switch (segment.mode_) {
+                    case RLE: {
+                        segment.num_entry_ = header >> 1;
+                        segment.value_ = byteutils::readIntLittleEndianPaddedOnBitWidth(data_, &pointer_, bit_width_);
+                        break;
+                    }
+                    case PACKED: {
+                        int numGroups = header >> 1;
+                        segment.num_entry_ = numGroups << 3;
+                        segment.data_ = data_ + pointer_;
+                        segment.data_length_ = numGroups * bit_width_;
+                        pointer_ += numGroups * bit_width_;
+                        break;
+                    }
+                }
+                counter_ += segment.num_entry_;
+                return segment;
+            }
+
             template<typename PRED>
             void process(const uint8_t *input,
                          uint64_t *output, uint32_t outputOffset,

@@ -62,7 +62,7 @@ namespace lqf {
 
         class Executor {
         protected:
-            bool shutdown_;
+            atomic<bool> shutdown_;
             Semaphore shutdown_guard_;
             uint32_t pool_size_;
             vector<unique_ptr<thread>> threads_;

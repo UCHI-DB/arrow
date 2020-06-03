@@ -10,6 +10,7 @@
 #include <iostream>
 #include <arrow/util/bit_stream_utils.h>
 #include <parquet/file_reader.h>
+#include <parquet/column_reader.h>
 #include <parquet/column_page.h>
 #include "stream.h"
 #include "bitmap.h"
@@ -324,6 +325,8 @@ namespace lqf {
 
         template<typename DTYPE>
         shared_ptr<Bitmap> raw(uint32_t col_index, RawAccessor<DTYPE> *accessor);
+
+        unique_ptr<parquet::PageReader> pages(uint32_t);
 
         unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 

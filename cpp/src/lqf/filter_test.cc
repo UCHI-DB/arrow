@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 #include "filter.h"
+#include <iostream>
 #include "data_model.h"
+#include "print.h"
 
 using namespace std;
 using namespace lqf;
@@ -98,7 +100,7 @@ TEST_F(ColFilterTest, FilterSboost) {
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
     function<bool(const DataField &)> pred2 = [](const DataField &field) {
-        ByteArray& input = field.asByteArray();
+        ByteArray &input = field.asByteArray();
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
     ColFilter filter({new SboostPredicate<ByteArrayType>(14, bind(&ByteArrayDictMultiEq::build, pred))});
@@ -140,11 +142,11 @@ TEST_F(ColFilterTest, FilterMultiSboost) {
 
 
     function<bool(const DataField &)> simplePred = [](const DataField &field) {
-        ByteArray& input = field.asByteArray();
+        ByteArray &input = field.asByteArray();
         return !strncmp(reinterpret_cast<const char *>(input.ptr + input.len - 3), "AIL", 3);
     };
     function<bool(const DataField &)> simplePred2 = [](const DataField &field) {
-        ByteArray& input = field.asByteArray();
+        ByteArray &input = field.asByteArray();
         return input.len == 3 && !strncmp(reinterpret_cast<const char *>(input.ptr), "AIR", 3);
     };
     ColFilter regFilter({new SimplePredicate(14, simplePred)});
@@ -168,5 +170,21 @@ TEST_F(ColFilterTest, FilterMultiSboost) {
     for (uint32_t i = 0; i < 94; i++) {
         EXPECT_EQ(sbraw2[i], simraw2[i]) << i;
     }
+}
 
+TEST(SboostRowFilterTest, Filter) {
+    auto ptable = ParquetTable::Open("testres/lineitem2", (1 << 14) - 1);
+
+    SboostRowFilter filter(10, 11);
+    auto result = filter.filter(*ptable);
+
+    RowFilter compareFilter([](DataRow &drow) {
+        return drow[10].asByteArray() < drow[11].asByteArray();
+    });
+    auto result2 = compareFilter.filter(*ptable);
+
+    auto b1 = (*(result->blocks()->collect()))[0];
+    auto b2 = (*(result2->blocks()->collect()))[0];
+
+    EXPECT_EQ(b1->size(), b2->size());
 }

@@ -81,11 +81,13 @@ add_arrow_lib(lqf
         sboost_static
         )
 
+set(LQF_SANITIZER -fsanitize=thread)
+
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 target_compile_options(lqf_objlib
         PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:-fsanitize=address>>)
-target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:-fsanitize=address>>)
+        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
 if(${LQF_PARALLEL})
     target_compile_definitions(lqf_objlib PUBLIC LQF_PARALLEL)
 endif()
@@ -119,14 +121,16 @@ add_test_case(all-test
         EXTRA_FLAGS
         ${LQF_SIMD_FLAGS}
         --coverage
+        ${LQF_SANITIZER}
         EXTRA_LINK_LIBS
         --coverage
+        ${LQF_SANITIZER}
         )
 
 arrow_install_all_headers(lqf)
 
-add_executable(scan_column scan_column.cc)
-target_link_libraries(scan_column lqf_static)
+#add_executable(scan_column scan_column.cc)
+#target_link_libraries(scan_column lqf_static)
 
 add_custom_target(lqf-benchmarks)
 set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)

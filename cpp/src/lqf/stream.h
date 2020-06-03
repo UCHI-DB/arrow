@@ -456,8 +456,8 @@ namespace lqf {
 
     class StreamEvaluator {
     public:
-//        static shared_ptr<Executor> defaultExecutor;
-        static shared_ptr<arrow::internal::ThreadPool> defaultExecutor;
+        static shared_ptr<Executor> defaultExecutor;
+//        static shared_ptr<arrow::internal::ThreadPool> defaultExecutor;
 
         bool parallel_;
 
@@ -469,14 +469,14 @@ namespace lqf {
         unique_ptr<vector<T>> collect(StreamSource<SRC> *source, Mapper<T, SRC> *mapper) {
             if (parallel_) {
                 // Version 1: LQF threadpool
-//                vector<function<T()>> tasks;
-//                while (source->hasNext()) {
-//                    auto next = source->next();
-//                    tasks.push_back([=]() {
-//                        return (*mapper)(next);
-//                    });
-//                }
-//                return move(defaultExecutor->invokeAll(tasks));
+                vector<function<T()>> tasks;
+                while (source->hasNext()) {
+                    auto next = source->next();
+                    tasks.push_back([=]() {
+                        return (*mapper)(next);
+                    });
+                }
+                return move(defaultExecutor->invokeAll(tasks));
                 // Version 2: serial
 //                auto result = unique_ptr<vector<T>>(new vector<T>());
 //                while (source->hasNext()) {
@@ -495,15 +495,15 @@ namespace lqf {
 //                }
 //                return unique_ptr<vector<T>>(results);
                 // Version 4: Arrow Threadpool
-                vector<future<T>> futures;
-                while (source->hasNext()) {
-                    futures.push_back(*(defaultExecutor->Submit([=](uint32_t next) { return (*mapper)(next); } ,source->next())));
-                }
-                auto results = new vector<T>();
-                for (auto &future:futures) {
-                    results->push_back(future.get());
-                }
-                return unique_ptr<vector<T>>(results);
+//                vector<future<T>> futures;
+//                while (source->hasNext()) {
+//                    futures.push_back(*(defaultExecutor->Submit([=](uint32_t next) { return (*mapper)(next); } ,source->next())));
+//                }
+//                auto results = new vector<T>();
+//                for (auto &future:futures) {
+//                    results->push_back(future.get());
+//                }
+//                return unique_ptr<vector<T>>(results);
             } else {
                 auto result = unique_ptr<vector<T>>(new vector<T>());
                 while (source->hasNext()) {
@@ -517,15 +517,15 @@ namespace lqf {
         void eval(StreamSource<SRC> *source, Mapper<void, SRC> *mapper) {
             if (parallel_) {
                 // Lqf Threadpool
-//                vector<function<int()>> tasks;
-//                while (source->hasNext()) {
-//                    auto next = source->next();
-//                    tasks.push_back([=]() {
-//                        (*mapper)(next);
-//                        return 0;
-//                    });
-//                }
-//                defaultExecutor->invokeAll(tasks);
+                vector<function<int()>> tasks;
+                while (source->hasNext()) {
+                    auto next = source->next();
+                    tasks.push_back([=]() {
+                        (*mapper)(next);
+                        return 0;
+                    });
+                }
+                defaultExecutor->invokeAll(tasks);
                 // Serial
 //                while (source->hasNext()) {
 //                    (*mapper)(source->next());
@@ -539,13 +539,13 @@ namespace lqf {
 //                    future.wait();
 //                }
                 // Arrow Threadpool
-                vector<future<void>> futures;
-                while (source->hasNext()) {
-                    futures.push_back(*(defaultExecutor->Submit([=](uint32_t next) { (*mapper)(next); } ,source->next())));
-                }
-                for (auto &future:futures) {
-                    future.wait();
-                }
+//                vector<future<void>> futures;
+//                while (source->hasNext()) {
+//                    futures.push_back(*(defaultExecutor->Submit([=](uint32_t next) { (*mapper)(next); } ,source->next())));
+//                }
+//                for (auto &future:futures) {
+//                    future.wait();
+//                }
             } else {
                 while (source->hasNext()) {
                     (*mapper)(source->next());
