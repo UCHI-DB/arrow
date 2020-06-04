@@ -26,6 +26,8 @@ namespace lqf {
     template<typename type>
     class Iterator {
     public:
+        virtual ~Iterator() = default;
+
         virtual bool hasNext() = 0;
 
         virtual type next() = 0;

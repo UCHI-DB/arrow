@@ -286,7 +286,7 @@ TEST(HashJoinTest, JoinWithKey) {
     auto left = ParquetTable::Open("testres/lineitem");
     left->updateColumns((1 << 14) - 1);
     auto right = MemTable::Make(2);
-    auto block = right->allocate(100);
+    auto block = right->allocate(5);
 
     auto rows = block->rows();
     (*rows)[0][0] = 35; // 6
@@ -479,7 +479,7 @@ TEST(HashJoinTest, WithRawLeft) {
     auto left = ParquetTable::Open("testres/lineitem");
     left->updateColumns((1 << 16) - 1);
     auto right = MemTable::Make(2);
-    auto block = right->allocate(100);
+    auto block = right->allocate(5);
 
     auto rows = block->rows();
     (*rows)[0][0] = 35; // 6
@@ -753,7 +753,7 @@ TEST(HashExistJoinTest, Join) {
     auto left = ParquetTable::Open("testres/lineitem");
     left->updateColumns((1 << 14) - 1);
     auto right = MemTable::Make(2);
-    auto block = right->allocate(100);
+    auto block = right->allocate(8);
 
     auto rows = block->rows();
     (*rows)[0][0] = 35; // 6
@@ -829,7 +829,7 @@ TEST(HashExistJoinTest, JoinWithPredicate) {
 
     // QUANTITY
     HashExistJoin join(0, 0,
-                       new RowBuilder({JL(4), JR(0), JR(1)}),
+                       new RowBuilder({JR(0), JR(1)}),
                        [](DataRow &left, DataRow &right) {
                            return left[4].asInt() > 40;
                        });

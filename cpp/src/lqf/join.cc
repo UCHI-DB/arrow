@@ -54,14 +54,14 @@ namespace lqf {
         }
 
         unique_ptr<MemDataRow> JoinBuilder::snapshot(DataRow &input) {
-            auto res = new MemDataRow(right_col_offsets_);
+            auto res = unique_ptr<MemDataRow>(new MemDataRow(right_col_offsets_));
             for (auto &inst: right_read_inst_) {
                 (*res)[inst.second] = input[inst.first];
             }
             for (auto &inst:right_read_raw_) {
                 (*res)[inst.second] = input(inst.first);
             }
-            return unique_ptr<MemDataRow>(res);
+            return res;
         }
 
         RowBuilder::RowBuilder(initializer_list<int32_t> fields, bool needkey, bool vertical)

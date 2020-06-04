@@ -417,6 +417,8 @@ namespace lqf {
                     }
                 }
 
+                virtual ~PCHMIterator() = default;
+
                 bool hasNext() {
                     return pointer_ < content_len_;
                 }

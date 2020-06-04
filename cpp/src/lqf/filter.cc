@@ -9,6 +9,7 @@
 #include <sboost/sboost.h>
 #include <sboost/simd.h>
 #include <sboost/bitmap_writer.h>
+#include <sboost/encoding/encoding_utils.h>
 
 using namespace std;
 using namespace std::placeholders;
@@ -165,7 +166,7 @@ namespace lqf {
     };
 
     SboostRowFilter::SboostRowFilter(uint32_t col1, uint32_t col2)
-            : column1(col1), column2(col2) {}
+            : column1_(col1), column2_(col2) {}
 
     /**
      * Make sure the returned value is aligned
@@ -194,8 +195,8 @@ namespace lqf {
 
     shared_ptr<Bitmap> SboostRowFilter::filterBlock(Block &block) {
         auto parquetBlock = static_cast<ParquetBlock &>(block);
-        auto pages1 = parquetBlock.pages(column1);
-        auto pages2 = parquetBlock.pages(column2);
+        auto pages1 = parquetBlock.pages(column1_);
+        auto pages2 = parquetBlock.pages(column2_);
 
         auto num_entry = block.size();
         shared_ptr<SimpleBitmap> result = make_shared<SimpleBitmap>(num_entry);
@@ -216,7 +217,7 @@ namespace lqf {
         uint32_t processed = 0;
 
         auto bitwidth = sreader1.bitWidth();
-        ::sboost::BitpackCompare bpcompare(sreader1.bitWidth());
+        ::sboost::BitpackCompare bpcompare(bitwidth);
 
         while (processed < num_entry) {
             auto remain = std::min(remain1, remain2);
@@ -262,9 +263,71 @@ namespace lqf {
                 remain2 = seg2.num_entry_;
             }
         }
+        auto full_size = ((num_entry >> 6) + 1) << 6;
+        ::sboost::encoding::cleanup(full_size, num_entry, result->raw(), 0);
+
         free(align_buffer1);
         free(align_buffer2);
 
+        return result;
+    }
+
+    SboostRow2Filter::SboostRow2Filter(uint32_t col1, uint32_t col2, uint32_t col3)
+            : column1_(col1), column2_(col2), column3_(col3) {}
+
+    shared_ptr<Bitmap> SboostRow2Filter::filterBlock(Block &block) {
+        auto parquetBlock = static_cast<ParquetBlock &>(block);
+        auto pages1 = parquetBlock.pages(column1_);
+        auto pages2 = parquetBlock.pages(column2_);
+        auto pages3 = parquetBlock.pages(column3_);
+
+        auto num_entry = block.size();
+        shared_ptr<SimpleBitmap> result = make_shared<SimpleBitmap>(num_entry);
+        BitmapWriter bitmapWriter(result->raw(), 0);
+
+        PagedSegmentReader sreader1(pages1.get());
+        PagedSegmentReader sreader2(pages2.get());
+        PagedSegmentReader sreader3(pages3.get());
+
+        Segment seg1 = sreader1.next();
+        Segment seg2 = sreader2.next();
+        Segment seg3 = sreader3.next();
+
+        uint32_t processed = 0;
+
+        ::sboost::BitpackCompare bpcompare(sreader1.bitWidth());
+
+        uint64_t *cmp12 = (uint64_t *) aligned_alloc(64, 20 * sizeof(uint64_t));
+        uint64_t *cmp23 = (uint64_t *) aligned_alloc(64, 20 * sizeof(uint64_t));
+
+        while (processed < num_entry) {
+            memset(cmp12, 0, 20 * sizeof(uint64_t));
+            memset(cmp23, 0, 20 * sizeof(uint64_t));
+            assert(seg1.num_entry_ == seg2.num_entry_);
+            assert(seg2.num_entry_ == seg3.num_entry_);
+            assert(seg1.mode_ == PACKED);
+            assert(seg2.mode_ == PACKED);
+            assert(seg3.mode_ == PACKED);
+
+            auto num_words = (seg1.num_entry_ + 63) >> 6;
+            bpcompare.less(seg1.data_, seg2.data_, seg1.num_entry_, cmp12, 0);
+            bpcompare.less(seg2.data_, seg3.data_, seg2.num_entry_, cmp23, 0);
+            ::sboost::simd::simd_and(cmp12, cmp23, num_words);
+
+            bitmapWriter.appendWord(cmp12, seg1.num_entry_);
+            processed += seg1.num_entry_;
+            if (sreader1.hasNext())
+                seg1 = sreader1.next();
+            if (sreader2.hasNext())
+                seg2 = sreader2.next();
+            if (sreader3.hasNext())
+                seg3 = sreader3.next();
+        }
+        auto full_size = ((num_entry >> 6) + 1) << 6;
+        ::sboost::encoding::cleanup(full_size, num_entry, result->raw(), 0);
+
+        free(cmp12);
+        free(cmp23);
         return result;
     }
 
@@ -528,6 +591,8 @@ namespace lqf {
             }
             ::sboost::BitmapWriter writer(bitmap, bitmap_offset);
             writer.appendWord(page_result, numEntry);
+            free(page_oneresult);
+            free(page_result);
         }
 
         template<typename DTYPE>

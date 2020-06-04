@@ -40,7 +40,7 @@ namespace lqf {
         uint32_t low = 0;
         uint32_t high = size_;
 
-        while (low <= high) {
+        while (low <= high && low < size_) {
             uint32_t mid = (low + high) >> 1;
             T midVal = buffer_[mid];
 

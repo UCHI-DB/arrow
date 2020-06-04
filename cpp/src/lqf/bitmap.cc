@@ -105,7 +105,8 @@ namespace lqf {
         // the theoretical size. Otherwise sboost will read past the boundary and cause
         // memory issues.
         array_size_ = (size >> 6) + 1;
-        bitmap_ = (uint64_t *) malloc(sizeof(uint64_t) * array_size_);
+//        bitmap_ = (uint64_t *) malloc(sizeof(uint64_t) * array_size_);
+        bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
         size_ = (int) size;
     }

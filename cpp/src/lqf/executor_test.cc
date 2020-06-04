@@ -22,6 +22,7 @@ TEST(ExecutorTest, Submit) {
 
     EXPECT_EQ(5, *i);
     executor->shutdown();
+    delete i;
 }
 
 TEST(ExecutorTest, InvokeAll) {
@@ -40,9 +41,9 @@ TEST(ExecutorTest, InvokeAll) {
     unique_ptr<vector<int32_t>> result = executor->invokeAll(tasks);
     executor->shutdown();
 
-    for(int i = 0 ; i < 10;i++) {
+    for (int i = 0; i < 10; i++) {
         auto start = (*result)[i];
-        auto end = (*result)[i+10];
+        auto end = (*result)[i + 10];
         EXPECT_TRUE(start >= end - 2);
     }
 }

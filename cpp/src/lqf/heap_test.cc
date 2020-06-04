@@ -10,8 +10,10 @@ TEST(HeapTest, TestInt) {
     Heap<int32_t *> heap(10, []() { return new int(INT32_MAX); },
                          [](int32_t *a, int32_t *b) { return *a < *b; });
 
+    int value;
     for (int i = 0; i < 100; i++) {
-        heap.add(new int32_t(100 - i));
+        value = 100 - i;
+        heap.add(&value);
     }
 
     heap.done();
