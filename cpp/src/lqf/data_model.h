@@ -141,7 +141,6 @@ namespace lqf {
 
         virtual uint64_t pos() = 0;
 
-        virtual const uint8_t *dict(uint32_t idx) { return nullptr; }
     };
 
     class ColumnIterator {
@@ -396,8 +395,6 @@ namespace lqf {
 
         template<typename DTYPE>
         unique_ptr<Dictionary<DTYPE>> LoadDictionary(int column);
-
-        uint32_t DictionarySize(int column);
 
         static shared_ptr<ParquetTable> Open(const string &filename, uint64_t columns = 0);
 

@@ -137,7 +137,7 @@ TEST(MemBlockTest, Row) {
 }
 
 TEST(MemBlockTest, RowCopy) {
-    vector<uint32_t> col_offsets({0, 1, 2, 4});
+    vector<uint32_t> col_offsets({0, 1, 2, 4, 5});
     MemBlock mb(100, 5, col_offsets);
 
     char buffer[3000];
@@ -442,9 +442,9 @@ TEST_F(ParquetBlockTest, Raw) {
     auto dict = scanner->accessDict();
     EXPECT_EQ(200, dict->size());
 
-    EXPECT_EQ(-202, dict->lookup(375));
+    EXPECT_EQ(-201, dict->lookup(375));
     EXPECT_EQ(102, dict->lookup(103));
-    EXPECT_EQ(-202, dict->lookup(514));
+    EXPECT_EQ(-201, dict->lookup(514));
     EXPECT_EQ(18, dict->lookup(19));
 
     delete scanner;
@@ -523,7 +523,7 @@ TEST_F(ParquetBlockTest, Mask) {
 TEST_F(ParquetBlockTest, MaskOnMask) {
     auto block = make_shared<ParquetBlock>(nullptr, rowGroup_, 0, 3);
 
-    shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(100);
+    shared_ptr<Bitmap> bitmap = make_shared<SimpleBitmap>(200);
     bitmap->put(4);
     bitmap->put(20);
     bitmap->put(95);
@@ -532,7 +532,7 @@ TEST_F(ParquetBlockTest, MaskOnMask) {
 
     auto masked = block->mask(bitmap);
 
-    shared_ptr<Bitmap> bitmap2 = make_shared<SimpleBitmap>(100);
+    shared_ptr<Bitmap> bitmap2 = make_shared<SimpleBitmap>(200);
     bitmap2->put(20);
     bitmap2->put(95);
 

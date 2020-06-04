@@ -378,7 +378,6 @@ class DictDecoder : virtual public TypedDecoder<DType> {
   /// with a new dictionary page
   virtual int DecodeIndices(int num_values, ::arrow::ArrayBuilder* builder) = 0;
 
-  virtual void* dictionary() = 0;
 };
 
 // ----------------------------------------------------------------------

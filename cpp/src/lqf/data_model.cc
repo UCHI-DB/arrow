@@ -367,13 +367,12 @@ namespace lqf {
         }
     };
 
-
     unique_ptr<DataRowIterator> MemvBlock::rows() {
-        auto cols = new vector<unique_ptr<ColumnIterator>>();
-        auto col_size = col_size_.size();
-        for (auto i = 0u; i < col_size; ++i) {
-            cols->push_back(col(i));
-        }
+//        auto cols = new vector<unique_ptr<ColumnIterator>>();
+//        auto col_size = col_size_.size();
+//        for (auto i = 0u; i < col_size; ++i) {
+//            cols->push_back(col(i));
+//        }
         return unique_ptr<DataRowIterator>(new MemvDataRowIterator(&content_, col_size_));
     }
 
@@ -599,10 +598,6 @@ namespace lqf {
             return pos_;
         }
 
-        const uint8_t *dict() {
-            return (const uint8_t *) columnReader_->dictionary();
-        }
-
     protected:
         inline uint64_t *loadBuffer(uint64_t idx) {
             if ((int64_t) idx < bufpos_ + buffer_size_) {
@@ -704,9 +699,6 @@ namespace lqf {
             return view_.index_;
         }
 
-        const uint8_t *dict(uint32_t idx) override {
-            return columns_[idx]->dict();
-        }
     };
 
     unique_ptr<DataRowIterator> ParquetBlock::rows() {
@@ -781,12 +773,6 @@ namespace lqf {
         auto dictpage = static_pointer_cast<DictionaryPage>(
                 fileReader_->RowGroup(0)->GetColumnPageReader(column)->NextPage());
         return unique_ptr<Dictionary<DTYPE>>(new Dictionary<DTYPE>(dictpage));
-    }
-
-    uint32_t ParquetTable::DictionarySize(int column) {
-        auto dictpage = static_pointer_cast<DictionaryPage>(
-                fileReader_->RowGroup(0)->GetColumnPageReader(column)->NextPage());
-        return dictpage->num_values();
     }
 
     MaskedTable::MaskedTable(ParquetTable *inner, vector<shared_ptr<Bitmap>> &masks)

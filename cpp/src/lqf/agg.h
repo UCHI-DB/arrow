@@ -268,19 +268,6 @@ namespace lqf {
         void setPredicate(function<bool(DataRow &)>);
     };
 
-    template<typename CORE>
-    class DictAgg : public Agg<CORE> {
-    protected:
-        vector<pair<uint32_t, uint32_t>> need_trans_;
-
-        unique_ptr<CORE> processBlock(const shared_ptr<Block> &block) override;
-
-    public:
-        DictAgg(const vector<uint32_t> &, initializer_list<pair<uint32_t, uint32_t>>);
-
-        virtual ~DictAgg() = default;
-    };
-
     class CoreMaker {
     protected:
         bool useRecording_ = false;
@@ -337,34 +324,6 @@ namespace lqf {
 
     protected:
         unique_ptr<HashCore> makeCore() override;
-    };
-
-    class HashDictCore : public HashCore {
-    protected:
-        unordered_map<string, unique_ptr<AggReducer>> translated_;
-    public:
-        HashDictCore(function<uint64_t(DataRow &)> hasher,
-                     function<unique_ptr<AggReducer>(DataRow &)> headerInit);
-
-        virtual ~HashDictCore() = default;
-
-        void reduce(HashDictCore &another);
-
-        void dump(MemTable &table, function<bool(DataRow &)>);
-
-        void translate(vector<pair<uint32_t, const uint8_t *>> &);
-    };
-
-    class HashDictAgg : public DictAgg<HashDictCore>, public CoreMaker {
-        function<uint64_t(DataRow &)> hasher_;
-    public:
-        HashDictAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
-                    function<uint64_t(DataRow &)>, initializer_list<pair<uint32_t, uint32_t>>);
-
-        virtual ~HashDictAgg() = default;
-
-    protected:
-        unique_ptr<HashDictCore> makeCore() override;
     };
 
     class TableCore {

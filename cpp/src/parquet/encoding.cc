@@ -1613,10 +1613,6 @@ class DictDecoderImpl : public DecoderImpl, virtual public DictDecoder<Type> {
     return num_values;
   }
 
-  void* dictionary() override {
-      return dictionary_.get()->mutable_data();
-  }
-
  protected:
   inline void DecodeDict(TypedDecoder<Type>* dictionary) {
     dictionary_length_ = static_cast<int32_t>(dictionary->values_left());

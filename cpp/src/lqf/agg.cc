@@ -367,115 +367,6 @@ namespace lqf {
         }
     }
 
-    HashDictCore::HashDictCore(function<uint64_t(DataRow &)> hasher,
-                               function<unique_ptr<AggReducer>(DataRow &)> headerInit)
-            : HashCore(hasher, headerInit) {}
-
-    void HashDictCore::translate(vector<pair<uint32_t, const uint8_t *>> &need_trans) {
-        for (auto &reducer: container_) {
-            auto &storage = reducer.second->storage();
-            for (auto &field_pair: need_trans) {
-                DataField &field = storage[field_pair.first];
-                int32_t key = field.asInt();
-                field = field_pair.second + key * (field.size_ << 3);
-            }
-            // Need a new key, temporarily just merge everything together
-            stringstream keymaker;
-            uint32_t limit = reducer.second->header_size();
-            for (uint32_t i = 0; i < limit; ++i) {
-                keymaker << storage[i];
-            }
-            auto newkey = keymaker.str();
-            translated_[newkey] = move(reducer.second);
-        }
-    }
-
-    void HashDictCore::reduce(HashDictCore &another) {
-        auto it = another.translated_.begin();
-        while (it != another.translated_.end()) {
-            auto exist = translated_.find(it->first);
-            if (exist == translated_.end()) {
-                translated_[it->first] = move(it->second);
-            } else {
-                exist->second->merge(*it->second);
-            }
-            it++;
-        }
-    }
-
-    void HashDictCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
-        // Use an init size
-        uint32_t size = container_.size();
-        auto block = table.allocate(size);
-
-        MemDataRow buffer(table.colOffset());
-
-        auto wit = block->rows();
-
-        uint32_t counter = 0;
-        uint32_t remain = size;
-        for (auto &pair: translated_) {
-            uint32_t item_size = pair.second->size();
-            if (__builtin_expect(item_size > remain, 0)) {
-                remain += size;
-                size *= 2;
-                block->resize(size);
-            }
-
-            uint32_t written = 0;
-            for (uint32_t i = 0; i < item_size; ++i) {
-                pair.second->dump(buffer);
-                if (__builtin_expect(!pred || pred(buffer), 1)) {
-                    DataRow &nextrow = wit->next();
-                    // Copy data
-                    nextrow = buffer;
-                    ++written;
-                }
-            }
-            counter += written;
-            remain -= written;
-        }
-        if (size != counter)
-            block->resize(counter);
-    }
-
-    template<typename CORE>
-    DictAgg<CORE>::DictAgg(const vector<uint32_t> &col_size, initializer_list<pair<uint32_t, uint32_t>> need_trans)
-            : Agg<CORE>(col_size), need_trans_(need_trans) {}
-
-    using namespace std::placeholders;
-
-    template<typename CORE>
-    unique_ptr<CORE> DictAgg<CORE>::processBlock(const shared_ptr<Block> &block) {
-        auto rows = block->rows();
-        auto core = this->makeCore();
-        uint64_t blockSize = block->size();
-
-        for (uint32_t i = 0; i < blockSize; ++i) {
-            core->consume(rows->next());
-        }
-
-        vector<pair<uint32_t, const uint8_t *>> dicts;
-        for (auto &nt_pair: need_trans_) {
-            dicts.push_back(pair<uint32_t, const uint8_t *>(nt_pair.first, rows->dict(nt_pair.second)));
-        }
-
-        core->translate(dicts);
-
-        return core;
-    }
-
-    HashDictAgg::HashDictAgg(const vector<uint32_t> &col_size, const initializer_list<int32_t> &header_fields,
-                             function<vector<AggField *>()> agg_fields,
-                             function<uint64_t(DataRow &)> hasher,
-                             initializer_list<pair<uint32_t, uint32_t>> need_trans) :
-            DictAgg<HashDictCore>(col_size, need_trans),
-            CoreMaker(col_size, header_fields, agg_fields), hasher_(hasher) {}
-
-    unique_ptr<HashDictCore> HashDictAgg::makeCore() {
-        return unique_ptr<HashDictCore>(new HashDictCore(hasher_, headerInit()));
-    }
-
     TableCore::TableCore(uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
                          function<unique_ptr<AggReducer>(DataRow &)> headerInit)
             : container_(tableSize), indexer_(indexer), headerInit_(headerInit) {}
@@ -751,11 +642,5 @@ namespace lqf {
 
     template
     class Agg<SimpleCore>;
-
-    template
-    class Agg<HashDictCore>;
-
-    template
-    class DictAgg<HashDictCore>;
 
 }
