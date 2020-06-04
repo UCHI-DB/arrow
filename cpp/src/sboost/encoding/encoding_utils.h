@@ -9,6 +9,14 @@
 
 namespace sboost {
     namespace encoding {
+        /**
+         * Clean up the bitmap that is overflown
+         *
+         * @param counter
+         * @param numEntry
+         * @param output
+         * @param outputOffset
+         */
         void cleanup(uint32_t counter, uint32_t numEntry, uint64_t *output, uint32_t outputOffset);
     }
 }

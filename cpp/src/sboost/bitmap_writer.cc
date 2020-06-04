@@ -2,6 +2,7 @@
 // Created by harper on 9/14/19.
 //
 #include "bitmap_writer.h"
+#include <cstring>
 
 namespace sboost {
     BitmapWriter::BitmapWriter(uint64_t *data, uint32_t offset) {
@@ -36,11 +37,14 @@ namespace sboost {
     void BitmapWriter::appendWord(uint64_t *word, uint32_t count) {
         uint32_t remain = count;
         if (bitOffset == 0) {
-            int destIndex = 0;
-            while (remain >= 64) {
-                data[index++] = word[destIndex++];
-                remain -= 64;
-            }
+//            while (remain >= 64) {
+//                data[index++] = word[destIndex++];
+//                remain -= 64;
+//            }
+            int destIndex = remain >> 6;
+            memcpy(data + index, word, sizeof(uint64_t) * destIndex);
+            index += destIndex;
+            remain &= 0x3F;
             if (remain > 0) {
                 data[index] = word[destIndex] & ((1L << remain) - 1);
             }
@@ -54,8 +58,10 @@ namespace sboost {
             if (remain > 0) {
                 auto mask = (1L << remain) - 1;
                 auto masked = word[destIndex] & mask;
-                if (remain <= 64 - bitOffset) {
+                if (remain < 64 - bitOffset) {
                     data[index] |= masked << bitOffset;
+                } else if (remain == 64 - bitOffset) {
+                    data[index++] |= masked << bitOffset;
                 } else {
                     data[index++] |= masked << bitOffset;
                     data[index] = masked >> (64 - bitOffset);

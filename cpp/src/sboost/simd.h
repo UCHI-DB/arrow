@@ -8,8 +8,12 @@
 #include <cstdint>
 
 namespace sboost {
+
     namespace simd {
+
         void simd_or(uint64_t *a, uint64_t *b, uint32_t size);
+
+        void simd_and(uint64_t *a, uint64_t *b, uint32_t size);
     }
 }
 

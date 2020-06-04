@@ -64,6 +64,7 @@ set(LQF_SRCS
         hash.cc
         hash_container.cc
         lang.cc
+        memory.cc
         )
 
 add_arrow_lib(lqf
@@ -81,7 +82,7 @@ add_arrow_lib(lqf
         sboost_static
         )
 
-set(LQF_SANITIZER -fsanitize=thread)
+set(LQF_SANITIZER -fsanitize=address)
 
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 target_compile_options(lqf_objlib
@@ -131,6 +132,11 @@ arrow_install_all_headers(lqf)
 
 #add_executable(scan_column scan_column.cc)
 #target_link_libraries(scan_column lqf_static)
+#target_compile_options(scan_column
+#        PUBLIC
+#        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+#target_link_options(scan_column PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+
 
 add_custom_target(lqf-benchmarks)
 set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)

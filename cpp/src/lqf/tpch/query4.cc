@@ -37,9 +37,11 @@ namespace lqf {
                                                        bind(&ByteArrayDictRangele::build, dateFrom, dateTo))),
                                          {order});
 
-            auto lineItemFilter = graph.add(new RowFilter([](DataRow &datarow) {
-                return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
-            }), {lineitem});
+//            auto lineItemFilter = graph.add(new RowFilter([](DataRow &datarow) {
+//                return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
+//            }), {lineitem});
+            auto lineItemFilter = graph.add(new SboostRowFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE),
+                                            {lineitem});
 
             auto existJoin = graph.add(new FilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 30000000, true),
                                        {orderFilter, lineItemFilter});
@@ -79,9 +81,10 @@ namespace lqf {
 
 //            cout << filteredOrderTable->size() << endl;
 
-            RowFilter lineItemFilter([](DataRow &datarow) {
-                return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
-            });
+//            RowFilter lineItemFilter([](DataRow &datarow) {
+//                return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
+//            });
+            SboostRowFilter lineItemFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE);
             auto filteredLineItemTable = lineItemFilter.filter(*lineitemTable);
 
             FilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 30000000, true);

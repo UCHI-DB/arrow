@@ -14,40 +14,6 @@
 #include "lqf/tpch/tpchquery.h"
 #include "filter.h"
 
-bool predicate(int32_t value) {
-    return value % 20 == 0;
-}
-
-void scanTable2() {
-
-    std::ofstream output;
-    output.open("/home/harper/cpp_res");
-    const char *fileName = "/local/hajiang/tpch/5/lineitem/lineitem.parquet";
-
-    using namespace parquet;
-    using namespace lqf;
-
-    auto dateFrom = ByteArray("1998-09-01");
-    auto dictless = new lqf::sboost::ByteArrayDictLess(dateFrom);
-
-    auto table = ParquetTable::Open(fileName, {tpch::LineItem::SHIPDATE});
-    table->blocks()->foreach([=](const shared_ptr<Block> &block) {
-//        auto col = block->col(lqf::tpch::LineItem::SHIPDATE);
-//        for(uint i = 0 ; i < block->size();++i) {
-//            std::cout << (*col)(i).asInt() << std::endl;
-//        }
-
-        auto pblock = static_pointer_cast<ParquetBlock>(block);
-        pblock->raw(lqf::tpch::LineItem::SHIPDATE, dictless);
-    });
-
-    delete dictless;
-}
-
-void scanTable3() {
-    const char *fileName = "testres/lineitem";
-}
-
 void scanTable() {
     auto start = std::chrono::high_resolution_clock::now();
 

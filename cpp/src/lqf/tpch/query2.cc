@@ -51,7 +51,6 @@ namespace lqf {
                                                        new SboostPredicate<ByteArrayType>(Part::TYPE,
                                                                                           bind(sboost::ByteArrayDictMultiEq::build,
                                                                                                typePred))}), {part});
-//            auto filteredPart = partFilter.filter(*partTable);
 
             auto regionFilter = graph.add(new ColFilter({new SimplePredicate(Region::NAME, [](const DataField &field) {
                 return q2::region == (field.asByteArray());
@@ -67,22 +66,14 @@ namespace lqf {
             }), {nrJoin});
 
             auto snJoin = graph.add(new FilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY), {supplier, nationMat});
-//            auto filteredSupplier = snJoin.join(*supplierTable, *memNationTable);
-
-
 
             auto partMat = graph.add(new FilterMat(), {partFilter});
             auto supplierMat = graph.add(new FilterMat(), {snJoin});
-//            FilterMat filterMat;
-//            auto matPart = filterMat.mat(*filteredPart);
-//            auto matSupplier = filterMat.mat(*filteredSupplier);
 
             // Sequence of these two joins
             auto pspJoin = graph.add(new FilterJoin(PartSupp::PARTKEY, Part::PARTKEY), {partsupp, partMat});
-//            auto filteredPs = pspJoin.join(*partSuppTable, *matPart);
 
             auto pssJoin = graph.add(new FilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY), {pspJoin, supplierMat});
-//            auto filteredPss = pssJoin.join(*filteredPs, *matSupplier);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &dr) { return dr[PartSupp::PARTKEY].asInt(); };
 
@@ -93,24 +84,20 @@ namespace lqf {
             psAgg->useRecording();
             // PARTKEY SUPPKEY SUPPLYCOST
             auto psMinCost = graph.add(psAgg, {pssJoin});
-//            auto psMinCostTable = psAgg.agg(*filteredPss);
 
             auto ps2partJoin = graph.add(
                     new HashColumnJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(1), JRS(Part::MFGR)})),
                     {psMinCost, partMat});
             // 0 PARTKEY 1 SUPPKEY 2 P_MFGR
-//            auto pswithPartTable = ps2partJoin.join(*psMinCostTable, *matPart);
 
             auto ps2suppJoin = graph.add(new HashColumnJoin(1, Supplier::SUPPKEY, new ColumnBuilder(
                     {JL(0), JR(Supplier::ACCTBAL), JR(Supplier::NATIONKEY), JRS(Supplier::NAME), JRS(Supplier::ADDRESS),
                      JRS(Supplier::PHONE), JRS(Supplier::COMMENT), JLS(2)})), {ps2partJoin, supplierMat});
             // 0 PARTKEY 1 ACCTBAL 2 NATIONKEY 3 SNAME 4 ADDRESS 5 PHONE 6 COMMENT 7 MFGR
-//            auto psWithBothTable = ps2suppJoin.join(*pswithPartTable, *matSupplier);
 
             auto psWithNationJoin = graph.add(new HashColumnJoin(2, 0, new ColumnBuilder(
                     {JL(0), JL(1), JLS(3), JLS(4), JLS(5), JLS(6), JLS(7), JRS(0)})), {ps2suppJoin, nationMat});
             // 0 PARTKEY 1 ACCTBAL 2 SNAME 3 ADDRESS 4 PHONE 5 COMMENT 6 MFGR 7 NATIONNAME
-//            auto alljoined = psWithNationJoin.join(*psWithBothTable, *memNationTable);
 
             // s_acctbal desc, n_name, s_name, p_partkey
             auto top = graph.add(new TopN(100, [](DataRow *a, DataRow *b) {

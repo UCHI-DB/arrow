@@ -188,3 +188,30 @@ TEST(SboostRowFilterTest, Filter) {
 
     EXPECT_EQ(b1->size(), b2->size());
 }
+
+TEST(SboostRow2FilterTest, Filter) {
+    auto ptable = ParquetTable::Open("testres/lineitem2", (1 << 14) - 1);
+
+    SboostRow2Filter filter(10, 11, 12);
+    auto result = filter.filter(*ptable);
+
+    RowFilter compareFilter([](DataRow &drow) {
+        return (drow[10].asByteArray() < drow[11].asByteArray()) && (drow[11].asByteArray() < drow[12].asByteArray());
+    });
+    auto result2 = compareFilter.filter(*ptable);
+
+    auto b1 = (*(result->blocks()->collect()))[0];
+    auto b2 = (*(result2->blocks()->collect()))[0];
+
+    auto mb1 = dynamic_pointer_cast<MaskedBlock>(b1);
+    auto mb2 = dynamic_pointer_cast<MaskedBlock>(b2);
+
+    auto mask1 = dynamic_pointer_cast<SimpleBitmap>(mb1->mask());
+    auto mask2 = dynamic_pointer_cast<SimpleBitmap>(mb2->mask());
+
+    for (uint32_t i = 0; i < 157; ++i) {
+        EXPECT_EQ(mask1->raw()[i], mask2->raw()[i]) << i;
+    }
+
+//    EXPECT_EQ(b1->size(), b2->size());
+}

@@ -337,9 +337,9 @@ namespace lqf {
      */
     class SboostRowFilter : public Filter {
     protected:
-        uint32_t column1;
+        uint32_t column1_;
 
-        uint32_t column2;
+        uint32_t column2_;
 
         virtual shared_ptr<Bitmap> filterBlock(Block &) override;
 
@@ -347,6 +347,20 @@ namespace lqf {
         SboostRowFilter(uint32_t, uint32_t);
 
         virtual ~SboostRowFilter() = default;
+    };
+
+    class SboostRow2Filter : public Filter {
+    protected:
+        uint32_t column1_;
+        uint32_t column2_;
+        uint32_t column3_;
+
+        virtual shared_ptr<Bitmap> filterBlock(Block &) override;
+
+    public:
+        SboostRow2Filter(uint32_t, uint32_t, uint32_t);
+
+        virtual ~SboostRow2Filter() = default;
     };
 
     using namespace hashcontainer;

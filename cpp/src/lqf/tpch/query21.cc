@@ -110,9 +110,12 @@ namespace lqf {
             auto linewithorder = graph.add(new FilterMat(), {lineWithOrderJoin});
 //            auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
 
-            auto linedateFilter = graph.add(new RowFilter([](DataRow &row) {
-                return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
-            }), {linewithorder});
+//            auto linedateFilter = graph.add(new RowFilter([](DataRow &row) {
+//                return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
+//            }), {linewithorder});
+            auto linedateFilter = graph.add(new SboostRowFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE),
+                                            {linewithorder});
+
             auto l1withdate = graph.add(new FilterMat(), {linedateFilter});
 
             auto supplierNationFilter = graph.add(new ColFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
@@ -192,9 +195,10 @@ namespace lqf {
             FilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000);
             auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
 
-            RowFilter linedateFilter([](DataRow &row) {
-                return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
-            });
+//            RowFilter linedateFilter([](DataRow &row) {
+//                return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
+//            });
+            SboostRowFilter linedateFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE);
             auto l1withdate = mat.mat(*linedateFilter.filter(*linewithorder));
 
             ColFilter supplierNationFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,

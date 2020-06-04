@@ -10,6 +10,7 @@
 #include <lqf/print.h>
 #include <lqf/join.h>
 #include <lqf/mat.h>
+#include <lqf/union.h>
 #include "tpchquery.h"
 
 
@@ -52,7 +53,7 @@ namespace lqf {
         }
         using namespace q12;
 
-        void executeQ12() {
+        void executeQ12_Graph() {
             ExecutionGraph graph;
 
             auto lineitem = graph.add(new TableNode(ParquetTable::Open(LineItem::path,
@@ -111,7 +112,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ12Backup() {
+        void executeQ12() {
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::RECEIPTDATE, LineItem::SHIPMODE, LineItem::COMMITDATE,
                                                 LineItem::SHIPDATE, LineItem::ORDERKEY});
@@ -128,13 +129,18 @@ namespace lqf {
                                                                               }))});
             auto validLineitem = lineitemFilter.filter(*lineitem);
 
-            RowFilter lineItemAgainFilter([](DataRow &row) {
-                auto &commitDate = row[LineItem::COMMITDATE].asByteArray();
-                auto &shipDate = row[LineItem::SHIPDATE].asByteArray();
-                auto &receiptDate = row[LineItem::RECEIPTDATE].asByteArray();
-                return commitDate < receiptDate && shipDate < commitDate;
-            });
-            auto validDateLineitem = lineItemAgainFilter.filter(*validLineitem);
+            SboostRow2Filter lineItemAgainFilter(LineItem::SHIPDATE, LineItem::COMMITDATE, LineItem::RECEIPTDATE);
+//
+//            [](DataRow &row) {
+//                auto &commitDate = row[LineItem::COMMITDATE].asByteArray();
+//                auto &shipDate = row[LineItem::SHIPDATE].asByteArray();
+//                auto &receiptDate = row[LineItem::RECEIPTDATE].asByteArray();
+//                return commitDate < receiptDate && shipDate < commitDate;
+//            });
+            auto validLineitem2 = lineItemAgainFilter.filter(*lineitem);
+
+            FilterAnd fand(2);
+            auto validDateLineitem = fand.execute(vector<Table *>{validLineitem.get(), validLineitem2.get()});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &row) {
                 return (row[LineItem::ORDERKEY].asInt() << 3) + row(LineItem::SHIPMODE).asInt();

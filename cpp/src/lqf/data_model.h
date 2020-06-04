@@ -201,6 +201,9 @@ namespace lqf {
         const vector<uint32_t> &col_offset_;
 
         vector<uint64_t> content_;
+
+        // This buffer is used for
+        vector<array<uint8_t, 16384>> buffers_;
     public:
         MemBlock(uint32_t size, uint32_t row_size, const vector<uint32_t> &col_offset);
 
