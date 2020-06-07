@@ -76,7 +76,7 @@ namespace lqf {
     ostream &operator<<(ostream &os, DataField &dt);
 
     /*
-     * A Union representing in-memory data fields
+     * A structure representing in-memory data fields
      */
     class DataRow {
     public:
@@ -88,7 +88,15 @@ namespace lqf {
             return (*this)[i];
         }
 
-        virtual void operator=(DataRow &row) {}
+        virtual DataRow &operator=(DataRow &row) { return *this; }
+
+        virtual uint32_t size() {
+            return 0;
+        }
+
+        virtual uint32_t num_fields() {
+            return 0;
+        }
 
         virtual uint64_t *raw() {
             return nullptr;
@@ -112,17 +120,17 @@ namespace lqf {
 
         DataField &operator[](uint64_t i) override;
 
-        void operator=(DataRow &row) override;
-
-        unique_ptr<DataRow> snapshot() override;
+        DataRow &operator=(DataRow &row) override;
 
         MemDataRow &operator=(MemDataRow &row);
 
+        unique_ptr<DataRow> snapshot() override;
+
+        inline uint32_t size() override { return data_.size(); }
+
+        inline uint32_t num_fields() override { return offset_.size() - 1; }
+
         uint64_t *raw() override;
-
-        inline uint32_t size() { return data_.size(); }
-
-        inline uint32_t num_fields() { return offset_.size() - 1; }
 
         inline const vector<uint32_t> &offset() const { return offset_; };
 
@@ -201,9 +209,6 @@ namespace lqf {
         const vector<uint32_t> &col_offset_;
 
         vector<uint64_t> content_;
-
-        // This buffer is used for
-        vector<array<uint8_t, 16384>> buffers_;
     public:
         MemBlock(uint32_t size, uint32_t row_size, const vector<uint32_t> &col_offset);
 
@@ -222,6 +227,8 @@ namespace lqf {
         unique_ptr<DataRowIterator> rows() override;
 
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
+
+        inline const vector<uint32_t> &col_offset() { return col_offset_; }
     };
 
     class MemvBlock : public Block {
@@ -248,25 +255,6 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
 
         void merge(MemvBlock &, const vector<pair<uint8_t, uint8_t>> &);
-    };
-
-    class MemListBlock : public Block {
-    private:
-        vector<DataRow *> content_;
-    public:
-        MemListBlock();
-
-        virtual ~MemListBlock();
-
-        uint64_t size() override;
-
-        inline vector<DataRow *> &content() { return content_; }
-
-        unique_ptr<ColumnIterator> col(uint32_t) override;
-
-        unique_ptr<DataRowIterator> rows() override;
-
-        shared_ptr<Block> mask(shared_ptr<Bitmap>) override;
     };
 
     template<typename DTYPE>
@@ -362,6 +350,8 @@ namespace lqf {
     };
 
     class Table {
+    protected:
+        bool external_ = false;
     public:
         virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() = 0;
 
@@ -371,7 +361,9 @@ namespace lqf {
          */
         virtual const vector<uint32_t> &colSize() = 0;
 
-        uint64_t size();
+        virtual uint64_t size();
+
+        inline bool isExternal() { return external_; }
     };
 
     class ParquetTable : public Table {
@@ -392,7 +384,7 @@ namespace lqf {
 
         void updateColumns(uint64_t columns);
 
-        inline uint64_t size() { return fileReader_->metadata()->num_rows(); }
+        inline uint64_t size() override { return fileReader_->metadata()->num_rows(); }
 
         inline uint32_t numBlocks() { return fileReader_->metadata()->num_row_groups(); }
 
@@ -431,7 +423,7 @@ namespace lqf {
         Table *root_;
         unique_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
-        TableView(const vector<uint32_t> &, unique_ptr<Stream<shared_ptr<Block>>>);
+        TableView(Table *, const vector<uint32_t> &, unique_ptr<Stream<shared_ptr<Block>>>);
 
         virtual ~TableView() = default;
 
@@ -475,6 +467,8 @@ namespace lqf {
         const vector<uint32_t> &colSize() override;
 
         const vector<uint32_t> &colOffset();
+
+        inline bool isVertical() { return vertical_; }
     };
 
     using TableOutput = parallel::TypedOutput<shared_ptr<Table>>;

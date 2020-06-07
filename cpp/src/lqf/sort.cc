@@ -10,6 +10,88 @@ using namespace std::placeholders;
 
 namespace lqf {
 
+    namespace sort {
+        SortBlock::SortBlock() {}
+
+        SortBlock::~SortBlock() {
+            for (auto &item: content_) {
+                delete item;
+            }
+        }
+
+        uint64_t SortBlock::size() {
+            return content_.size();
+        }
+
+        void SortBlock::copy(const shared_ptr<Block> &source) {
+            sources_.push_back(source);
+            auto rows = source->rows();
+            auto size = source->size();
+            for (uint32_t i = 0; i < size; ++i) {
+                content_.push_back(rows->next().snapshot().release());
+            }
+        }
+
+        class SortColumnIterator : public ColumnIterator {
+        protected:
+            vector<DataRow *> &ref_;
+            uint32_t col_index_;
+            uint32_t index_;
+        public:
+            SortColumnIterator(vector<DataRow *> &ref, uint32_t col_index)
+                    : ref_(ref), col_index_(col_index), index_(-1) {}
+
+            DataField &next() override {
+                index_++;
+                return (*ref_[index_])[col_index_];
+            }
+
+            uint64_t pos() override {
+                return index_;
+            }
+
+            DataField &operator[](uint64_t index) override {
+                index_ = index;
+                return (*ref_[index_])[col_index_];
+            }
+        };
+
+        unique_ptr<ColumnIterator> SortBlock::col(uint32_t col_index) {
+            return unique_ptr<ColumnIterator>(new SortColumnIterator(content_, col_index));
+        }
+
+        class SortRowIterator : public DataRowIterator {
+        protected:
+            vector<DataRow *> &ref_;
+            uint32_t index_;
+        public:
+            SortRowIterator(vector<DataRow *> &ref) : ref_(ref), index_(-1) {}
+
+            DataRow &next() override {
+                index_++;
+                return *(ref_[index_]);
+            }
+
+            uint64_t pos() override {
+                return index_;
+            }
+
+            DataRow &operator[](uint64_t index) override {
+                index_ = index;
+                return *(ref_[index_]);
+            }
+        };
+
+        unique_ptr<DataRowIterator> SortBlock::rows() {
+            return unique_ptr<DataRowIterator>(new SortRowIterator(content_));
+        }
+
+        shared_ptr<Block> SortBlock::mask(shared_ptr<Bitmap> mask) {
+            return make_shared<MaskedBlock>(shared_from_this(), mask);
+        }
+    }
+    using namespace sort;
+
     SmallSort::SmallSort(function<bool(DataRow *, DataRow *)> comp, bool vertical)
             : Node(1), comparator_(comp), vertical_(vertical) {}
 
@@ -22,17 +104,14 @@ namespace lqf {
     shared_ptr<Table> SmallSort::sort(Table &table) {
         auto output = MemTable::Make(table.colSize(), false);
 
-        auto block = make_shared<MemListBlock>();
-        auto container = &block->content();
-        table.blocks()->foreach([container](const shared_ptr<Block> &block) {
-            auto rows = block->rows();
-            auto block_size = block->size();
-            for (uint32_t i = 0; i < block_size; ++i) {
-                container->push_back(rows->next().snapshot().release());
-            }
+        auto sblock = make_shared<SortBlock>();
+        // TODO Note the multi-thread here
+        table.blocks()->sequential()->foreach([sblock](const shared_ptr<Block> &block) {
+            sblock->copy(block);
         });
-        std::sort(container->begin(), container->end(), comparator_);
-        output->append(block);
+        auto &container = sblock->content();
+        std::sort(container.begin(), container.end(), comparator_);
+        output->append(sblock);
         return output;
     }
 
@@ -48,7 +127,7 @@ namespace lqf {
     }
 
     shared_ptr<Table> SnapshotSort::sort(Table &input) {
-        auto memblock = make_shared<MemListBlock>();
+        auto memblock = make_shared<SortBlock>();
         auto row_cache = &(memblock->content());
         input.blocks()->sequential()->foreach([this, row_cache](const shared_ptr<Block> &block) {
             auto block_size = block->size();

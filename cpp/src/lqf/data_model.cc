@@ -9,6 +9,7 @@
 #include <parquet/column_reader.h>
 #include "validate.h"
 #include "data_model.h"
+#include "memorypool.h"
 
 using namespace std;
 
@@ -98,7 +99,7 @@ namespace lqf {
         return view_;
     }
 
-    void MemDataRow::operator=(DataRow &row) {
+    DataRow &MemDataRow::operator=(DataRow &row) {
         if (row.raw()) {
             memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.raw()),
                    sizeof(uint64_t) * data_.size());
@@ -108,6 +109,7 @@ namespace lqf {
                 (*this)[i] = row[i];
             }
         }
+        return *this;
     }
 
     MemDataRow &MemDataRow::operator=(MemDataRow &row) {
@@ -178,9 +180,28 @@ namespace lqf {
             return data_.data() + index_ * row_size_;
         }
 
-        void operator=(DataRow &row) override {
-            memcpy(static_cast<void *>(data_.data() + index_ * row_size_), static_cast<void *>(row.raw()),
-                   sizeof(uint64_t) * row_size_);
+        uint32_t size() override {
+            return row_size_;
+        }
+
+        uint32_t num_fields() override {
+            return col_offset_.size() - 1;
+        }
+
+        DataRow &operator=(DataRow &row) override {
+            if (row.raw()) {
+                memcpy(static_cast<void *>(data_.data() + index_ * row_size_), static_cast<void *>(row.raw()),
+                       sizeof(uint64_t) * row_size_);
+            } else {
+                auto offset_size = col_offset_.size();
+                for (uint32_t i = 0; i < offset_size - 1; ++i) {
+                    if (row[i].size_ == 2) {
+                        lqf::memory::ByteArrayBuffer::instance.allocate(row[i].asByteArray());
+                    }
+                    (*this)[i] = row[i];
+                }
+            }
+            return *this;
         }
     };
 
@@ -331,11 +352,19 @@ namespace lqf {
             return view_;
         }
 
-        void operator=(DataRow &row) override {
+        uint32_t num_fields() override {
+            return col_size_.size();
+        }
+
+        DataRow &operator=(DataRow &row) override {
             uint32_t num_cols = cols_->size();
             for (uint32_t i = 0; i < num_cols; ++i) {
+                if (row[i].size_ == 2) {
+                    lqf::memory::ByteArrayBuffer::instance.allocate(row[i].asByteArray());
+                }
                 (*this)[i] = row[i];
             }
+            return *this;
         }
 
         unique_ptr<DataRow> snapshot() override {
@@ -392,76 +421,6 @@ namespace lqf {
         }
         // The old memblock is discarded
         another.content_.clear();
-    }
-
-    MemListBlock::MemListBlock() {}
-
-    MemListBlock::~MemListBlock() {
-        for (auto &item: content_) {
-            delete item;
-        }
-    }
-
-    uint64_t MemListBlock::size() {
-        return content_.size();
-    }
-
-    class MemListColumnIterator : public ColumnIterator {
-    protected:
-        vector<DataRow *> &ref_;
-        uint32_t col_index_;
-        uint32_t index_;
-    public:
-        MemListColumnIterator(vector<DataRow *> &ref, uint32_t col_index)
-                : ref_(ref), col_index_(col_index), index_(-1) {}
-
-        DataField &next() override {
-            index_++;
-            return (*ref_[index_])[col_index_];
-        }
-
-        uint64_t pos() override {
-            return index_;
-        }
-
-        DataField &operator[](uint64_t index) override {
-            index_ = index;
-            return (*ref_[index_])[col_index_];
-        }
-    };
-
-    unique_ptr<ColumnIterator> MemListBlock::col(uint32_t col_index) {
-        return unique_ptr<ColumnIterator>(new MemListColumnIterator(content_, col_index));
-    }
-
-    class MemListRowIterator : public DataRowIterator {
-    protected:
-        vector<DataRow *> &ref_;
-        uint32_t index_;
-    public:
-        MemListRowIterator(vector<DataRow *> &ref) : ref_(ref), index_(-1) {}
-
-        DataRow &next() override {
-            index_++;
-            return *(ref_[index_]);
-        }
-
-        uint64_t pos() override {
-            return index_;
-        }
-
-        DataRow &operator[](uint64_t index) override {
-            index_ = index;
-            return *(ref_[index_]);
-        }
-    };
-
-    unique_ptr<DataRowIterator> MemListBlock::rows() {
-        return unique_ptr<DataRowIterator>(new MemListRowIterator(content_));
-    }
-
-    shared_ptr<Block> MemListBlock::mask(shared_ptr<Bitmap> mask) {
-        return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
     MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)
@@ -631,6 +590,8 @@ namespace lqf {
     public:
         ParquetRowView(vector<unique_ptr<ParquetColumnIterator>> &cols) : columns_(cols), index_(-1) {}
 
+        virtual ~ParquetRowView() = default;
+
         virtual DataField &operator[](uint64_t colindex) override {
             return (*(columns_[colindex]))[index_];
         }
@@ -723,7 +684,9 @@ namespace lqf {
         return blocks()->map(sizer)->reduce(reducer);
     }
 
-    ParquetTable::ParquetTable(const string &fileName, uint64_t columns) : name_(fileName), columns_(columns) {
+    ParquetTable::ParquetTable(const string &fileName, uint64_t columns)
+            : name_(fileName), columns_(columns) {
+        external_ = true;
         fileReader_ = ParquetFileReader::OpenFile(fileName);
         if (!fileReader_) {
             throw std::invalid_argument("ParquetTable-Open: file not found");
@@ -777,6 +740,7 @@ namespace lqf {
 
     MaskedTable::MaskedTable(ParquetTable *inner, vector<shared_ptr<Bitmap>> &masks)
             : inner_(inner), masks_(masks) {
+        external_ = inner_->isExternal();
         masks_.resize(inner_->numBlocks());
     }
 
@@ -797,8 +761,10 @@ namespace lqf {
         return make_shared<MaskedBlock>(pblock, masks_[pblock->index()]);
     }
 
-    TableView::TableView(const vector<uint32_t> &col_size, unique_ptr<Stream<shared_ptr<Block>>> stream)
-            : col_size_(col_size), stream_(move(stream)) {}
+    TableView::TableView(Table *ref, const vector<uint32_t> &col_size, unique_ptr<Stream<shared_ptr<Block>>> stream)
+            : col_size_(col_size), stream_(move(stream)) {
+        external_ = ref->isExternal();
+    }
 
     const vector<uint32_t> &TableView::colSize() {
         return col_size_;
@@ -818,6 +784,7 @@ namespace lqf {
 
     MemTable::MemTable(const vector<uint32_t> col_size, bool vertical)
             : vertical_(vertical), col_size_(col_size), row_size_(0), blocks_(vector<shared_ptr<Block>>()) {
+        external_ = false;
         col_offset_.push_back(0);
         auto num_fields = col_size_.size();
         for (uint8_t k = 0; k < num_fields; ++k) {
@@ -884,4 +851,5 @@ namespace lqf {
     template unique_ptr<Dictionary<DoubleType>> ParquetTable::LoadDictionary<DoubleType>(int index);
 
     template unique_ptr<Dictionary<ByteArrayType>> ParquetTable::LoadDictionary<ByteArrayType>(int index);
+
 }

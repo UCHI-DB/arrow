@@ -9,6 +9,7 @@
 #include "data_model.h"
 #include "hash_container.h"
 #include "container.h"
+#include "rowcopy.h"
 
 #define JL(x) x
 #define JR(x) x | 0x10000
@@ -23,6 +24,7 @@
 namespace lqf {
     using namespace std;
     using namespace lqf::container;
+    using namespace lqf::rowcopy;
 
     static function<bool(DataRow &, DataRow &)> TRUE = [](DataRow &a, DataRow &b) { return true; };
 
@@ -30,63 +32,77 @@ namespace lqf {
 
         class JoinBuilder {
         protected:
+            bool init_ = false;
+
             bool needkey_;
             bool vertical_;
 
-            vector<uint32_t> output_col_offsets_;
+            vector<int32_t> field_list_;
+
+            INPUT_TYPE left_type_;
+            INPUT_TYPE right_type_;
+
+            vector<uint32_t> left_col_offset_;
+            vector<uint32_t> right_col_offset_;
+
+            vector<uint32_t> output_col_offset_;
             vector<uint32_t> output_col_size_;
 
-            vector<uint32_t> right_col_offsets_;
-            vector<uint32_t> right_col_size_;
+            vector<uint32_t> snapshot_col_offset_;
+            vector<uint32_t> snapshot_col_size_;
 
-            vector<pair<uint8_t, uint8_t>> left_inst_;
-            vector<pair<uint8_t, uint8_t>> left_raw_;
-
-            vector<pair<uint8_t, uint8_t>> right_read_inst_;
-            vector<pair<uint8_t, uint8_t>> right_read_raw_;
-
-            vector<pair<uint8_t, uint8_t>> right_write_inst_;
-
-            void init(initializer_list<int32_t>);
+            unique_ptr<function<void(DataRow &, DataRow &)>> snapshot_copier_;
 
         public:
             JoinBuilder(initializer_list<int32_t>, bool needkey, bool vertical);
 
             virtual ~JoinBuilder() = default;
 
+            void on(Table &, Table &);
+
+            virtual void init();
+
             inline bool useVertical() { return vertical_; }
 
-            inline vector<uint32_t> &outputColOffset() { return output_col_offsets_; }
-
+//            inline vector<uint32_t> &outputColOffset() { return output_col_offsets_; }
+//
             inline vector<uint32_t> &outputColSize() { return output_col_size_; }
-
-            inline vector<uint32_t> &rightColOffset() { return right_col_offsets_; }
+//
+//            inline vector<uint32_t> &rightColOffset() { return right_col_offsets_; }
 
             virtual unique_ptr<MemDataRow> snapshot(DataRow &);
         };
 
         class RowBuilder : public JoinBuilder {
+        protected:
+            unique_ptr<function<void(DataRow &, DataRow &)>> left_copier_;
+            unique_ptr<function<void(DataRow &, DataRow &)>> right_copier_;
 
         public:
             RowBuilder(initializer_list<int32_t>, bool needkey = false, bool vertical = false);
 
             virtual ~RowBuilder() = default;
 
+            void init() override;
+
             virtual void build(DataRow &, DataRow &, DataRow &, int32_t key);
         };
 
         /// For use with VJoin
         class ColumnBuilder : public JoinBuilder {
+        protected:
+            vector<pair<uint8_t,uint8_t>> left_merge_inst_;
+            vector<pair<uint8_t,uint8_t>> right_merge_inst_;
         public:
             ColumnBuilder(initializer_list<int32_t>);
 
             virtual ~ColumnBuilder() = default;
 
-            inline const vector<uint32_t> &rightColSize() { return right_col_size_; }
+            void init() override;
 
-            inline const vector<pair<uint8_t, uint8_t>> &leftInst() { return left_inst_; }
+            inline const vector<uint32_t> &rightColSize() { return snapshot_col_size_; }
 
-            inline const vector<pair<uint8_t, uint8_t>> &rightInst() { return right_write_inst_; }
+            virtual void build(MemvBlock &, MemvBlock &, MemvBlock &);
         };
 
     }

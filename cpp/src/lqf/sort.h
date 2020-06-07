@@ -26,6 +26,29 @@ namespace lqf {
 
     using namespace parallel;
 
+    namespace sort {
+        class SortBlock : public Block {
+        private:
+            vector<DataRow *> content_;
+            vector<shared_ptr<Block>> sources_;
+        public:
+            SortBlock();
+
+            virtual ~SortBlock();
+
+            uint64_t size() override;
+
+            void copy(const shared_ptr<Block>& source);
+
+            inline vector<DataRow *> &content() { return content_; }
+
+            unique_ptr<ColumnIterator> col(uint32_t) override;
+
+            unique_ptr<DataRowIterator> rows() override;
+
+            shared_ptr<Block> mask(shared_ptr<Bitmap>) override;
+        };
+    }
     /**
      *
      */

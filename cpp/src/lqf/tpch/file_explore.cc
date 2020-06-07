@@ -18,25 +18,11 @@ using namespace lqf::hashcontainer;
 
 int main() {
 
-    auto lineitem = ParquetTable::Open(LineItem::path,
+    auto lineitem = ParquetTable::Open("testres/lineitem",
                                        {LineItem::COMMITDATE, LineItem::SHIPDATE, LineItem::RECEIPTDATE});
-//    lineitem->blocks()->foreach([](const shared_ptr<Block>& block){
-//        cout << block->size() << '\n';
-//    });
-    auto filter = SboostRow2Filter(LineItem::COMMITDATE, LineItem::RECEIPTDATE, LineItem::SHIPDATE);
+    cout << lineitem->numBlocks() << endl;
+    cout << lineitem->size() << endl;
+    auto blocks = lineitem->blocks()->collect();
+    auto block = (*blocks)[0];
 
-    auto filtered = filter.filter(*lineitem);
-    cout << filtered->size() << endl;
-//    filtered->blocks()->foreach([](const shared_ptr<Block> &block) {
-//        auto mblock = dynamic_pointer_cast<MaskedBlock>(block);
-//        auto mask = mblock->mask();
-//        auto ite = mask->iterator();
-//        uint64_t max = -1;
-//        auto size = mask->cardinality();
-////        cout << size << endl;
-//        for (uint32_t i = 0; i < size; ++i) {
-//            max = ite->next();
-//        }
-//        cout << max << '\n';
-//    });
 }

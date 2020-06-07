@@ -29,7 +29,7 @@ namespace lqf {
     shared_ptr<Table> Filter::filter(Table &input) {
         function<shared_ptr<Block>(
                 const shared_ptr<Block> &)> mapper = bind(&Filter::processBlock, this, _1);
-        return make_shared<TableView>(input.colSize(), input.blocks()->map(mapper));
+        return make_shared<TableView>(&input, input.colSize(), input.blocks()->map(mapper));
     }
 
     shared_ptr<Block> Filter::processBlock(const shared_ptr<Block> &input) {

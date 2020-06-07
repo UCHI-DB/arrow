@@ -41,7 +41,7 @@ function(ADD_LQF_BENCHMARK REL_TEST_NAME)
 endfunction()
 
 set(LQF_SIMD_FLAGS -msse4.1 -mavx -mavx2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mbmi2)
-set(LQF_BENCHMARK_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads)
+set(LQF_BENCHMARK_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads lqf_static)
 
 set(LQF_SRCS
         threadpool.cc
@@ -64,7 +64,8 @@ set(LQF_SRCS
         hash.cc
         hash_container.cc
         lang.cc
-        memory.cc
+        memorypool.cc
+        rowcopy.cc
         )
 
 add_arrow_lib(lqf
@@ -108,6 +109,7 @@ set(LQF_TEST_SRC
         mat_test.cc
         container_test.cc
         parallel_test.cc
+        rowcopy_test.cc
         )
 
 add_test_case(all-test
@@ -145,5 +147,6 @@ add_lqf_benchmark(container_benchmark)
 add_lqf_benchmark(join_benchmark)
 add_lqf_benchmark(bitmap_benchmark)
 add_lqf_benchmark(stream_benchmark)
+add_lqf_benchmark(rowcopy_benchmark)
 
 add_subdirectory(tpch)

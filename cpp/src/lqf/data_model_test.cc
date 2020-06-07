@@ -627,7 +627,7 @@ TEST(MemTableTest, Create) {
 TEST(TableViewTest, Create) {
     auto parquetTable = ParquetTable::Open("testres/lineitem");
     auto blocks = parquetTable->blocks();
-    TableView tableView(parquetTable->colSize(), move(blocks));
+    TableView tableView(parquetTable.get(), parquetTable->colSize(), move(blocks));
 
     tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
 //    tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
@@ -653,4 +653,7 @@ TEST(DataRowTest, Copy) {
         (*rows2)[i] = buffer[i];
         EXPECT_EQ((*rows1)[i][0].asInt(), (*rows2)[i][0].asInt());
     }
+}
+
+TEST(DataRowCopyTest, Copy) {
 }
