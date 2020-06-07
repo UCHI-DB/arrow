@@ -27,7 +27,7 @@ public:
     unique_ptr<function<void(DataRow &, DataRow &)>> copier2_;
 
     RowCopyBenchmark() {
-        mem_source_ = make_shared<MemBlock>(150000, 8);
+        mem_source_ = make_shared<MemBlock>(300000, 8);
 
         rowcopy::RowCopyFactory f;
         copier1_ = f.from(I_RAW)->to(I_RAW)
@@ -57,6 +57,11 @@ public:
 
     virtual ~RowCopyBenchmark() {
     }
+
+    template <class T>
+    void blackhole(T&& datum) {
+        asm volatile("" : "+g" (datum));
+    }
 };
 
 
@@ -67,8 +72,11 @@ BENCHMARK_F(RowCopyBenchmark, CopyVirtualFromMem)(benchmark::State &state) {
         auto writer = mem_dest->rows();
         auto size = mem_source_->size();
         for (uint32_t i = 0; i < size; ++i) {
-            (*writer)[i] = reader->next();
+            DataRow& next = reader->next();
+            if (i % 3 == 0)
+                (*writer)[i] = next;
         }
+        blackhole(mem_dest);
     }
 }
 
@@ -79,8 +87,11 @@ BENCHMARK_F(RowCopyBenchmark, CopyDirectFromMem)(benchmark::State &state) {
         auto writer = mem_dest->rows();
         auto size = mem_source_->size();
         for (uint32_t i = 0; i < size; ++i) {
-            elements::rc_memcpy((*writer)[i], reader->next());
+            DataRow& next = reader->next();
+            if (i % 3 == 0)
+                elements::rc_memcpy((*writer)[i], next);
         }
+        blackhole(mem_dest);
     }
 }
 
@@ -92,8 +103,11 @@ BENCHMARK_F(RowCopyBenchmark, CopyMethodFromMem)(benchmark::State &state) {
         auto size = mem_source_->size();
 
         for (uint32_t i = 0; i < size; ++i) {
-            (*copier1_)((*writer)[i], reader->next());
+            DataRow& next = reader->next();
+            if (i % 3 == 0)
+                (*copier1_)((*writer)[i], next);
         }
+        blackhole(mem_dest);
     }
 }
 
@@ -111,6 +125,7 @@ BENCHMARK_F(RowCopyBenchmark, CopyVirtualFromParquet)(benchmark::State &state) {
         for (uint32_t i = 0; i < size; ++i) {
             (*writer)[i] = reader->next();
         }
+        blackhole(mem_dest);
     }
 }
 
@@ -131,5 +146,6 @@ BENCHMARK_F(RowCopyBenchmark, CopyMethodFromParquet)(benchmark::State &state) {
         for (uint32_t i = 0; i < size; ++i) {
             (*copier2_)((*writer)[i], reader->next());
         }
+        blackhole(mem_dest);
     }
 }

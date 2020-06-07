@@ -35,8 +35,8 @@ namespace lqf {
                 new_slab();
             }
             uint8_t *target = buffer_[index_] + offset_;
-            std::memcpy(buffer_[index_] + offset_, (void *) input.ptr, input.len);
-            input.ptr = buffer_[index_] + offset_;
+            std::memcpy(target, input.ptr, input.len);
+            input.ptr = target;
             offset_ += input.len;
         }
     }
