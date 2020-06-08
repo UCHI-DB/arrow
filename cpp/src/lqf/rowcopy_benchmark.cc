@@ -8,7 +8,6 @@
 #include <functional>
 #include "container.h"
 #include "bitmap.h"
-#include "threadpool.h"
 #include "data_model.h"
 #include "rowcopy.h"
 
@@ -16,6 +15,11 @@ using namespace lqf;
 using namespace lqf::container;
 using namespace lqf::threadpool;
 using namespace lqf::rowcopy;
+
+template <class T>
+void blackhole(T&& datum) {
+    asm volatile("" : "+g" (datum));
+}
 
 class RowCopyBenchmark : public benchmark::Fixture {
 protected:
@@ -58,10 +62,7 @@ public:
     virtual ~RowCopyBenchmark() {
     }
 
-    template <class T>
-    void blackhole(T&& datum) {
-        asm volatile("" : "+g" (datum));
-    }
+
 };
 
 

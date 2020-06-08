@@ -113,7 +113,7 @@ namespace lqf {
     }
 
     MemDataRow &MemDataRow::operator=(MemDataRow &row) {
-        memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.raw()),
+        memcpy(static_cast<void *>(data_.data()), static_cast<void *>(row.data_.data()),
                sizeof(uint64_t) * data_.size());
         return *this;
     }
@@ -195,9 +195,6 @@ namespace lqf {
             } else {
                 auto offset_size = col_offset_.size();
                 for (uint32_t i = 0; i < offset_size - 1; ++i) {
-                    if (row[i].size_ == 2) {
-                        lqf::memory::ByteArrayBuffer::instance.allocate(row[i].asByteArray());
-                    }
                     (*this)[i] = row[i];
                 }
             }
@@ -359,9 +356,6 @@ namespace lqf {
         DataRow &operator=(DataRow &row) override {
             uint32_t num_cols = cols_->size();
             for (uint32_t i = 0; i < num_cols; ++i) {
-                if (row[i].size_ == 2) {
-                    lqf::memory::ByteArrayBuffer::instance.allocate(row[i].asByteArray());
-                }
                 (*this)[i] = row[i];
             }
             return *this;
@@ -603,6 +597,8 @@ namespace lqf {
         unique_ptr<DataRow> snapshot() override {
             return nullptr;
         }
+
+        DataRow &operator=(DataRow &) override { return *this; }
     };
 
     template<typename DTYPE>

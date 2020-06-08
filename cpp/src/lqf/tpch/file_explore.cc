@@ -16,13 +16,31 @@ using namespace lqf::tpch;
 using namespace lqf::hashcontainer;
 
 
+class A {
+public:
+    virtual void print() = 0;
+};
+
+class B : public A {
+public:
+    void print() override {
+        cout << "From B" << endl;
+    }
+};
+
+class Builder {
+protected:
+    B b;
+public:
+    A &build() {
+        return b;
+    }
+};
+
 int main() {
+    Builder builder;
+    builder.build().print();
 
-    auto lineitem = ParquetTable::Open("testres/lineitem",
-                                       {LineItem::COMMITDATE, LineItem::SHIPDATE, LineItem::RECEIPTDATE});
-    cout << lineitem->numBlocks() << endl;
-    cout << lineitem->size() << endl;
-    auto blocks = lineitem->blocks()->collect();
-    auto block = (*blocks)[0];
-
+    A &a = builder.build();
+    a.print();
 }

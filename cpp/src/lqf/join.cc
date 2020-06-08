@@ -39,9 +39,6 @@ namespace lqf {
         void JoinBuilder::init() {}
 
         unique_ptr<MemDataRow> JoinBuilder::snapshot(DataRow &input) {
-            if (!init_) {
-                throw "not init";
-            }
             auto res = unique_ptr<MemDataRow>(new MemDataRow(snapshot_col_offset_));
             (*snapshot_copier_)(*res, input);
             return res;
@@ -51,7 +48,6 @@ namespace lqf {
                 : JoinBuilder(fields, needkey, vertical) {}
 
         void RowBuilder::init() {
-            init_ = true;
             uint32_t i = needkey_;
             uint32_t right_counter = 0;
 
@@ -130,9 +126,6 @@ namespace lqf {
         }
 
         void RowBuilder::build(DataRow &output, DataRow &left, DataRow &right, int key) {
-            if (!init_)
-                throw "not init";
-
             if (needkey_) {
                 output[0] = key;
             }
@@ -144,8 +137,6 @@ namespace lqf {
                 : JoinBuilder(fields, false, true) {}
 
         void ColumnBuilder::init() {
-            init_ = true;
-
             RowCopyFactory snapshot_factory;
 
             snapshot_factory.from(right_type_);
@@ -192,9 +183,6 @@ namespace lqf {
         }
 
         void ColumnBuilder::build(MemvBlock &output, MemvBlock &left, MemvBlock &right) {
-            if (!init_) {
-                throw "not init";
-            }
             output.merge(left, left_merge_inst_);
             output.merge(right, right_merge_inst_);
         }

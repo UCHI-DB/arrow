@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include "data_model.cc"
+#include "rowcopy.h"
 
 using namespace lqf;
 
@@ -646,10 +647,14 @@ TEST(DataRowTest, Copy) {
 
     srand(time(NULL));
 
+    using namespace rowcopy;
+    auto copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
+
     for (int i = 0; i < 100; ++i) {
         (*rows1)[i][0] = rand();
-        buffer.push_back(MemDataRow(4));
-        buffer[i] = (*rows1)[i];
+        buffer.emplace_back(4);
+        (*copier)(buffer[i], (*rows1)[i]);
+        EXPECT_EQ((*rows1)[i][0].asInt(), buffer[i][0].asInt());
         (*rows2)[i] = buffer[i];
         EXPECT_EQ((*rows1)[i][0].asInt(), (*rows2)[i][0].asInt());
     }

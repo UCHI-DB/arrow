@@ -56,6 +56,12 @@ namespace lqf {
             RowCopyFactory *field(FIELD_TYPE type, uint32_t from, uint32_t to);
 
             unique_ptr<function<void(DataRow &, DataRow &)>> build();
+
+            unique_ptr<function<void(DataRow &, DataRow &)>>
+            buildAssign(INPUT_TYPE from, INPUT_TYPE to, uint32_t num_fields);
+
+            unique_ptr<function<void(DataRow &, DataRow &)>>
+            buildAssign(INPUT_TYPE from, INPUT_TYPE to, vector<uint32_t> &col_size);
         };
 
         namespace elements {
@@ -66,7 +72,7 @@ namespace lqf {
 
             inline void
             rc_fieldmemcpy(DataRow &to, DataRow &from, uint32_t from_start, uint32_t to_start, uint32_t len) {
-                memcpy(to.raw() + to_start, from.raw() + from_start, len * sizeof(uint64_t));
+                memcpy((void*)(to.raw() + to_start), (void*)(from.raw() + from_start), len * sizeof(uint64_t));
             }
 
             inline void rc_field(DataRow &to, DataRow &from, uint32_t to_idx, uint32_t from_idx) {

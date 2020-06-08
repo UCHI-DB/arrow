@@ -88,7 +88,7 @@ namespace lqf {
             return (*this)[i];
         }
 
-        virtual DataRow &operator=(DataRow &row) { return *this; }
+        virtual DataRow &operator=(DataRow &row) = 0;
 
         virtual uint32_t size() {
             return 0;

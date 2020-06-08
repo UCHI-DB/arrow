@@ -32,8 +32,6 @@ namespace lqf {
 
         class JoinBuilder {
         protected:
-            bool init_ = false;
-
             bool needkey_;
             bool vertical_;
 
@@ -64,11 +62,7 @@ namespace lqf {
 
             inline bool useVertical() { return vertical_; }
 
-//            inline vector<uint32_t> &outputColOffset() { return output_col_offsets_; }
-//
             inline vector<uint32_t> &outputColSize() { return output_col_size_; }
-//
-//            inline vector<uint32_t> &rightColOffset() { return right_col_offsets_; }
 
             virtual unique_ptr<MemDataRow> snapshot(DataRow &);
         };
