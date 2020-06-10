@@ -203,7 +203,7 @@ namespace lqf {
         }
 
         shared_ptr<Hash32Container> HashBuilder::buildContainer(Table &input, uint32_t keyIndex,
-                                                                function<unique_ptr<MemDataRow>(DataRow &)> builder) {
+                                                                Snapshoter *builder) {
             Hash32Container *container = new Hash32Container();
             shared_ptr<Hash32Container> retval = shared_ptr<Hash32Container>(container);
 
@@ -219,7 +219,7 @@ namespace lqf {
                 for (uint32_t i = 0; i < block_size; ++i) {
                     DataRow &row = rows->next();
                     auto key = row[keyIndex].asInt();
-                    container->add(key, builder(row));
+                    container->add(key, (*builder)(row));
                 }
             };
             input.blocks()->foreach(processor);
@@ -228,7 +228,7 @@ namespace lqf {
 
         shared_ptr<Hash64Container> HashBuilder::buildContainer(Table &input,
                                                                 function<int64_t(DataRow &)> key_maker,
-                                                                function<unique_ptr<MemDataRow>(DataRow &)> builder) {
+                                                                Snapshoter *builder) {
             Hash64Container *container = new Hash64Container();
             shared_ptr<Hash64Container> retval = shared_ptr<Hash64Container>(container);
             function<void(const shared_ptr<Block> &)> processor = [builder, &container, &retval, key_maker](
@@ -242,7 +242,7 @@ namespace lqf {
                 for (uint32_t i = 0; i < block_size; ++i) {
                     DataRow &row = rows->next();
                     auto key = key_maker(row);
-                    container->add(key, builder(row));
+                    container->add(key, (*builder)(row));
                 }
             };
             input.blocks()->foreach(processor);

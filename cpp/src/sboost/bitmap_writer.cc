@@ -42,7 +42,7 @@ namespace sboost {
 //                remain -= 64;
 //            }
             int destIndex = remain >> 6;
-            memcpy(data + index, word, sizeof(uint64_t) * destIndex);
+            memcpy((void *) (data + index), (void *) word, sizeof(uint64_t) * destIndex);
             index += destIndex;
             remain &= 0x3F;
             if (remain > 0) {

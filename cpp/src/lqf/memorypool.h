@@ -34,7 +34,15 @@ namespace lqf {
         public:
             ByteArrayBuffer();
 
+            ByteArrayBuffer(ByteArrayBuffer &) = delete;
+
+            ByteArrayBuffer(ByteArrayBuffer &&) = delete;
+
             virtual ~ByteArrayBuffer();
+
+            ByteArrayBuffer &operator=(ByteArrayBuffer &) = delete;
+
+            ByteArrayBuffer &operator=(ByteArrayBuffer &&) = delete;
 
             void allocate(parquet::ByteArray &input);
 

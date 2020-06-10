@@ -26,20 +26,6 @@ namespace lqf {
 
         uint32_t ceil2(uint32_t);
 
-        template<typename T>
-        class ConcurrentVectorWrapper {
-        protected:
-            unique_ptr<vector<T>> content_;
-        public:
-            ConcurrentVectorWrapper() {
-                content_ = unique_ptr<vector<T>>(new vector<T>());
-            }
-
-            void push_back(T element) {
-
-            }
-        };
-
         template<typename DTYPE>
         class PhaseConcurrentHashSet {
             using type = typename DTYPE::type;
@@ -99,6 +85,14 @@ namespace lqf {
             virtual ~PhaseConcurrentHashSet() {
                 delete content_;
             }
+
+            PhaseConcurrentHashSet(PhaseConcurrentHashSet &) = delete;
+
+            PhaseConcurrentHashSet(PhaseConcurrentHashSet &&) = delete;
+
+            PhaseConcurrentHashSet &operator=(PhaseConcurrentHashSet &) = delete;
+
+            PhaseConcurrentHashSet &operator=(PhaseConcurrentHashSet &&) = delete;
 
             void add(type value) {
                 if (_insert(content_, value)) {
@@ -309,6 +303,14 @@ namespace lqf {
                 }
                 free(content_);
             }
+
+            PhaseConcurrentHashMap(PhaseConcurrentHashMap &) = delete;
+
+            PhaseConcurrentHashMap(PhaseConcurrentHashMap &&) = delete;
+
+            PhaseConcurrentHashMap &operator=(PhaseConcurrentHashMap &) = delete;
+
+            PhaseConcurrentHashMap &operator=(PhaseConcurrentHashMap &&) = delete;
 
             void put(ktype key, VTYPEP value) {
                 Entry entry;

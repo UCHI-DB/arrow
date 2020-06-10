@@ -112,7 +112,15 @@ namespace lqf {
     public:
         SimpleBitmap(uint64_t size);
 
+        SimpleBitmap(const SimpleBitmap &) = delete;
+
+        SimpleBitmap(SimpleBitmap &&);
+
         virtual ~SimpleBitmap();
+
+        SimpleBitmap &operator=(const SimpleBitmap &) = delete;
+
+        SimpleBitmap &operator=(SimpleBitmap &&);
 
         bool check(uint64_t pos) override;
 

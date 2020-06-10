@@ -72,7 +72,7 @@ namespace lqf {
 
             auto resultMap = new unordered_map<ColPredicate *, shared_ptr<Bitmap>>();
             for (uint32_t i = 0; i < preds.size(); ++i) {
-                (*resultMap)[preds[i]] = content[i]->result();
+                (*resultMap)[preds[i]] = move(content[i]->result());
             }
 
             unique_lock<mutex> lock(write_lock);

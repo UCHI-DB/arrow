@@ -1,3 +1,14 @@
+function(ADD_TPCH_EXEC NAME SOURCE)
+    add_executable(${NAME} ${SOURCE})
+    target_link_libraries(${NAME} PUBLIC tpch_static)
+    target_compile_options(${NAME} PUBLIC ${LQF_SIMD_FLAGS})
+    target_compile_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
+    target_link_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
+    target_compile_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
+    target_link_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
+endfunction()
+
+
 set(TPCH_SRC
         tpchquery.cc
         query1.cc
@@ -30,20 +41,7 @@ target_compile_options(tpch_static PUBLIC ${LQF_SIMD_FLAGS})
 
 add_lqf_benchmark(tpchquery_benchmark)
 
-add_executable(lqf-tpch-query-dev tpchquery_dev.cc)
-target_link_libraries(lqf-tpch-query-dev PUBLIC tpch_static)
-target_compile_options(lqf-tpch-query-dev PUBLIC ${LQF_SIMD_FLAGS})
-target_compile_options(lqf-tpch-query-dev PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-target_link_options(lqf-tpch-query-dev PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
 
-add_executable(lqf-threadsanitizer-exp threadsanitizer_exp.cc)
-target_link_libraries(lqf-threadsanitizer-exp PUBLIC tpch_static)
-target_compile_options(lqf-threadsanitizer-exp PUBLIC ${LQF_SIMD_FLAGS})
-target_compile_options(lqf-threadsanitizer-exp PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-target_link_options(lqf-threadsanitizer-exp PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-
-add_executable(lqf-file-explore file_explore.cc)
-target_link_libraries(lqf-file-explore PUBLIC tpch_static)
-target_compile_options(lqf-file-explore PUBLIC ${LQF_SIMD_FLAGS})
-target_compile_options(lqf-file-explore PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-target_link_options(lqf-file-explore PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+add_tpch_exec(lqf-tpch-query-dev tpchquery_dev.cc)
+add_tpch_exec(lqf-threadsanitizer-exp threadsanitizer_exp.cc)
+add_tpch_exec(lqf-file-explore file_explore.cc)

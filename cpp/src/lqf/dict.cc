@@ -4,10 +4,12 @@
 
 #include <parquet/encoding.h>
 #include "dict.h"
+#include "memorypool.h"
 
 namespace lqf {
 
     using namespace parquet;
+    using namespace lqf::memory;
 
     template<typename DTYPE>
     Dictionary<DTYPE>::Dictionary() {
@@ -16,12 +18,17 @@ namespace lqf {
 
     template<typename DTYPE>
     Dictionary<DTYPE>::Dictionary(shared_ptr<DictionaryPage> dpage) {
-        this->page_ = dpage;
         auto decoder = parquet::MakeTypedDecoder<DTYPE>(Encoding::PLAIN, nullptr);
         size_ = dpage->num_values();
         decoder->SetData(size_, dpage->data(), dpage->size());
         buffer_ = (T *) malloc(sizeof(T) * size_);
         decoder->Decode(buffer_, size_);
+        if (sizeof(T) == 16) { // This is a byte array, need to copy to mempool
+            for (auto i = 0u; i < size_; ++i) {
+                ByteArray *ba = (ByteArray *) buffer_ + i;
+                ByteArrayBuffer::instance.allocate(*ba);
+            }
+        }
     }
 
     template<typename DTYPE>

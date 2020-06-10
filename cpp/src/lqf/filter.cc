@@ -571,8 +571,8 @@ namespace lqf {
         void DictMultiEq<DTYPE>::scanPage(uint64_t numEntry, const uint8_t *data,
                                           uint64_t *bitmap, uint64_t bitmap_offset) {
             uint8_t bitWidth = data[0];
-
-            uint32_t buffer_size = (numEntry + 63) >> 6;
+            // See SimpleBitmap for the reason of +2 here
+            uint32_t buffer_size = (numEntry >> 6) + 2;
             uint64_t *page_oneresult = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * buffer_size);
             uint64_t *page_result = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * buffer_size);
 

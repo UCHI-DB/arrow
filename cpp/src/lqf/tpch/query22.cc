@@ -31,18 +31,22 @@ namespace lqf {
                 }
             };
 
-            vector<uint32_t> col_offset{0, 2, 3};
+            void phone_snapshot(DataRow &to, DataRow &from) {
+                auto &phone = from[Customer::PHONE].asByteArray();
+                to[0] = (int)((phone.ptr[0] - '0') * 10 + (phone.ptr[1] - '0'));
+                to[1] = from[Customer::ACCTBAL];
+            }
 
-            class PhoneBuilder : public JoinBuilder {
+            class PhoneBuilder : public RowBuilder {
             public:
-                PhoneBuilder() : JoinBuilder({JRS(Customer::PHONE), JR(Customer::ACCTBAL)}, false, false) {}
+                PhoneBuilder() : RowBuilder({JRS(Customer::PHONE), JR(Customer::ACCTBAL)}, false, false) {}
 
-                unique_ptr<MemDataRow> snapshot(DataRow &right) override {
-                    MemDataRow *result = new MemDataRow(col_offset);
-                    (*result)[0] = right[Customer::PHONE].asByteArray();
-                    (*result)[0].asByteArray().len = 2;
-                    (*result)[1] = right[Customer::ACCTBAL].asDouble();
-                    return unique_ptr<MemDataRow>(result);
+                void init() override {
+                    RowBuilder::init();
+                    snapshoter_ = RowCopyFactory().from(right_type_)->to(I_RAW)
+                            ->to_layout(colOffset(2))
+                            ->process(phone_snapshot)
+                            ->buildSnapshot();
                 }
             };
 
@@ -133,18 +137,18 @@ namespace lqf {
                 ByteArray &val = input[0].asByteArray();
                 return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
             };
-            auto agg = graph.add(new HashAgg(vector<uint32_t>{2, 1, 1}, {AGB(0)},
+            auto agg = graph.add(new HashAgg(vector<uint32_t>{2, 1, 1}, {AGI(0)},
                                              []() { return vector<AggField *>{new DoubleSum(1), new Count()}; },
                                              hasher), {notExistJoin});
 //            auto result = agg.agg(*noorderCust);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SBLE(0);
+                return SILE(0);
             };
             auto sorter = graph.add(new SmallSort(comparator), {agg});
 //            auto sorted = sorter.sort(*result);
 
-            graph.add(new Printer(PBEGIN PB(0) PD(1) PI(2) PEND), {sorter});
+            graph.add(new Printer(PBEGIN PI(0) PD(1) PI(2) PEND), {sorter});
 //            printer.print(*sorted);
             graph.execute();
         }
@@ -170,24 +174,24 @@ namespace lqf {
 //            cout << filteredCust->size() << endl;
 
             HashNotExistJoin notExistJoin(Orders::CUSTKEY, 0, new PhoneBuilder());
-            // PHONE, ACCTBAL
+            // PHONE_PREFIX, ACCTBAL
             auto noorderCust = notExistJoin.join(*order, *filteredCust);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 ByteArray &val = input[0].asByteArray();
                 return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
             };
-            HashAgg agg(vector<uint32_t>{2, 1, 1}, {AGB(0)},
+            HashAgg agg(vector<uint32_t>{2, 1, 1}, {AGI(0)},
                         []() { return vector<AggField *>{new DoubleSum(1), new Count()}; }, hasher);
             auto result = agg.agg(*noorderCust);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SBLE(0);
+                return SILE(0);
             };
             SmallSort sorter(comparator);
             auto sorted = sorter.sort(*result);
 
-            Printer printer(PBEGIN PB(0) PD(1) PI(2) PEND);
+            Printer printer(PBEGIN PI(0) PD(1) PI(2) PEND);
             printer.print(*sorted);
         }
     }

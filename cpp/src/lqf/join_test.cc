@@ -25,8 +25,9 @@ TEST(RowBuilderTest, Create) {
     right[1] = 34359543;
     right[2] = 33901;
 
-    auto lsn = rb.snapshot(left);
-    auto rsn = rb.snapshot(right);
+    auto snapshoter = rb.snapshoter();
+    auto lsn = (*snapshoter)(left);
+    auto rsn = (*snapshoter)(right);
     EXPECT_EQ(424, (*lsn)[0].asInt());
     EXPECT_EQ(87452, (*lsn)[1].asInt());
     EXPECT_EQ(33244, (*rsn)[0].asInt());

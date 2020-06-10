@@ -18,12 +18,8 @@ namespace lqf {
 
     class DictionaryBase {
     protected:
-        // We cache the page used by the dictionary here. Otherwise when it is released, byte array data will be lost.
-        shared_ptr<DictionaryPage> page_;
-
         uint32_t size_;
 
-        void *generic_buffer_;
     public:
 
         virtual ~DictionaryBase() = default;
@@ -44,7 +40,11 @@ namespace lqf {
 
         Dictionary(shared_ptr<DictionaryPage> data);
 
-        Dictionary(void* buffer);
+        Dictionary(void *buffer);
+
+        Dictionary(Dictionary &) = delete;
+
+        Dictionary(Dictionary &&) = delete;
 
         virtual ~Dictionary();
 
@@ -54,7 +54,9 @@ namespace lqf {
 
         unique_ptr<vector<uint32_t>> list(function<bool(const T &)>);
 
-        Dictionary<DTYPE> &operator=(Dictionary<DTYPE> &&other) {
+        Dictionary &operator=(Dictionary &) = delete;
+
+        Dictionary &operator=(Dictionary &&other) {
             this->buffer_ = other.buffer_;
             other.buffer_ = nullptr;
             this->size_ = other.size_;

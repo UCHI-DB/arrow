@@ -2,10 +2,12 @@
 // Created by harper on 2/5/20.
 //
 
+#include <assert.h>
 #include <cstring>
 #include <immintrin.h>
 #include "validate.h"
 #include "bitmap.h"
+#include <sboost/simd.h>
 
 namespace lqf {
 
@@ -100,20 +102,60 @@ namespace lqf {
     }
 
     SimpleBitmap::SimpleBitmap(uint64_t size) {
-        validate_true(size < 0xFFFFFFFFL, "size overflow");
+//        validate_true(size < 0xFFFFFFFFL, "size overflow");
         // Attention: Due to a glitch in sboost, the bitmap should be one word larger than
         // the theoretical size. Otherwise sboost will read past the boundary and cause
         // memory issues.
-        array_size_ = (size >> 6) + 1;
+        // In addition, the RLE encoding may have at most 7 entries appended to the tail.
+        // For simplicity, we just make the bitmap at least 64 bit larger.
+        array_size_ = (size >> 6) + 2;
 //        bitmap_ = (uint64_t *) malloc(sizeof(uint64_t) * array_size_);
         bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
         size_ = (int) size;
     }
 
+//    SimpleBitmap::SimpleBitmap(const SimpleBitmap &copy) {
+//        array_size_ = copy.array_size_;
+//        size_ = copy.size_;
+//        first_valid_ = copy.first_valid_;
+//        bitmap_ = (uint64_t *) aligned_alloc(64, array_size_);
+//        memcpy((void *) bitmap_, (void *) copy.bitmap_, sizeof(uint64_t) * array_size_);
+//    }
+
+    SimpleBitmap::SimpleBitmap(SimpleBitmap &&move) {
+        array_size_ = move.array_size_;
+        size_ = move.size_;
+        first_valid_ = move.first_valid_;
+        bitmap_ = move.bitmap_;
+        move.bitmap_ = nullptr;
+    }
+
     SimpleBitmap::~SimpleBitmap() {
-        free(bitmap_);
+        if (bitmap_ != nullptr)
+            free(bitmap_);
         bitmap_ = nullptr;
+    }
+
+//    SimpleBitmap &SimpleBitmap::operator=(const SimpleBitmap &copy) {
+//        if (bitmap_ != nullptr)
+//            free(bitmap_);
+//        array_size_ = copy.array_size_;
+//        size_ = copy.size_;
+//        first_valid_ = copy.first_valid_;
+//        bitmap_ = (uint64_t *) aligned_alloc(64, array_size_);
+//        memcpy((void *) bitmap_, (void *) copy.bitmap_, sizeof(uint64_t) * array_size_);
+//    }
+
+    SimpleBitmap &SimpleBitmap::operator=(SimpleBitmap &&move) {
+        if (bitmap_ != nullptr)
+            free(bitmap_);
+        array_size_ = move.array_size_;
+        size_ = move.size_;
+        first_valid_ = move.first_valid_;
+        bitmap_ = move.bitmap_;
+        move.bitmap_ = nullptr;
+        return *this;
     }
 
     bool SimpleBitmap::check(uint64_t pos) {
@@ -135,34 +177,36 @@ namespace lqf {
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         this->first_valid_ = -1;
-        uint64_t limit = (array_size_ >> 3) << 3;
-        uint64_t i = 0;
-        for (i = 0; i < limit; i += 8) {
-            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
-            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
-            __m512i res = _mm512_and_si512(a, b);
-            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
-        }
-        for (; i < array_size_; ++i) {
-            this->bitmap_[i] &= sx1.bitmap_[i];
-        }
+//        uint64_t limit = (array_size_ >> 3) << 3;
+//        uint64_t i = 0;
+//        for (i = 0; i < limit; i += 8) {
+//            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+//            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
+//            __m512i res = _mm512_and_si512(a, b);
+//            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
+//        }
+//        for (; i < array_size_; ++i) {
+//            this->bitmap_[i] &= sx1.bitmap_[i];
+//        }
+        sboost::simd::simd_and(bitmap_, sx1.bitmap_, array_size_);
         return shared_from_this();
     }
 
     shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         this->first_valid_ = -1;
-        uint64_t limit = (array_size_ >> 3) << 3;
-        uint64_t i = 0;
-        for (i = 0; i < limit; i += 8) {
-            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
-            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
-            __m512i res = _mm512_or_si512(a, b);
-            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
-        }
-        for (; i < array_size_; ++i) {
-            this->bitmap_[i] |= sx1.bitmap_[i];
-        }
+//        uint64_t limit = (array_size_ >> 3) << 3;
+//        uint64_t i = 0;
+//        for (i = 0; i < limit; i += 8) {
+//            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+//            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
+//            __m512i res = _mm512_or_si512(a, b);
+//            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
+//        }
+//        for (; i < array_size_; ++i) {
+//            this->bitmap_[i] |= sx1.bitmap_[i];
+//        }
+        sboost::simd::simd_or(bitmap_, sx1.bitmap_, array_size_);
         return shared_from_this();
     }
 
@@ -239,6 +283,7 @@ namespace lqf {
         uint32_t index = static_cast<uint32_t>(pos >> 6);
         uint32_t offset = static_cast<uint32_t> (pos & 0x3F);
         uint64_t modify = 1L << offset;
+        assert(index < array_size_);
         uint64_t oldval = bitmap_[index];
         uint64_t newval;
         do {

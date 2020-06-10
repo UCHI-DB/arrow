@@ -46,7 +46,15 @@ namespace lqf {
     public:
         PrintBuffer();
 
-        virtual ~PrintBuffer() = default;
+        PrintBuffer(PrintBuffer &) = delete;
+
+        PrintBuffer(PrintBuffer &&) = delete;
+
+        virtual ~PrintBuffer();
+
+        PrintBuffer &operator=(PrintBuffer &) = delete;
+
+        PrintBuffer &operator=(PrintBuffer &&) = delete;
 
         PrintBuffer &operator<<(const int32_t value);
 

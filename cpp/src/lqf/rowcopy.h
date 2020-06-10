@@ -34,8 +34,37 @@ namespace lqf {
             FieldInst(FIELD_TYPE, uint32_t, uint32_t);
         };
 
+        class FunctorBase {
+        protected:
+            vector<function<void(DataRow &, DataRow &)>> contents_;
+
+        public:
+            void add(function<void(DataRow &, DataRow &)>&& f) {
+                contents_.emplace_back(f);
+            }
+        };
+
+        class Snapshoter : public FunctorBase {
+        protected:
+            vector<uint32_t> col_offset_;
+        public:
+            Snapshoter(vector<uint32_t> &col_offset) : col_offset_(col_offset) {}
+
+            virtual unique_ptr<MemDataRow> operator()(DataRow &input) {
+                unique_ptr<MemDataRow> result = unique_ptr<MemDataRow>(new MemDataRow(col_offset_));
+                for (auto &p:contents_) {
+                    p(*result, input);
+                }
+                return result;
+            }
+
+            vector<uint32_t> &colOffset() {
+                return col_offset_;
+            }
+        };
+
         /**
-         * Generate
+         * Generate rowcopy objects
          */
         class RowCopyFactory {
         protected:
@@ -44,6 +73,10 @@ namespace lqf {
             vector<uint32_t> from_offset_;
             vector<uint32_t> to_offset_;
             vector<FieldInst> fields_;
+            vector<function<void(DataRow&,DataRow&)>> processors_;
+
+            void buildInternal(FunctorBase &);
+
         public:
             RowCopyFactory *from(INPUT_TYPE from);
 
@@ -55,6 +88,8 @@ namespace lqf {
 
             RowCopyFactory *field(FIELD_TYPE type, uint32_t from, uint32_t to);
 
+            RowCopyFactory *process(function<void(DataRow &, DataRow &)>);
+
             unique_ptr<function<void(DataRow &, DataRow &)>> build();
 
             unique_ptr<function<void(DataRow &, DataRow &)>>
@@ -62,6 +97,8 @@ namespace lqf {
 
             unique_ptr<function<void(DataRow &, DataRow &)>>
             buildAssign(INPUT_TYPE from, INPUT_TYPE to, vector<uint32_t> &col_size);
+
+            unique_ptr<Snapshoter> buildSnapshot();
         };
 
         namespace elements {
@@ -72,7 +109,7 @@ namespace lqf {
 
             inline void
             rc_fieldmemcpy(DataRow &to, DataRow &from, uint32_t from_start, uint32_t to_start, uint32_t len) {
-                memcpy((void*)(to.raw() + to_start), (void*)(from.raw() + from_start), len * sizeof(uint64_t));
+                memcpy((void *) (to.raw() + to_start), (void *) (from.raw() + from_start), len * sizeof(uint64_t));
             }
 
             inline void rc_field(DataRow &to, DataRow &from, uint32_t to_idx, uint32_t from_idx) {

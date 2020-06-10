@@ -20,49 +20,18 @@ namespace lqf {
             left_type_ = table_type(left);
             right_type_ = table_type(right);
 
-            auto last = 0U;
-            left_col_offset_.push_back(last);
-            for (auto &s:left.colSize()) {
-                auto insert = last + s;
-                left_col_offset_.push_back(insert);
-                last = insert;
-            }
-            last = 0U;
-            right_col_offset_.push_back(last);
-            for (auto &s:right.colSize()) {
-                auto insert = last + s;
-                right_col_offset_.push_back(insert);
-                last = insert;
-            }
+            left_col_offset_ = size2offset(left.colSize());
+            right_col_offset_ = size2offset(right.colSize());
         }
 
-        void JoinBuilder::init() {}
-
-        unique_ptr<MemDataRow> JoinBuilder::snapshot(DataRow &input) {
-            auto res = unique_ptr<MemDataRow>(new MemDataRow(snapshot_col_offset_));
-            (*snapshot_copier_)(*res, input);
-            return res;
-        }
-
-        RowBuilder::RowBuilder(initializer_list<int32_t> fields, bool needkey, bool vertical)
-                : JoinBuilder(fields, needkey, vertical) {}
-
-        void RowBuilder::init() {
+        void JoinBuilder::init() {
             uint32_t i = needkey_;
             uint32_t right_counter = 0;
 
             RowCopyFactory snapshot_factory;
-            RowCopyFactory left_factory;
-            RowCopyFactory right_factory;
 
             snapshot_factory.from(right_type_);
             snapshot_factory.to(I_RAW);
-
-            auto dest_type = vertical_ ? I_OTHER : I_RAW;
-            left_factory.from(left_type_);
-            left_factory.to(dest_type);
-            right_factory.from(I_RAW);
-            right_factory.to(dest_type);
 
             output_col_offset_.push_back(0);
             if (needkey_) {
@@ -82,22 +51,58 @@ namespace lqf {
 
                 if (is_right) {
                     FIELD_TYPE ifield_type;
-                    FIELD_TYPE ofield_type;
                     if (is_raw) {
                         ifield_type = F_RAW;
-                        ofield_type = F_REGULAR;
                     } else if (is_string) {
                         ifield_type = F_STRING;
-                        ofield_type = F_STRING;
                     } else {
                         ifield_type = F_REGULAR;
-                        ofield_type = F_REGULAR;
                     }
-                    snapshot_factory.field(ifield_type, index, right_counter);
-                    right_factory.field(ofield_type, right_counter++, i);
+                    snapshot_factory.field(ifield_type, index, right_counter++);
 
                     snapshot_col_size_.push_back(output_col_size_.back());
                     snapshot_col_offset_.push_back(snapshot_col_offset_.back() + snapshot_col_size_.back());
+                }
+                ++i;
+            }
+            snapshot_factory.from_layout(right_col_offset_);
+            snapshot_factory.to_layout(snapshot_col_offset_);
+            snapshoter_ = snapshot_factory.buildSnapshot();
+        }
+
+        RowBuilder::RowBuilder(initializer_list<int32_t> fields, bool needkey, bool vertical)
+                : JoinBuilder(fields, needkey, vertical) {}
+
+        void RowBuilder::init() {
+            JoinBuilder::init();
+            uint32_t i = needkey_;
+            uint32_t right_counter = 0;
+
+            RowCopyFactory left_factory;
+            RowCopyFactory right_factory;
+
+            auto dest_type = vertical_ ? I_OTHER : I_RAW;
+            left_factory.from(left_type_);
+            left_factory.to(dest_type);
+            right_factory.from(I_RAW);
+            right_factory.to(dest_type);
+
+            for (auto &inst: field_list_) {
+                auto index = inst & 0xffff;
+                bool is_string = inst >> 17;
+                bool is_raw = inst >> 18;
+                bool is_right = inst & 0x10000;
+
+                if (is_right) {
+                    FIELD_TYPE ofield_type;
+                    if (is_raw) {
+                        ofield_type = F_REGULAR;
+                    } else if (is_string) {
+                        ofield_type = F_STRING;
+                    } else {
+                        ofield_type = F_REGULAR;
+                    }
+                    right_factory.field(ofield_type, right_counter++, i);
                 } else {
                     FIELD_TYPE field_type;
                     if (is_raw) {
@@ -111,8 +116,6 @@ namespace lqf {
                 }
                 ++i;
             }
-            snapshot_factory.from_layout(right_col_offset_);
-            snapshot_factory.to_layout(snapshot_col_offset_);
 
             left_factory.from_layout(left_col_offset_);
             left_factory.to_layout(output_col_offset_);
@@ -120,7 +123,6 @@ namespace lqf {
             right_factory.from_layout(snapshot_col_offset_);
             right_factory.to_layout(output_col_offset_);
 
-            snapshot_copier_ = snapshot_factory.build();
             left_copier_ = left_factory.build();
             right_copier_ = right_factory.build();
         }
@@ -137,49 +139,22 @@ namespace lqf {
                 : JoinBuilder(fields, false, true) {}
 
         void ColumnBuilder::init() {
-            RowCopyFactory snapshot_factory;
-
-            snapshot_factory.from(right_type_);
-            snapshot_factory.to(I_RAW);
+            JoinBuilder::init();
 
             uint32_t i = 0;
             uint32_t right_counter = 0;
 
-            output_col_offset_.push_back(0);
-            snapshot_col_offset_.push_back(0);
-
             for (auto &inst: field_list_) {
                 auto index = inst & 0xffff;
-                bool is_string = inst >> 17;
-                bool is_raw = inst >> 18;
                 bool is_right = inst & 0x10000;
 
-                output_col_size_.push_back(is_string ? 2 : 1);
-                output_col_offset_.push_back(output_col_offset_.back() + output_col_size_.back());
-
                 if (is_right) {
-                    FIELD_TYPE ifield_type;
-                    if (is_raw) {
-                        ifield_type = F_RAW;
-                    } else if (is_string) {
-                        ifield_type = F_STRING;
-                    } else {
-                        ifield_type = F_REGULAR;
-                    }
-                    snapshot_factory.field(ifield_type, index, right_counter);
                     right_merge_inst_.emplace_back(right_counter++, i);
-
-                    snapshot_col_size_.push_back(output_col_size_.back());
-                    snapshot_col_offset_.push_back(snapshot_col_offset_.back() + snapshot_col_size_.back());
                 } else {
                     left_merge_inst_.emplace_back(index, i);
                 }
                 ++i;
             }
-            snapshot_factory.from_layout(right_col_offset_);
-            snapshot_factory.to_layout(snapshot_col_offset_);
-
-            snapshot_copier_ = snapshot_factory.build();
         }
 
         void ColumnBuilder::build(MemvBlock &output, MemvBlock &left, MemvBlock &right) {
@@ -211,9 +186,7 @@ namespace lqf {
         builder_->on(left, right);
         builder_->init();
 
-        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
-                bind(&JoinBuilder::snapshot, builder_.get(), std::placeholders::_1);
-        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, snapshoter);
+        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter());
         auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
         function<void(const shared_ptr<Block> &)> prober = bind(&HashBasedJoin::probe, this, memTable.get(), _1);
         left.blocks()->foreach(prober);
@@ -337,9 +310,7 @@ namespace lqf {
         builder_->on(left, right);
         builder_->init();
 
-        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
-                bind(&JoinBuilder::snapshot, builder_.get(), std::placeholders::_1);
-        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, snapshoter);
+        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter());
 
         auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
 
@@ -418,9 +389,7 @@ namespace lqf {
         builder_->on(left, right);
         builder_->init();
 
-        function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
-                bind(&JoinBuilder::snapshot, builder_.get(), std::placeholders::_1);
-        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, snapshoter);
+        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter());
 
         auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
 
@@ -524,9 +493,9 @@ namespace lqf {
                 builder_(unique_ptr<JoinBuilder>(builder)), predicate_(predicate) {}
 
         shared_ptr<Table> PowerHashBasedJoin::join(Table &left, Table &right) {
-            function<unique_ptr<MemDataRow>(DataRow &)> snapshoter =
-                    bind(&JoinBuilder::snapshot, builder_.get(), std::placeholders::_1);
-            container_ = HashBuilder::buildContainer(right, right_key_maker_, snapshoter);
+            builder_->on(left, right);
+            builder_->init();
+            container_ = HashBuilder::buildContainer(right, right_key_maker_, builder_->snapshoter());
             auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
             function<void(const shared_ptr<Block> &)> prober = bind(&PowerHashBasedJoin::probe, this,
                                                                     memTable.get(),

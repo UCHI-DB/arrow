@@ -19,6 +19,10 @@ namespace lqf {
         data_ = (uint8_t *) malloc(1048576);
     }
 
+    PrintBuffer::~PrintBuffer() noexcept {
+        free(data_);
+    }
+
     PrintBuffer &PrintBuffer::operator<<(const int32_t value) {
         uint32_t width = (uint32_t) ceil(log10(value));
         if (firstline_) {

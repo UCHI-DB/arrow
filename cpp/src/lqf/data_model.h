@@ -27,6 +27,10 @@ namespace lqf {
 
     const vector<uint32_t> &colSize(uint32_t num_fields);
 
+     vector<uint32_t> offset2size(const vector<uint32_t>& offset);
+
+     vector<uint32_t> size2offset(const vector<uint32_t>& size);
+
     union DataPointer {
         uint64_t *raw_;
         int32_t *ival_;

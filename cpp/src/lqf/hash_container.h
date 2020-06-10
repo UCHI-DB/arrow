@@ -7,10 +7,12 @@
 
 #include "container.h"
 #include "data_model.h"
+#include "rowcopy.h"
 
 namespace lqf {
 
     using namespace container;
+    using namespace rowcopy;
 
     namespace hashcontainer {
 
@@ -124,10 +126,10 @@ namespace lqf {
             static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t, uint32_t);
 
             static shared_ptr<Hash32Container>
-            buildContainer(Table &input, uint32_t, function<unique_ptr<MemDataRow>(DataRow &)>);
+            buildContainer(Table &input, uint32_t, Snapshoter *);
 
             static shared_ptr<Hash64Container>
-            buildContainer(Table &input, function<int64_t(DataRow &)>, function<unique_ptr<MemDataRow>(DataRow &)>);
+            buildContainer(Table &input, function<int64_t(DataRow &)>, Snapshoter *);
         };
 
     }

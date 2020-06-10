@@ -121,8 +121,17 @@ namespace lqf {
             void executeNodeSync(Node *);
 
         public:
+            ExecutionGraph() = default;
+
+            ExecutionGraph(ExecutionGraph &) = delete;
+
+            ExecutionGraph(ExecutionGraph &&) = delete;
 
             virtual ~ExecutionGraph();
+
+            ExecutionGraph &operator=(ExecutionGraph &) = default;
+
+            ExecutionGraph &operator=(ExecutionGraph &&) = default;
 
             uint32_t add(Node *, initializer_list<uint32_t>);
 

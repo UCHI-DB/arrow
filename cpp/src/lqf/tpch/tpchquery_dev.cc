@@ -14,7 +14,7 @@ int main() {
     auto start = high_resolution_clock::now();
 
     // Call the function,
-    lqf::tpch::executeQ12();
+    lqf::tpch::executeQ2();
     // TODO Check q17
 
     // Get ending timepoint

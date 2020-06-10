@@ -79,12 +79,32 @@ namespace lqf {
         return SIZES[num_fields];
     }
 
+    vector<uint32_t> offset2size(const vector<uint32_t> &offset) {
+        vector<uint32_t> size;
+        for (auto i = 1u; i < offset.size(); ++i) {
+            size.push_back(offset[i] - offset[i - 1]);
+        }
+        return size;
+    }
+
+    vector<uint32_t> size2offset(const vector<uint32_t> &size) {
+        vector<uint32_t> offset;
+        auto last = 0u;
+        offset.push_back(last);
+        for (auto &i:size) {
+            last += i;
+            offset.push_back(last);
+        }
+        return offset;
+    }
+
     MemDataRow MemDataRow::EMPTY = MemDataRow(0);
 
     MemDataRow::MemDataRow(uint8_t num_fields)
             : MemDataRow(OFFSETS[num_fields]) {}
 
-    MemDataRow::MemDataRow(const vector<uint32_t> &offset) : data_(offset.back(), 0x0), offset_(offset) {}
+    MemDataRow::MemDataRow(const vector<uint32_t> &offset)
+            : data_(offset.back(), 0x0), offset_(offset) {}
 
     unique_ptr<DataRow> MemDataRow::snapshot() {
         MemDataRow *mdr = new MemDataRow(offset_);
@@ -779,14 +799,10 @@ namespace lqf {
     }
 
     MemTable::MemTable(const vector<uint32_t> col_size, bool vertical)
-            : vertical_(vertical), col_size_(col_size), row_size_(0), blocks_(vector<shared_ptr<Block>>()) {
+            : vertical_(vertical), col_size_(col_size), row_size_(0),
+              col_offset_(lqf::size2offset(col_size)), blocks_(vector<shared_ptr<Block>>()) {
         external_ = false;
-        col_offset_.push_back(0);
-        auto num_fields = col_size_.size();
-        for (uint8_t k = 0; k < num_fields; ++k) {
-            row_size_ += col_size_[k];
-            col_offset_.push_back(col_offset_.back() + col_size_[k]);
-        }
+        row_size_ = col_offset_.back();
     }
 
     shared_ptr<Block> MemTable::allocate(uint32_t num_rows) {

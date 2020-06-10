@@ -305,7 +305,7 @@ namespace lqf {
         HashCore(function<uint64_t(DataRow &)> hasher,
                  function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
-        virtual ~HashCore();
+        virtual ~HashCore() = default;
 
         void consume(DataRow &row);
 
@@ -335,7 +335,7 @@ namespace lqf {
         TableCore(uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
                   function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
-        virtual ~TableCore();
+        virtual ~TableCore() = default;
 
         void consume(DataRow &row);
 
@@ -364,6 +364,8 @@ namespace lqf {
     public:
         SimpleCore(function<unique_ptr<AggReducer>(DataRow &)> headerInit);
 
+        virtual ~SimpleCore() = default;
+
         void consume(DataRow &row);
 
         void reduce(SimpleCore &another);
@@ -374,6 +376,8 @@ namespace lqf {
     class SimpleAgg : public Agg<SimpleCore>, public CoreMaker {
     public:
         SimpleAgg(const vector<uint32_t> &, function<vector<AggField *>()>);
+
+        virtual ~SimpleAgg() = default;
 
     protected:
         unique_ptr<SimpleCore> makeCore() override;

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 #include "mat.h"
 #include "filter.h"
+#include "rowcopy.h"
 
 using namespace lqf;
 
@@ -55,4 +56,74 @@ TEST(FilterMatTest, Mat) {
     EXPECT_EQ(585, (*f1)[0]->size());
     EXPECT_EQ(585, (*f2)[0]->size());
     EXPECT_EQ(585, (*f3)[0]->size());
+}
+
+using namespace lqf::rowcopy;
+
+TEST(HashMatTest, Mat) {
+    auto ptable = ParquetTable::Open("testres/nation", 7);
+
+    HashMat mat(0, RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->field(F_STRING, 1, 0)->buildSnapshot());
+
+    auto result = mat.mat(*ptable);
+    EXPECT_EQ(result->colSize(), vector<uint32_t>({2}));
+    auto blocks = result->blocks()->collect();
+    EXPECT_EQ(1, blocks->size());
+    auto block = (*blocks)[0];
+//    return;
+    auto mblock = dynamic_pointer_cast<HashMemBlock<Hash32Container>>(block);
+    auto container = mblock->content();
+    EXPECT_EQ(container->size(), 25);
+    auto ite = container->iterator();
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("ALGERIA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("MOROCCO"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("IRAQ"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("GERMANY"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("RUSSIA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("CANADA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("CHINA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("KENYA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("IRAN"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("FRANCE"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("VIETNAM"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("BRAZIL"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("PERU"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("JORDAN"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("INDONESIA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("UNITED STATES"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("ETHIOPIA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("SAUDI ARABIA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("ARGENTINA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("MOZAMBIQUE"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("JAPAN"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("INDIA"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("UNITED KINGDOM"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("EGYPT"));
+    ite->hasNext();
+    EXPECT_EQ((*ite->next().second)[0].asByteArray(), ByteArray("ROMANIA"));
+    EXPECT_FALSE(ite->hasNext());
 }

@@ -37,6 +37,9 @@ function(ADD_LQF_BENCHMARK REL_TEST_NAME)
             ${LQF_BENCHMARK_LINK_LIBS}
             EXTRA_FLAGS
             ${LQF_SIMD_FLAGS}
+            ${LQF_RELEASE_SANITIZER}
+            EXTRA_LINK_LIBS
+            ${LQF_RELEASE_SANITIZER}
             ${ARG_UNPARSED_ARGUMENTS})
 endfunction()
 
@@ -83,13 +86,17 @@ add_arrow_lib(lqf
         sboost_static
         )
 
-set(LQF_SANITIZER -fsanitize=address)
-
+set(LQF_DEBUG_SANITIZER -fsanitize=address)
+#set(LQF_RELEASE_SANITIZER )
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 target_compile_options(lqf_objlib
         PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
+        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
+target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
+target_compile_options(lqf_objlib
+        PUBLIC
+        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
+target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
 if(${LQF_PARALLEL})
     target_compile_definitions(lqf_objlib PUBLIC LQF_PARALLEL)
 endif()
@@ -110,6 +117,7 @@ set(LQF_TEST_SRC
         container_test.cc
         parallel_test.cc
         rowcopy_test.cc
+        dict_test.cc
         )
 
 add_test_case(all-test
@@ -124,10 +132,10 @@ add_test_case(all-test
         EXTRA_FLAGS
         ${LQF_SIMD_FLAGS}
         --coverage
-        ${LQF_SANITIZER}
+        ${LQF_DEBUG_SANITIZER}
         EXTRA_LINK_LIBS
         --coverage
-        ${LQF_SANITIZER}
+        ${LQF_DEBUG_SANITIZER}
         )
 
 arrow_install_all_headers(lqf)

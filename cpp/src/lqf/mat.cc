@@ -31,8 +31,8 @@ namespace lqf {
         return make_shared<MaskedTable>(owner, storage);
     }
 
-    HashMat::HashMat(uint32_t key_index, function<unique_ptr<MemDataRow>(DataRow &)> snapshoter)
-            : Node(1), key_index_(key_index), snapshoter_(snapshoter) {}
+    HashMat::HashMat(uint32_t key_index, unique_ptr<Snapshoter> snapshoter)
+            : Node(1), key_index_(key_index), snapshoter_(move(snapshoter)) {}
 
     unique_ptr<NodeOutput> HashMat::execute(const vector<NodeOutput *> &inputs) {
         auto input0 = static_cast<TableOutput *>(inputs[0]);
@@ -41,10 +41,10 @@ namespace lqf {
     }
 
     shared_ptr<Table> HashMat::mat(Table &input) {
-        auto table = MemTable::Make(0);
+        auto table = MemTable::Make(offset2size(snapshoter_->colOffset()));
         if (snapshoter_) {
             // Make Container
-            auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_);
+            auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_.get());
             auto block = make_shared<HashMemBlock<HashContainer<Int32>>>(move(container));
             table->append(block);
         } else {
@@ -56,8 +56,8 @@ namespace lqf {
     }
 
     PowerHashMat::PowerHashMat(function<int64_t(DataRow &)> key_maker,
-                               function<unique_ptr<MemDataRow>(DataRow &)> snapshoter)
-            : Node(1), key_maker_(key_maker), snapshoter_(snapshoter) {}
+                               unique_ptr<Snapshoter> snapshoter)
+            : Node(1), key_maker_(key_maker), snapshoter_(move(snapshoter)) {}
 
     unique_ptr<NodeOutput> PowerHashMat::execute(const vector<NodeOutput *> &inputs) {
         auto input0 = static_cast<TableOutput *>(inputs[0]);
@@ -66,10 +66,10 @@ namespace lqf {
     }
 
     shared_ptr<Table> PowerHashMat::mat(Table &input) {
-        auto table = MemTable::Make(0);
+        auto table = MemTable::Make(offset2size(snapshoter_->colOffset()));
         if (snapshoter_) {
             // Make Container
-            auto container = HashBuilder::buildContainer(input, key_maker_, snapshoter_);
+            auto container = HashBuilder::buildContainer(input, key_maker_, snapshoter_.get());
             auto block = make_shared<HashMemBlock<HashContainer<Int64>>>(move(container));
             table->append(block);
         } else {

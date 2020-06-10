@@ -302,10 +302,6 @@ namespace lqf {
                        function<unique_ptr<AggReducer>(DataRow &)> headerInit)
             : hasher_(hasher), headerInit_(headerInit) {}
 
-    HashCore::~HashCore() {
-        container_.clear();
-    }
-
     void HashCore::consume(DataRow &row) {
         uint64_t key = hasher_(row);
         auto exist = container_.find(key);
@@ -370,10 +366,6 @@ namespace lqf {
     TableCore::TableCore(uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
                          function<unique_ptr<AggReducer>(DataRow &)> headerInit)
             : container_(tableSize), indexer_(indexer), headerInit_(headerInit) {}
-
-    TableCore::~TableCore() {
-        container_.clear();
-    }
 
     void TableCore::consume(DataRow &row) {
         uint32_t index = indexer_(row);

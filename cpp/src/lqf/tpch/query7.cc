@@ -42,13 +42,9 @@ namespace lqf {
 
         void executeQ7() {
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
-            vector<uint32_t> nation_col_offset({0, 2});
-            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_offset](DataRow &dr) {
-                auto row = new MemDataRow(nation_col_offset);
-                (*row)[0] = dr[Nation::NAME].asByteArray();
-                return unique_ptr<MemDataRow>(row);
-            };
-            auto matNation = HashMat(Nation::NATIONKEY, snapshot).mat(*nationTable);
+            auto matNation = HashMat(Nation::NATIONKEY, RowCopyFactory()
+                    .from(I_EXTERNAL)->to(I_RAW)
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()).mat(*nationTable);
 
             unordered_map<string, int32_t> nation_mapping;
             nationTable->blocks()->foreach([&nation_mapping](const shared_ptr<Block> &block) {
@@ -144,13 +140,9 @@ namespace lqf {
         void executeQ7Backup() {
 
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
-            vector<uint32_t> nation_col_offset({0, 2});
-            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_offset](DataRow &dr) {
-                auto row = new MemDataRow(nation_col_offset);
-                (*row)[0] = dr[Nation::NAME].asByteArray();
-                return unique_ptr<MemDataRow>(row);
-            };
-            auto matNation = HashMat(Nation::NATIONKEY, snapshot).mat(*nationTable);
+            auto matNation = HashMat(Nation::NATIONKEY, RowCopyFactory()
+                    .from(I_EXTERNAL)->to(I_RAW)
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()).mat(*nationTable);
             unordered_map<string, int32_t> nation_mapping;
             nationTable->blocks()->foreach([&nation_mapping](const shared_ptr<Block> &block) {
                 auto rows = block->rows();

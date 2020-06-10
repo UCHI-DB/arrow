@@ -60,13 +60,9 @@ namespace lqf {
             auto nationFilterJoin = graph.add(new FilterJoin(Nation::REGIONKEY, Region::REGIONKEY),
                                               {nation, regionFilter});
 
-            vector<uint32_t> nation_col_offset{0, 2};
-            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_offset](DataRow &input) {
-                auto result = new MemDataRow(nation_col_offset);
-                (*result)[0] = input[Nation::NAME];
-                return unique_ptr<MemDataRow>(result);
-            };
-            auto matNation = graph.add(new HashMat(Nation::NATIONKEY, snapshot), {nationFilterJoin});
+            auto matNation = graph.add(new HashMat(Nation::NATIONKEY, RowCopyFactory()
+                    .from(I_EXTERNAL)->to(I_RAW)
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()), {nationFilterJoin});
 
             auto custNationFilter = graph.add(new FilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
                                               {customer, matNation});
@@ -137,13 +133,9 @@ namespace lqf {
             FilterJoin nationFilterJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto validNation = nationFilterJoin.join(*nationTable, *validRegion);
 
-            vector<uint32_t> nation_col_offset{0, 2};
-            function<unique_ptr<MemDataRow>(DataRow &)> snapshot = [&nation_col_offset](DataRow &input) {
-                auto result = new MemDataRow(nation_col_offset);
-                (*result)[0] = input[Nation::NAME];
-                return unique_ptr<MemDataRow>(result);
-            };
-            auto matNation = HashMat(Nation::NATIONKEY, snapshot).mat(*validNation);
+            auto matNation = HashMat(Nation::NATIONKEY, RowCopyFactory()
+                    .from(I_EXTERNAL)->to(I_RAW)
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()).mat(*validNation);
 
             FilterJoin custNationFilter(Customer::NATIONKEY, Nation::NATIONKEY);
             auto validCustomer = custNationFilter.join(*customerTable, *matNation);

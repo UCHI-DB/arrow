@@ -34,11 +34,19 @@ namespace lqf {
         public:
             SortBlock();
 
+            SortBlock(SortBlock &) = delete;
+
+            SortBlock(SortBlock &&) = delete;
+
             virtual ~SortBlock();
+
+            SortBlock &operator=(SortBlock &) = delete;
+
+            SortBlock &operator=(SortBlock &&) = delete;
 
             uint64_t size() override;
 
-            void copy(const shared_ptr<Block>& source);
+            void copy(const shared_ptr<Block> &source);
 
             inline vector<DataRow *> &content() { return content_; }
 

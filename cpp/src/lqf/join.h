@@ -49,7 +49,7 @@ namespace lqf {
             vector<uint32_t> snapshot_col_offset_;
             vector<uint32_t> snapshot_col_size_;
 
-            unique_ptr<function<void(DataRow &, DataRow &)>> snapshot_copier_;
+            unique_ptr<Snapshoter> snapshoter_;
 
         public:
             JoinBuilder(initializer_list<int32_t>, bool needkey, bool vertical);
@@ -64,7 +64,7 @@ namespace lqf {
 
             inline vector<uint32_t> &outputColSize() { return output_col_size_; }
 
-            virtual unique_ptr<MemDataRow> snapshot(DataRow &);
+            inline Snapshoter* snapshoter() { return snapshoter_.get(); }
         };
 
         class RowBuilder : public JoinBuilder {
@@ -77,7 +77,7 @@ namespace lqf {
 
             virtual ~RowBuilder() = default;
 
-            void init() override;
+            virtual void init() override;
 
             virtual void build(DataRow &, DataRow &, DataRow &, int32_t key);
         };
@@ -85,14 +85,14 @@ namespace lqf {
         /// For use with VJoin
         class ColumnBuilder : public JoinBuilder {
         protected:
-            vector<pair<uint8_t,uint8_t>> left_merge_inst_;
-            vector<pair<uint8_t,uint8_t>> right_merge_inst_;
+            vector<pair<uint8_t, uint8_t>> left_merge_inst_;
+            vector<pair<uint8_t, uint8_t>> right_merge_inst_;
         public:
             ColumnBuilder(initializer_list<int32_t>);
 
             virtual ~ColumnBuilder() = default;
 
-            void init() override;
+            virtual void init() override;
 
             inline const vector<uint32_t> &rightColSize() { return snapshot_col_size_; }
 
