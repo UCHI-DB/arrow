@@ -61,7 +61,7 @@ namespace lqf {
 
             auto orderItemJoin = graph.add(new HashJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new RowBuilder(
                     {JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT), JRR(Orders::ORDERDATE),
-                     JRR(Orders::SHIPPRIORITY)}, true)), {lineItemFilter, orderOnCustFilterJoin});
+                     JRR(Orders::SHIPPRIORITY)}, true), nullptr, 3000000), {lineItemFilter, orderOnCustFilterJoin});
             // ORDERKEY EXTENDEDPRICE DISCOUNT ORDERDATE SHIPPRIORITY
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
@@ -97,8 +97,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ3_Backup() {
-
+        void executeQ3Backup() {
             auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
             auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY, Orders::ORDERKEY, Orders::ORDERDATE,
                                                                 Orders::SHIPPRIORITY});
@@ -122,9 +121,12 @@ namespace lqf {
                                                                          bind(&ByteArrayDictGreater::build, date))});
             auto filteredLineItemTable = lineItemFilter.filter(*lineItemTable);
 
+//            cout << filteredOrderTable->size() << endl;
+//            cout << filteredLineItemTable->size() << endl;
+
             HashJoin orderItemJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new RowBuilder(
                     {JL(LineItem::EXTENDEDPRICE), JL(LineItem::DISCOUNT), JRR(Orders::ORDERDATE),
-                     JRR(Orders::SHIPPRIORITY)}, true));
+                     JRR(Orders::SHIPPRIORITY)}, true), nullptr, 3000000);
             // ORDERKEY EXTENDEDPRICE DISCOUNT ORDERDATE SHIPPRIORITY
             auto orderItemTable = orderItemJoin.join(*filteredLineItemTable, *filteredOrderTable);
 

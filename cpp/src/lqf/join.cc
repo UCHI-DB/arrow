@@ -176,17 +176,18 @@ namespace lqf {
         return unique_ptr<TableOutput>(new TableOutput(result));
     }
 
-    HashBasedJoin::HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *builder)
+    HashBasedJoin::HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *builder,
+                                 uint32_t expect_size)
             : leftKeyIndex_(leftKeyIndex), rightKeyIndex_(rightKeyIndex),
               builder_(unique_ptr<JoinBuilder>(builder)),
-              container_() {}
+              container_(), expect_size_(expect_size) {}
 
 
     shared_ptr<Table> HashBasedJoin::join(Table &left, Table &right) {
         builder_->on(left, right);
         builder_->init();
 
-        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter());
+        container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter(), expect_size_);
         auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
         function<void(const shared_ptr<Block> &)> prober = bind(&HashBasedJoin::probe, this, memTable.get(), _1);
         left.blocks()->foreach(prober);
@@ -194,8 +195,8 @@ namespace lqf {
     }
 
     HashJoin::HashJoin(uint32_t lk, uint32_t rk, lqf::RowBuilder *builder,
-                       function<bool(DataRow &, DataRow &)> pred) : HashBasedJoin(lk, rk, builder),
-                                                                    rowBuilder_(builder), predicate_(pred) {}
+                       function<bool(DataRow &, DataRow &)> pred, uint32_t expect_size)
+            : HashBasedJoin(lk, rk, builder, expect_size), rowBuilder_(builder), predicate_(pred) {}
 
     void HashJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(leftKeyIndex_);

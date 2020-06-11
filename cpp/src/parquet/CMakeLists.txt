@@ -244,7 +244,7 @@ if (NOT APPLE AND NOT MSVC)
             "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/symbols.map")
 endif ()
 
-set(PARQUET_DEBUG_SANITIZER "-fsanitize=address")
+#set(PARQUET_DEBUG_SANITIZER "-fsanitize=address")
 #set(PARQUET_RELEASE_SANITIZER "-fsanitize=address")
 
 add_arrow_lib(parquet

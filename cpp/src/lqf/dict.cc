@@ -22,13 +22,14 @@ namespace lqf {
         size_ = dpage->num_values();
         decoder->SetData(size_, dpage->data(), dpage->size());
         buffer_ = (T *) malloc(sizeof(T) * size_);
-        decoder->Decode(buffer_, size_);
-        if (sizeof(T) == 16) { // This is a byte array, need to copy to mempool
-            for (auto i = 0u; i < size_; ++i) {
-                ByteArray *ba = (ByteArray *) buffer_ + i;
-                ByteArrayBuffer::instance.allocate(*ba);
-            }
-        }
+        auto loaded = decoder->Decode(buffer_, size_);
+        // TODO Check why the following code cause error
+//        if (sizeof(T) == 16) { // This is a byte array, need to copy to mempool
+//            for (auto i = 0u; i < size_; ++i) {
+//                ByteArray *ba = (ByteArray *) buffer_ + i;
+//                ByteArrayBuffer::instance.allocate(*ba);
+//            }
+//        }
     }
 
     template<typename DTYPE>

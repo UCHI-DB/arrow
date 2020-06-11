@@ -263,8 +263,7 @@ namespace lqf {
                 remain2 = seg2.num_entry_;
             }
         }
-        auto full_size = ((num_entry >> 6) + 1) << 6;
-        ::sboost::encoding::cleanup(full_size, num_entry, result->raw(), 0);
+        ::sboost::encoding::cleanup(processed, num_entry, result->raw(), 0);
 
         free(align_buffer1);
         free(align_buffer2);

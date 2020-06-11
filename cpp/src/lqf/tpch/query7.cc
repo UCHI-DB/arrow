@@ -42,9 +42,10 @@ namespace lqf {
 
         void executeQ7() {
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
-            auto matNation = HashMat(Nation::NATIONKEY, RowCopyFactory()
+            HashMat nationMat(Nation::NATIONKEY, RowCopyFactory()
                     .from(I_EXTERNAL)->to(I_RAW)
-                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()).mat(*nationTable);
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot());
+            auto matNation = nationMat.mat(*nationTable);
 
             unordered_map<string, int32_t> nation_mapping;
             nationTable->blocks()->foreach([&nation_mapping](const shared_ptr<Block> &block) {
@@ -111,7 +112,7 @@ namespace lqf {
                     new HashJoin(0, 0, new RowBuilder({JL(1), JR(1), JL(2), JL(3)}),
                                  [](DataRow &left, DataRow &right) {
                                      return left[1].asInt() != right[0].asInt();
-                                 }), {itemWithNationJoin, orderWithNationJoin});
+                                 }, 2500000), {itemWithNationJoin, orderWithNationJoin});
             // Customer::NATIONKEY, Supplier::NATIONKEY, YEAR, PRICE
 
             function<uint64_t(DataRow &)> indexer = [](DataRow &input) {
@@ -122,9 +123,9 @@ namespace lqf {
             pagg->useVertical();
             auto agg = graph.add(pagg, {itemWithOrderJoin});
 
-            auto joinNation1 = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JRS(1), JL(1), JL(2), JL(3)})),
+            auto joinNation1 = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JRS(0), JL(1), JL(2), JL(3)})),
                                          {agg, nation});
-            auto joinNation2 = graph.add(new HashColumnJoin(1, 0, new ColumnBuilder({JLS(0), JRS(1), JL(2), JL(3)})),
+            auto joinNation2 = graph.add(new HashColumnJoin(1, 0, new ColumnBuilder({JLS(0), JRS(0), JL(2), JL(3)})),
                                          {joinNation1, nation});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -138,11 +139,12 @@ namespace lqf {
         }
 
         void executeQ7Backup() {
-
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
-            auto matNation = HashMat(Nation::NATIONKEY, RowCopyFactory()
+            HashMat nationMat(Nation::NATIONKEY, RowCopyFactory()
                     .from(I_EXTERNAL)->to(I_RAW)
-                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()).mat(*nationTable);
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot());
+            auto matNation = nationMat.mat(*nationTable);
+
             unordered_map<string, int32_t> nation_mapping;
             nationTable->blocks()->foreach([&nation_mapping](const shared_ptr<Block> &block) {
                 auto rows = block->rows();
@@ -178,7 +180,6 @@ namespace lqf {
                                                                                nation_key_pred))});
             auto validSupplier = validSupplierFilter.filter(*supplierTable);
 
-
             HashJoin orderWithNationJoin(Orders::CUSTKEY, Customer::CUSTKEY,
                                          new RowBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)}));
             // ORDERKEY, NATIONKEY
@@ -189,7 +190,6 @@ namespace lqf {
                                                                               dateTo))});
             auto filteredLineitem = lineitemFilter.filter(*lineitemTable);
 
-
             HashJoin itemWithNationJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new Q7ItemWithNationBuilder());
             // ORDERKEY, NATIONKEY, YEAR, PRICE
             auto itemWithNation = itemWithNationJoin.join(*filteredLineitem, *validSupplier);
@@ -197,7 +197,8 @@ namespace lqf {
             HashJoin itemWithOrderJoin(0, 0, new RowBuilder({JL(1), JR(1), JL(2), JL(3)}),
                                        [](DataRow &left, DataRow &right) {
                                            return left[1].asInt() != right[0].asInt();
-                                       });
+                                       }, 2500000);
+//            cout << orderWithNation->size() << endl;
             // Customer::NATIONKEY, Supplier::NATIONKEY, YEAR, PRICE
             auto joined = itemWithOrderJoin.join(*itemWithNation, *orderWithNation);
 
@@ -209,10 +210,10 @@ namespace lqf {
             agg.useVertical();
             auto agged = agg.agg(*joined);
 
-            HashColumnJoin joinNation1(0, 0, new ColumnBuilder({JRS(1), JL(1), JL(2), JL(3)}));
+            HashColumnJoin joinNation1(0, 0, new ColumnBuilder({JRS(0), JL(1), JL(2), JL(3)}));
             agged = joinNation1.join(*agged, *matNation);
 
-            HashColumnJoin joinNation2(1, 0, new ColumnBuilder({JLS(0), JRS(1), JL(2), JL(3)}));
+            HashColumnJoin joinNation2(1, 0, new ColumnBuilder({JLS(0), JRS(0), JL(2), JL(3)}));
             agged = joinNation2.join(*agged, *matNation);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

@@ -64,7 +64,7 @@ namespace lqf {
 
             inline vector<uint32_t> &outputColSize() { return output_col_size_; }
 
-            inline Snapshoter* snapshoter() { return snapshoter_.get(); }
+            inline Snapshoter *snapshoter() { return snapshoter_.get(); }
         };
 
         class RowBuilder : public JoinBuilder {
@@ -123,9 +123,10 @@ namespace lqf {
         unique_ptr<JoinBuilder> builder_;
         shared_ptr<Hash32Container> container_;
         bool outer_ = false;
+        uint32_t expect_size_;
     public:
         HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
-                      JoinBuilder *builder);
+                      JoinBuilder *builder, uint32_t expect_size = 0xFFFFFFFF);
 
         virtual ~HashBasedJoin() = default;
 
@@ -139,7 +140,7 @@ namespace lqf {
     class HashJoin : public HashBasedJoin {
     public:
         HashJoin(uint32_t, uint32_t, RowBuilder *,
-                 function<bool(DataRow &, DataRow &)> pred = nullptr);
+                 function<bool(DataRow &, DataRow &)> pred = nullptr, uint32_t expect_size = 0xFFFFFFFF);
 
         virtual ~HashJoin() = default;
 

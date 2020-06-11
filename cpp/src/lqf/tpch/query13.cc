@@ -36,7 +36,7 @@ namespace lqf {
 
         using namespace q13;
 
-        void executeQ13() {
+        void executeQ13_graph() {
             ExecutionGraph graph;
 
             auto customer = graph.add(new TableNode(ParquetTable::Open(Customer::path, {Customer::CUSTKEY})), {});
@@ -79,7 +79,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ13Backup() {
+        void executeQ13() {
             auto customer = ParquetTable::Open(Customer::path, {Customer::CUSTKEY});
             auto order = ParquetTable::Open(Orders::path, {Orders::COMMENT, Orders::CUSTKEY});
 
@@ -99,7 +99,7 @@ namespace lqf {
             // CUSTKEY, COUNT
             auto orderCount = orderCustAgg.agg(*validOrder);
 
-
+/*
             HashJoin join(Customer::CUSTKEY, 0, new CustCountBuilder());
             join.useOuter();
             // CUSTKEY, COUNT
@@ -118,7 +118,7 @@ namespace lqf {
             auto sorted = sort.sort(*result);
 
             Printer printer(PBEGIN PI(0) PI(1) PEND);
-            printer.print(*sorted);
+            printer.print(*sorted);*/
         }
     }
 }

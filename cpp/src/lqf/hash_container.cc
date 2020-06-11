@@ -203,8 +203,9 @@ namespace lqf {
         }
 
         shared_ptr<Hash32Container> HashBuilder::buildContainer(Table &input, uint32_t keyIndex,
-                                                                Snapshoter *builder) {
-            Hash32Container *container = new Hash32Container();
+                                                                Snapshoter *builder, uint32_t expect_size) {
+            Hash32Container *container = expect_size == 0xFFFFFFFF ? new Hash32Container() :
+                                         new Hash32Container(expect_size);
             shared_ptr<Hash32Container> retval = shared_ptr<Hash32Container>(container);
 
             function<void(const shared_ptr<Block> &)> processor = [builder, keyIndex, &container, &retval](
@@ -228,8 +229,9 @@ namespace lqf {
 
         shared_ptr<Hash64Container> HashBuilder::buildContainer(Table &input,
                                                                 function<int64_t(DataRow &)> key_maker,
-                                                                Snapshoter *builder) {
-            Hash64Container *container = new Hash64Container();
+                                                                Snapshoter *builder, uint32_t expect_size) {
+            Hash64Container *container = expect_size == 0xFFFFFFFF ?
+                                         new Hash64Container() : new Hash64Container(expect_size);
             shared_ptr<Hash64Container> retval = shared_ptr<Hash64Container>(container);
             function<void(const shared_ptr<Block> &)> processor = [builder, &container, &retval, key_maker](
                     const shared_ptr<Block> &block) {

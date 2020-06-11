@@ -55,6 +55,11 @@ if(${ARROW_USE_UBSAN})
   endif()
 endif()
 
+# Flag to enable stack-check
+if(${ARROW_USE_STACKCHECK})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fstack-check")
+endif()
+
 # Flag to enable thread sanitizer (clang or gcc 4.8)
 if(${ARROW_USE_TSAN})
   if(NOT

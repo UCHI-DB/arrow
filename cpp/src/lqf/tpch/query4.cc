@@ -2,6 +2,7 @@
 // Created by harper on 4/2/20.
 //
 
+#include <unordered_set>
 #include <lqf/filter.h>
 #include <lqf/data_model.h>
 #include <parquet/types.h>
@@ -43,7 +44,7 @@ namespace lqf {
             auto lineItemFilter = graph.add(new SboostRowFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE),
                                             {lineitem});
 
-            auto existJoin = graph.add(new FilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 30000000, true),
+            auto existJoin = graph.add(new FilterJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 3000000),
                                        {orderFilter, lineItemFilter});
 
             function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
@@ -67,7 +68,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ4_Backup() {
+        void executeQ4Backup() {
 
             auto orderTable = ParquetTable::Open(Orders::path,
                                                  {Orders::ORDERDATE, Orders::ORDERKEY, Orders::ORDERPRIORITY});
@@ -79,17 +80,27 @@ namespace lqf {
                                                         bind(&ByteArrayDictRangele::build, dateFrom, dateTo))});
             auto filteredOrderTable = orderFilter.filter(*orderTable);
 
-//            cout << filteredOrderTable->size() << endl;
-
-//            RowFilter lineItemFilter([](DataRow &datarow) {
-//                return datarow[LineItem::COMMITDATE].asByteArray() < datarow[LineItem::RECEIPTDATE].asByteArray();
-//            });
             SboostRowFilter lineItemFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE);
             auto filteredLineItemTable = lineItemFilter.filter(*lineitemTable);
 
-            FilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 30000000, true);
-            auto existOrderTable = existJoin.join(*filteredOrderTable, *filteredLineItemTable);
+//            auto set = make_shared<unordered_set<int32_t>>();
+//            auto max = 0;
 
+//            filteredLineItemTable->blocks()->foreach([set, &max](const shared_ptr<Block> &b) {
+//                auto col = b->col(LineItem::ORDERKEY);
+//                auto bsize = b->size();
+//                for (uint32_t i = 0; i < bsize; ++i) {
+//                    auto val = col->next().asInt();
+//                    max = std::max(val, max);
+//                    set->insert(val);
+//                }
+//            });
+//
+//            cout << set->size() << "," << max << endl;
+
+            FilterJoin existJoin(Orders::ORDERKEY, LineItem::ORDERKEY, 3000000);
+            auto existOrderTable = existJoin.join(*filteredOrderTable, *filteredLineItemTable);
+//
             function<uint64_t(DataRow &)> indexer = [](DataRow &row) {
                 return row(Orders::ORDERPRIORITY).asInt();
             };

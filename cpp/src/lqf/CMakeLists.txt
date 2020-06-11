@@ -86,7 +86,7 @@ add_arrow_lib(lqf
         sboost_static
         )
 
-set(LQF_DEBUG_SANITIZER -fsanitize=address)
+#set(LQF_DEBUG_SANITIZER -fsanitize=undefined)
 #set(LQF_RELEASE_SANITIZER )
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 target_compile_options(lqf_objlib

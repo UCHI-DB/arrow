@@ -41,18 +41,20 @@ namespace lqf {
     }
 
     shared_ptr<Table> HashMat::mat(Table &input) {
-        auto table = MemTable::Make(offset2size(snapshoter_->colOffset()));
         if (snapshoter_) {
             // Make Container
+            auto table = MemTable::Make(offset2size(snapshoter_->colOffset()));
             auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_.get());
             auto block = make_shared<HashMemBlock<HashContainer<Int32>>>(move(container));
             table->append(block);
+            return table;
         } else {
+            auto table = MemTable::Make(colSize(0));
             auto predicate = HashBuilder::buildHashPredicate(input, key_index_);
             auto block = make_shared<HashMemBlock<IntPredicate<Int32>>>(move(predicate));
             table->append(block);
+            return table;
         }
-        return table;
     }
 
     PowerHashMat::PowerHashMat(function<int64_t(DataRow &)> key_maker,

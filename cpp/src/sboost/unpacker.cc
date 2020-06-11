@@ -11,6 +11,9 @@ namespace sboost {
 
     Small32Unpacker::Small32Unpacker(uint32_t es) : entrySize_(es) {
         assert(es < 26);
+        if (es == 0) {
+            return;
+        }
 
         this->shuffleInst_ = (__m256i *) aligned_alloc(32, 32 * 8);
         this->shiftInst_ = (__m256i *) aligned_alloc(32, 32 * 8);
@@ -82,7 +85,7 @@ namespace sboost {
         shuffleInst_ = (__m512i *) aligned_alloc(64, 8 * 64);
 
         mask_ = (__m256i *) aligned_alloc(32, 32);
-        mask_[0] = _mm256_set1_epi32((1 << entrySize_) - 1);
+        mask_[0] = _mm256_set1_epi32((1u << entrySize_) - 1);
 
         __m128i *shuffleBuffer = (__m128i *) aligned_alloc(16, 16 * 8);
         __m128i *shiftBuffer = (__m128i *) aligned_alloc(16, 16 * 8);

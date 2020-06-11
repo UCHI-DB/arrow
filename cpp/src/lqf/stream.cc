@@ -6,7 +6,7 @@
 
 namespace lqf {
 
-    shared_ptr<Executor> StreamEvaluator::defaultExecutor = Executor::Make(30);
+    shared_ptr<Executor> StreamEvaluator::defaultExecutor = Executor::Make(20);
 
 //    using namespace arrow::internal;
 //    shared_ptr<ThreadPool> StreamEvaluator::defaultExecutor = *(ThreadPool::Make(25));

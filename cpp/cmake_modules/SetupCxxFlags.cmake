@@ -402,7 +402,7 @@ if(NOT MSVC)
   endif()
 
   set(C_FLAGS_RELEASE "-O3 -DNDEBUG")
-  set(CXX_FLAGS_RELEASE "-O3 -DNDEBUG -gdwarf-2")
+  set(CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 endif()
 
 set(C_FLAGS_PROFILE_GEN "${CXX_FLAGS_RELEASE} -fprofile-generate")

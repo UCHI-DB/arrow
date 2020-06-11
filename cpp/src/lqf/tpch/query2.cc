@@ -24,7 +24,7 @@ namespace lqf {
         using namespace parallel;
         using namespace rowcopy;
 
-        void executeQ2_graph() {
+        void executeQ2() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -101,15 +101,13 @@ namespace lqf {
                 return SDGE(1) || (SDE(1) && SBLE(7)) || (SDE(1) && SBE(7) && SBLE(2)) ||
                        (SDE(1) && SBE(7) && SBE(2) && SILE(0));
             }), {psWithNationJoin});
-//            auto result = top.sort(*alljoined);
 
             graph.add(new Printer(PBEGIN PI(0) PD(1) /*PB(2)*/ PB(3) PB(4) PB(5) PB(6) PB(7) PEND), {top});
-//            printer.print(*result);
 
             graph.execute();
         }
 
-        void executeQ2() {
+        void executeQ2Backup() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
