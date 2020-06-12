@@ -2183,15 +2183,20 @@ namespace parquet {
             }
 
             // Speed up Delta computation using Sboost
-            for (uint32_t i = buffer_start; i < num_buffered_; i += 8) {
-                int32_t *position = buffer + i;
-                __m256i loaded = _mm256_loadu_si256((const __m256i *) position);
-                loaded = _mm256_add_epi32(loaded, _mm256_set1_epi32(min_delta_));
-                __m256i result = ::sboost::cumsum32(loaded);
-                result = _mm256_add_epi32(result, _mm256_set1_epi32(last_value_));
-                _mm256_storeu_si256((__m256i *) position, result);
-                last_value_ = *(position + 7);
+//            for (uint32_t i = buffer_start; i < num_buffered_; i += 8) {
+//                int32_t *position = buffer + i;
+//                __m256i loaded = _mm256_loadu_si256((const __m256i *) position);
+//                loaded = _mm256_add_epi32(loaded, _mm256_set1_epi32(min_delta_));
+//                __m256i result = ::sboost::cumsum32(loaded);
+//                result = _mm256_add_epi32(result, _mm256_set1_epi32(last_value_));
+//                _mm256_storeu_si256((__m256i *) position, result);
+//                last_value_ = *(position + 7);
+//            }
+            for (uint32_t i = buffer_start; i < num_buffered_; ++i) {
+                buffer[i] += min_delta_ + last_value_;
+                last_value_ = buffer[i];
             }
+
 //    last_value_ = buffer[num_buffered_-1];
             num_buffer_read_ = 0;
         }

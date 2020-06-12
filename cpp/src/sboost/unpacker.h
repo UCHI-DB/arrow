@@ -77,15 +77,7 @@ namespace sboost {
 
     template<int bitWidth>
     void unpack(const uint8_t *input, uint32_t numEntry, uint32_t *output) {
-        auto upckr = unpackers[bitWidth];
-        uint32_t round = numEntry >> 3;
-        uint32_t ioff = 0;
-        for (uint i = 0; i < round; ++i) {
-            __m256i result = upckr->unpack(input + ioff);
-            _mm256_storeu_si256(((__m256i *) output) + i, result);
-            ioff += bitWidth;
-        }
-        unpackScalar(input + (round * bitWidth), numEntry & 0x7, bitWidth, output + (round << 3));
+        unpackScalar(input, numEntry, bitWidth, output);
     }
 
     static std::array<function<void(const uint8_t *, uint32_t, uint32_t *)>, 32> unpacks =
