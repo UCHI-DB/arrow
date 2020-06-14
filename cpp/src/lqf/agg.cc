@@ -635,4 +635,19 @@ namespace lqf {
     template
     class Agg<SimpleCore>;
 
+    StripeAgg::StripeAgg(uint32_t num_stripe) : Node(1), num_stripe_(num_stripe) {}
+
+    unique_ptr<NodeOutput> StripeAgg::execute(const vector<NodeOutput *> &input) {
+        auto input0 = static_cast<TableOutput *>(input[0]);
+        auto result = agg(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(result));
+    }
+
+    shared_ptr<Table> StripeAgg::agg(Table &input) {
+
+    }
+
+    void StripeAgg::processBlock(shared_ptr<Block> &block) {
+        vector<vector<>>
+    }
 }

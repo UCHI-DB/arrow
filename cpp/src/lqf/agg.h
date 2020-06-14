@@ -382,5 +382,21 @@ namespace lqf {
     protected:
         unique_ptr<SimpleCore> makeCore() override;
     };
+
+    class StripeAgg : public Node {
+    protected:
+        uint32_t num_stripe_;
+
+        void processBlock(shared_ptr<Block> &);
+
+    public:
+        StripeAgg(uint32_t num_stripe);
+
+        virtual ~StripeAgg() = default;
+
+        shared_ptr<Table> agg(Table &input);
+
+        virtual unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+    };
 }
 #endif //LQF_OPERATOR_AGG_H
