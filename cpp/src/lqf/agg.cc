@@ -634,4 +634,31 @@ namespace lqf {
     template
     class Agg<SimpleCore>;
 
+    StripeAgg::StripeAgg(uint32_t num_stripes) : Node(1), num_stripes_(num_stripes) {}
+
+    unique_ptr<NodeOutput> StripeAgg::execute(const vector<NodeOutput *> &input) {
+        auto input0 = static_cast<TableOutput *>(input[0]);
+        auto result = agg(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(result));
+    }
+
+    shared_ptr<Table> StripeAgg::agg(Table &input) {
+
+    }
+
+    void StripeAgg::processBlock(shared_ptr<Block> &block) {
+        // Make stripes
+        vector<shared_ptr<vector<uint32_t>>> stripes;
+        for (auto i = 0u; i < num_stripes_; ++i) {
+            stripes.push_back(make_shared<vector<uint32_t>>());
+        }
+        // Assign stripes
+
+        // Process stripes
+
+    }
+
+    void StripeAgg::processStripe(vector<uint32_t> * stripe) {
+
+    }
 }
