@@ -2,10 +2,6 @@ function(ADD_TPCH_EXEC NAME SOURCE)
     add_executable(${NAME} ${SOURCE})
     target_link_libraries(${NAME} PUBLIC tpch_static)
     target_compile_options(${NAME} PUBLIC ${LQF_SIMD_FLAGS})
-    target_compile_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
-    target_link_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
-    target_compile_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
-    target_link_options(${NAME} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
 endfunction()
 
 

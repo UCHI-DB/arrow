@@ -480,14 +480,13 @@ namespace lqf {
 
     template<typename CORE>
     shared_ptr<Table> Agg<CORE>::agg(Table &input) {
-        function<unique_ptr<CORE>(
+        function<shared_ptr<CORE>(
                 const shared_ptr<Block> &)> mapper = bind(&Agg::processBlock, this, _1);
 
-        function<unique_ptr<CORE>(unique_ptr<CORE> &, unique_ptr<CORE> &)> reducer =
-                [](unique_ptr<CORE> &a, unique_ptr<CORE> &b) {
-                    a->reduce(*b);
-                    return move(a);
-                };
+        auto reducer = [](const shared_ptr<CORE> &a, const shared_ptr<CORE> &b) {
+            a->reduce(*b);
+            return move(a);
+        };
         auto merged = input.blocks()->map(mapper)->reduce(reducer);
 
         auto result = MemTable::Make(output_col_size_, vertical_);
@@ -497,7 +496,7 @@ namespace lqf {
     }
 
     template<typename CORE>
-    unique_ptr<CORE> Agg<CORE>::processBlock(const shared_ptr<Block> &block) {
+    shared_ptr<CORE> Agg<CORE>::processBlock(const shared_ptr<Block> &block) {
         auto rows = block->rows();
         auto core = makeCore();
         uint64_t blockSize = block->size();
@@ -505,12 +504,12 @@ namespace lqf {
         for (uint32_t i = 0; i < blockSize; ++i) {
             core->consume(rows->next());
         }
-        return core;
+        return move(core);
     }
 
     // Subclass should override this
     template<typename CORE>
-    unique_ptr<CORE> Agg<CORE>::makeCore() { return nullptr; }
+    shared_ptr<CORE> Agg<CORE>::makeCore() { return nullptr; }
 
     template<typename CORE>
     void Agg<CORE>::useVertical() { vertical_ = true; }
@@ -605,8 +604,8 @@ namespace lqf {
                      function<uint64_t(DataRow &)> hasher, bool vertical)
             : Agg<HashCore>(col_size, vertical), CoreMaker(col_size, header_fields, agg_fields), hasher_(hasher) {}
 
-    unique_ptr<HashCore> HashAgg::makeCore() {
-        return unique_ptr<HashCore>(new HashCore(hasher_, headerInit()));
+    shared_ptr<HashCore> HashAgg::makeCore() {
+        return make_shared<HashCore>(hasher_, headerInit());
     }
 
     TableAgg::TableAgg(const vector<uint32_t> &col_size,
@@ -615,15 +614,15 @@ namespace lqf {
             : Agg<TableCore>(col_size), CoreMaker(col_size, header_fields, agg_fields),
               table_size_(table_size), indexer_(indexer) {}
 
-    unique_ptr<TableCore> TableAgg::makeCore() {
-        return unique_ptr<TableCore>(new TableCore(table_size_, indexer_, headerInit()));
+    shared_ptr<TableCore> TableAgg::makeCore() {
+        return make_shared<TableCore>(table_size_, indexer_, headerInit());
     }
 
     SimpleAgg::SimpleAgg(const vector<uint32_t> &col_size, function<vector<AggField *>()> agg_fields) :
             Agg<SimpleCore>(col_size), CoreMaker(col_size, {}, agg_fields) {}
 
-    unique_ptr<SimpleCore> SimpleAgg::makeCore() {
-        return unique_ptr<SimpleCore>(new SimpleCore(headerInit()));
+    shared_ptr<SimpleCore> SimpleAgg::makeCore() {
+        return make_shared<SimpleCore>(headerInit());
     }
 
     template

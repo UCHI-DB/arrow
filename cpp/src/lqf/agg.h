@@ -250,9 +250,9 @@ namespace lqf {
         bool vertical_;
         function<bool(DataRow &)> predicate_;
 
-        virtual unique_ptr<CORE> processBlock(const shared_ptr<Block> &block);
+        virtual shared_ptr<CORE> processBlock(const shared_ptr<Block> &block);
 
-        virtual unique_ptr<CORE> makeCore();
+        virtual shared_ptr<CORE> makeCore();
 
     public:
         Agg(const vector<uint32_t> &output_col_size, bool vertical = false);
@@ -309,6 +309,8 @@ namespace lqf {
 
         void consume(DataRow &row);
 
+        inline uint32_t size() { return container_.size(); };
+
         void reduce(HashCore &another);
 
         void dump(MemTable &table, function<bool(DataRow &)>);
@@ -323,7 +325,7 @@ namespace lqf {
         virtual ~HashAgg() = default;
 
     protected:
-        unique_ptr<HashCore> makeCore() override;
+        shared_ptr<HashCore> makeCore() override;
     };
 
     class TableCore {
@@ -338,6 +340,8 @@ namespace lqf {
         virtual ~TableCore() = default;
 
         void consume(DataRow &row);
+
+        inline uint32_t size() { return container_.size(); }
 
         void reduce(TableCore &another);
 
@@ -354,7 +358,7 @@ namespace lqf {
         virtual ~TableAgg() = default;
 
     protected:
-        unique_ptr<TableCore> makeCore() override;
+        shared_ptr<TableCore> makeCore() override;
     };
 
     class SimpleCore {
@@ -368,6 +372,8 @@ namespace lqf {
 
         void consume(DataRow &row);
 
+        inline uint32_t size() { return 1; }
+
         void reduce(SimpleCore &another);
 
         void dump(MemTable &table, function<bool(DataRow &)>);
@@ -380,7 +386,7 @@ namespace lqf {
         virtual ~SimpleAgg() = default;
 
     protected:
-        unique_ptr<SimpleCore> makeCore() override;
+        shared_ptr<SimpleCore> makeCore() override;
     };
 }
 #endif //LQF_OPERATOR_AGG_H

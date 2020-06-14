@@ -318,10 +318,9 @@ namespace lqf {
         if (predicate_) {
             function<shared_ptr<Bitmap>(const shared_ptr<Block> &)> prober = bind(
                     &HashExistJoin::probeWithPredicate, this, _1);
-            function<shared_ptr<Bitmap>(shared_ptr<Bitmap> &, shared_ptr<Bitmap> &)> reducer =
-                    [](shared_ptr<Bitmap> &a, shared_ptr<Bitmap> &b) {
-                        return (*a) | (*b);
-                    };
+            auto reducer = [](const shared_ptr<Bitmap> &a, const shared_ptr<Bitmap> &b) {
+                return (*a) | (*b);
+            };
             auto exist = left.blocks()->map(prober)->reduce(reducer);
             auto memblock = memTable->allocate(exist->cardinality());
 
@@ -397,8 +396,7 @@ namespace lqf {
         if (predicate_) {
             function<shared_ptr<Bitmap>(const shared_ptr<Block> &)> prober = bind(
                     &HashNotExistJoin::probeWithPredicate, this, _1);
-            function<shared_ptr<Bitmap>(shared_ptr<Bitmap> &, shared_ptr<Bitmap> &)> reducer =
-                    [](shared_ptr<Bitmap> &a, shared_ptr<Bitmap> &b) {
+            auto reducer = [](const shared_ptr<Bitmap> &a, const shared_ptr<Bitmap> &b) {
                         return (*a) | (*b);
                     };
             auto exist = left.blocks()->map(prober)->reduce(reducer);

@@ -91,7 +91,7 @@ namespace lqf {
             template<typename T>
             unique_ptr<vector<T>> invokeAll(vector<function<T()>> &tasks) {
                 vector<future<T>> futures;
-                for (auto t: tasks) {
+                for (auto& t: tasks) {
                     auto res = new CallTask<T>(t);
                     futures.push_back(res->getFuture());
                     submit(unique_ptr<CallTask<T>>(res));

@@ -37,9 +37,7 @@ function(ADD_LQF_BENCHMARK REL_TEST_NAME)
             ${LQF_BENCHMARK_LINK_LIBS}
             EXTRA_FLAGS
             ${LQF_SIMD_FLAGS}
-            ${LQF_RELEASE_SANITIZER}
             EXTRA_LINK_LIBS
-            ${LQF_RELEASE_SANITIZER}
             ${ARG_UNPARSED_ARGUMENTS})
 endfunction()
 
@@ -85,18 +83,7 @@ add_arrow_lib(lqf
         parquet_static
         sboost_static
         )
-
-#set(LQF_DEBUG_SANITIZER -fsanitize=undefined)
-#set(LQF_RELEASE_SANITIZER )
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
-target_compile_options(lqf_objlib
-        PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
-target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_DEBUG_SANITIZER}>>)
-target_compile_options(lqf_objlib
-        PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
-target_link_options(lqf_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${LQF_RELEASE_SANITIZER}>>)
 if(${LQF_PARALLEL})
     target_compile_definitions(lqf_objlib PUBLIC LQF_PARALLEL)
 endif()
@@ -131,22 +118,9 @@ add_test_case(all-test
         GTest::Main
         EXTRA_FLAGS
         ${LQF_SIMD_FLAGS}
-        --coverage
-        ${LQF_DEBUG_SANITIZER}
-        EXTRA_LINK_LIBS
-        --coverage
-        ${LQF_DEBUG_SANITIZER}
         )
 
 arrow_install_all_headers(lqf)
-
-#add_executable(scan_column scan_column.cc)
-#target_link_libraries(scan_column lqf_static)
-#target_compile_options(scan_column
-#        PUBLIC
-#        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-#target_link_options(scan_column PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${LQF_SANITIZER}>>)
-
 
 add_custom_target(lqf-benchmarks)
 set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)

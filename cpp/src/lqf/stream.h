@@ -91,7 +91,6 @@ namespace lqf {
             }
         };
 
-
         template<typename VIEW>
         class Stream;
 
@@ -133,8 +132,7 @@ namespace lqf {
                 for (auto &eval:input) {
                     tasks.push_back(std::bind(&StreamEvaluator::evalOp<T>, eval.get()));
                 }
-                shared_ptr<vector<T>> res = move(defaultExecutor->invokeAll(tasks));
-                return res;
+                return defaultExecutor->invokeAll(tasks);
             }
 
             template<typename T>
@@ -204,17 +202,24 @@ namespace lqf {
 
             VIEW reduce(function<VIEW(VIEW &, VIEW &)> reducer) {
                 auto collected = collect();
-                // TODO it is possible to execute reduce in parallel
                 if (collected->size() == 1) {
-                    return move((*collected)[0]);
+                    return (*collected)[0];
                 }
-                VIEW first = move((*collected)[0]);
-                auto ite = collected->begin();
-                ite++;
-                for (; ite != collected->end(); ite++) {
-                    first = reducer(first, *ite);
+                // execute reduce in parallel
+                while (collected->size() > 1) {
+                    vector<unique_ptr<EvalOp<VIEW>>> holder;
+
+
+                    collected = evaluator_->eval(holder);
                 }
-                return first;
+                return (*collected)[0];
+//                VIEW first = move((*collected)[0]);
+//                auto ite = collected->begin();
+//                ite++;
+//                for (; ite != collected->end(); ite++) {
+//                    first = reducer(first, *ite);
+//                }
+//                return first;
             }
 
             inline bool isParallel() {
@@ -552,6 +557,41 @@ namespace lqf {
                 }
             }
         }
+
+        template<typename T, typename SRC, typename REDUCER>
+        T reduce(StreamSource<SRC> *source, Mapper<T, SRC> *mapper, REDUCER reducer) {
+            if (parallel_) {
+                vector<function<T()>> tasks;
+                // execute reduce in parallel
+                auto collected = collect(source, mapper);
+                while (collected->size() > 1) {
+                    tasks.clear();
+
+                    auto pair = collected->size() / 2;
+                    auto remain = collected->size() % 2;
+                    for (auto i = 0u; i < pair; ++i) {
+                        auto first = move((*collected)[i * 2]);
+                        auto second = move((*collected)[i * 2 + 1]);
+                        tasks.push_back([&reducer, first, second]() {
+                            return reducer(first, second);
+                        });
+                    }
+                    auto next = defaultExecutor->invokeAll(tasks);
+                    if (remain) {
+                        next->emplace_back(move(collected->back()));
+                    }
+                    collected = move(next);
+                }
+                return move((*collected)[0]);
+            } else {
+                T result = (*mapper)(source->next());
+                while (source->hasNext()) {
+                    auto next = (*mapper)(source->next());
+                    result = reducer(result, next);
+                }
+                return result;
+            }
+        }
     };
 
     template<typename T, typename SRC>
@@ -585,25 +625,7 @@ namespace lqf {
         // For simplicity we assume there is at least one valid element
         template<typename REDUCER>
         T reduce(REDUCER reducer) {
-            if (evaluator_->parallel_) {
-                auto collected = collect();
-                // TODO it is possible to execute reduce in parallel
-                T result = move((*collected)[0]);
-                auto ite = collected->begin();
-                ite++;
-                for (; ite != collected->end(); ite++) {
-                    result = reducer(result, *ite);
-                }
-                return result;
-            } else {
-                // Fetch the first
-                T result = (*mapper_)(source_->next());
-                while (source_->hasNext()) {
-                    auto next = (*mapper_)(source_->next());
-                    result = reducer(result, next);
-                }
-                return result;
-            }
+            return evaluator_->reduce(source_.get(), mapper_.get(), reducer);
         }
 
         inline bool isParallel() {

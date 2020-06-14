@@ -123,6 +123,24 @@ TEST(StreamTest, Reduce) {
     EXPECT_EQ(reduced->value_, 55);
 }
 
+TEST(StreamTest, ReduceParallel) {
+    auto source = IntStream::Make(0, 11);
+    function<shared_ptr<TestHolder>(const int &)> mapper = [](const int &value) {
+        return make_shared<TestHolder>(value);
+    };
+    auto mapped = source->parallel()->map(mapper);
+
+    function<shared_ptr<TestHolder>(const shared_ptr<TestHolder> &, const shared_ptr<TestHolder> &)> reducer =
+            [](const shared_ptr<TestHolder> &a, const shared_ptr<TestHolder> &b) {
+                a->value_ += b->value_;
+                return a;
+            };
+
+    auto reduced = mapped->reduce(reducer);
+    EXPECT_EQ(reduced->value_, 55);
+}
+
+
 TEST(StreamTest, Parallel) {
     auto source = IntStream::Make(0, 10);
     function<shared_ptr<TestHolder>(const int &)> mapper = [](const int &value) {

@@ -49,7 +49,7 @@ namespace lqf {
                         const char *begin = (const char *) value.ptr;
                         char *index = lqf::util::strnstr(begin, "special", value.len);
                         if (index != NULL) {
-                            return NULL == lqf::util::strnstr(index, "requests", value.len - (index - begin) - 7);
+                            return NULL == lqf::util::strnstr(index + 7, "requests", value.len - (index - begin) - 7);
                         }
                         return true;
                     })), {order});
@@ -88,7 +88,7 @@ namespace lqf {
                 const char *begin = (const char *) value.ptr;
                 char *index = lqf::util::strnstr(begin, "special", value.len);
                 if (index != NULL) {
-                    return NULL == lqf::util::strnstr(index, "requests", value.len - (index - begin) - 7);
+                    return NULL == lqf::util::strnstr(index + 7, "requests", value.len - (index - begin) - 7);
                 }
                 return true;
             })});
@@ -99,6 +99,7 @@ namespace lqf {
             // CUSTKEY, COUNT
             auto orderCount = orderCustAgg.agg(*validOrder);
 
+//            cout << orderCount->size() << endl;
 /*
             HashJoin join(Customer::CUSTKEY, 0, new CustCountBuilder());
             join.useOuter();

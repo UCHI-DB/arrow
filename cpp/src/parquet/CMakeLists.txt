@@ -56,20 +56,14 @@ function(ADD_PARQUET_TEST REL_TEST_NAME)
                 ${PARQUET_STATIC_TEST_LINK_LIBS}
                 ${TEST_ARGUMENTS}
                 ${ARG_UNPARSED_ARGUMENTS}
-                EXTRA_FLAGS
-                ${PARQUET_DEBUG_SANITIZER}
-                EXTRA_LINK_LIBS
-                ${PARQUET_DEBUG_SANITIZER})
+                )
     else ()
         add_test_case(${REL_TEST_NAME}
                 STATIC_LINK_LIBS
                 ${PARQUET_SHARED_TEST_LINK_LIBS}
                 ${TEST_ARGUMENTS}
                 ${ARG_UNPARSED_ARGUMENTS}
-                EXTRA_FLAGS
-                ${PARQUET_DEBUG_SANITIZER}
-                EXTRA_LINK_LIBS
-                ${PARQUET_DEBUG_SANITIZER})
+                )
     endif ()
 endfunction()
 
@@ -97,10 +91,7 @@ function(ADD_PARQUET_BENCHMARK REL_TEST_NAME)
             "parquet-benchmarks"
             ${PARQUET_BENCHMARK_LINK_OPTION}
             ${ARG_UNPARSED_ARGUMENTS}
-            EXTRA_FLAGS
-            ${PARQUET_RELEASE_SANITIZER}
-            EXTRA_LINK_LIBS
-            ${PARQUET_RELEASE_SANITIZER})
+            )
 endfunction()
 
 # ----------------------------------------------------------------------
@@ -244,9 +235,6 @@ if (NOT APPLE AND NOT MSVC)
             "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/symbols.map")
 endif ()
 
-#set(PARQUET_DEBUG_SANITIZER "-fsanitize=address")
-#set(PARQUET_RELEASE_SANITIZER "-fsanitize=address")
-
 add_arrow_lib(parquet
         CMAKE_PACKAGE_NAME
         Parquet
@@ -267,14 +255,6 @@ add_arrow_lib(parquet
         STATIC_LINK_LIBS
         ${PARQUET_STATIC_LINK_LIBS})
 target_compile_options(parquet_objlib PUBLIC -mavx2 -mavx512vl -mavx512f)
-target_compile_options(parquet_objlib
-        PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${PARQUET_DEBUG_SANITIZER}>>)
-target_link_options(parquet_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Debug>:${PARQUET_DEBUG_SANITIZER}>>)
-target_compile_options(parquet_objlib
-        PUBLIC
-        $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${PARQUET_RELEASE_SANITIZER}>>)
-target_link_options(parquet_objlib PUBLIC $<$<COMPILE_LANGUAGE:CXX>:$<$<CONFIG:Release>:${PARQUET_RELEASE_SANITIZER}>>)
 
 if (WIN32 AND NOT (ARROW_TEST_LINKAGE STREQUAL "static"))
     add_library(parquet_test_support STATIC parquet_constants.cpp parquet_types.cpp)

@@ -47,7 +47,7 @@ namespace lqf {
         if (content_[pointer_] != 0) {
             uint64_t remain = pos & 0x3F;
             cached_ = content_[pointer_];
-            cached_ &= -1L << remain;
+            cached_ &= 0xFFFFFFFFFFFFFFFFL << remain;
             while (cached_ == 0) {
                 ++pointer_;
                 if (pointer_ == content_size_) {
