@@ -385,12 +385,13 @@ namespace lqf {
 
     class StripeAgg : public Node {
     protected:
-        uint32_t num_stripe_;
+        uint32_t num_stripes_;
 
         void processBlock(shared_ptr<Block> &);
 
+        void processStripe(vector<uint32_t>*);
     public:
-        StripeAgg(uint32_t num_stripe);
+        StripeAgg(uint32_t);
 
         virtual ~StripeAgg() = default;
 
