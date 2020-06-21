@@ -27,9 +27,9 @@ namespace lqf {
 
     const vector<uint32_t> &colSize(uint32_t num_fields);
 
-     vector<uint32_t> offset2size(const vector<uint32_t>& offset);
+    vector<uint32_t> offset2size(const vector<uint32_t> &offset);
 
-     vector<uint32_t> size2offset(const vector<uint32_t>& size);
+    vector<uint32_t> size2offset(const vector<uint32_t> &size);
 
     union DataPointer {
         uint64_t *raw_;
@@ -261,6 +261,69 @@ namespace lqf {
         void merge(MemvBlock &, const vector<pair<uint8_t, uint8_t>> &);
     };
 
+#define FLEX_SLAB_SIZE_  1048576
+
+    class FlexAccessor : public DataRow {
+    private:
+        uint64_t *pointer_;
+        vector<uint32_t> offset_;
+        vector<uint32_t> size_;
+        DataField view_;
+    public:
+        FlexAccessor() = default;
+
+        virtual ~FlexAccessor() = default;
+
+        void init(const vector<uint32_t> &offset);
+
+        DataField &operator[](uint64_t i) override;
+
+        DataRow &operator=(DataRow &row) override;
+
+        unique_ptr<DataRow> snapshot() override;
+
+        uint64_t *raw() override;
+
+        inline uint32_t size() override { return offset_.back(); }
+
+        inline uint32_t num_fields() override { return offset_.size() - 1; }
+
+        inline void raw(uint64_t *p) { pointer_ = p; }
+
+        inline const vector<uint32_t> &offset() const { return offset_; };
+    };
+
+    class MemFlexBlock : public Block {
+    private:
+        vector<shared_ptr<vector<uint64_t>>> memory_;
+        FlexAccessor accessor_;
+        uint32_t size_;
+        uint32_t row_size_;
+        uint32_t stripe_size_;
+        vector<uint32_t> col_offset_;
+        uint32_t pointer_;
+    public:
+        MemFlexBlock(const vector<uint32_t> &col_offset);
+
+        virtual ~MemFlexBlock() = default;
+
+        uint64_t size() override;
+
+        DataRow &push_back();
+
+        DataRow &operator[](uint32_t index);
+
+        void assign(vector<shared_ptr<vector<uint64_t>>>& content, uint32_t size);
+
+        unique_ptr<ColumnIterator> col(uint32_t col_index) override;
+
+        unique_ptr<DataRowIterator> rows() override;
+
+        shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
+
+        inline const vector<uint32_t> &col_offset() { return col_offset_; }
+    };
+
     template<typename DTYPE>
     class RawAccessor {
     protected:
@@ -463,6 +526,8 @@ namespace lqf {
         virtual ~MemTable() = default;
 
         shared_ptr<Block> allocate(uint32_t num_rows);
+
+        shared_ptr<MemFlexBlock> allocateFlex();
 
         void append(shared_ptr<Block>);
 

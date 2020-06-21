@@ -209,6 +209,38 @@ namespace lqf {
             inline uint32_t limit() { return (*content_).size(); }
         };
 
+        class PhaseConcurrentIntHashMap {
+        protected:
+            std::atomic<uint32_t> size_;
+
+            vector<uint64_t> content_;
+            uint32_t content_len_;
+
+            bool _insert(vector<uint64_t> *content, uint32_t content_len, uint64_t entry);
+
+            pair<uint32_t, uint64_t> _findreplacement(uint32_t start_index);
+
+        public:
+
+            PhaseConcurrentIntHashMap();
+
+            PhaseConcurrentIntHashMap(uint32_t expect_size);
+
+            void put(int key, int value);
+
+            int get(int key);
+
+            int remove(int key);
+
+            void resize(uint64_t expect);
+
+            unique_ptr<Iterator<pair<int, int>>> iterator();
+
+            inline uint32_t size() { return size_; }
+
+            inline uint32_t limit() { return content_len_; }
+        };
+
         inline __uint128_t cas128(volatile __uint128_t *src, __uint128_t cmp, __uint128_t exchange) {
             bool success;
             __asm__ __volatile__ (
@@ -399,7 +431,7 @@ namespace lqf {
                 for (uint32_t i = 0; i < content_len_; ++i) {
                     auto entry = content_[i];
                     if (entry.key_ != KTYPE::empty) {
-                        internal_insert(new_content, new_content_len, entry);
+                        _insert(new_content, new_content_len, entry);
                     }
                 }
                 free(content_);

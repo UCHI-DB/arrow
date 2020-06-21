@@ -26,14 +26,13 @@ namespace lqf {
                 CostField() : agg::DoubleSum(0) {}
 
                 void reduce(DataRow &row) {
-                    *value_ += row[PartSupp::AVAILQTY].asInt() * row[PartSupp::SUPPLYCOST].asDouble();
+                    value_ = value_.asDouble() + row[PartSupp::AVAILQTY].asInt() * row[PartSupp::SUPPLYCOST].asDouble();
                 }
             };
 
             class TotalAggNode : public SimpleAgg {
             public:
-                TotalAggNode(const vector<uint32_t> &col_size, function<vector<AggField *>()> agg_fields) : SimpleAgg(
-                        col_size, agg_fields) {}
+                TotalAggNode(function<vector<agg::AggField *>()> field_gen) : SimpleAgg(field_gen) {}
 
                 unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &input) override {
                     auto input0 = static_cast<TableOutput *>(input[0]);
@@ -87,13 +86,14 @@ namespace lqf {
 
             auto matPs = graph.add(new FilterMat(), {validPsJoin});
 
-            function<vector<AggField *>()> agg_fields = []() { return vector<AggField *>{new CostField()}; };
-            auto totalAgg = graph.add(new TotalAggNode(vector<uint32_t>({1}), agg_fields), {matPs});
+            function<vector<agg::AggField *>()> agg_fields = []() { return vector<agg::AggField *>{new CostField()}; };
+            auto totalAgg = graph.add(new TotalAggNode(agg_fields), {matPs});
 
 
-            auto bypartAgg = graph.add(
-                    new PartAggNode(new HashAgg(vector<uint32_t>({1, 1}), {AGI(PartSupp::PARTKEY)}, agg_fields,
-                                                COL_HASHER(PartSupp::PARTKEY))), {totalAgg, matPs});
+            auto bypartAgg = graph.add(new PartAggNode(new HashAgg(
+                    COL_HASHER(PartSupp::PARTKEY),
+                    RowCopyFactory().field(F_REGULAR, PartSupp::PARTKEY, 0)->buildSnapshot(),
+                    agg_fields)), {totalAgg, matPs});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) { return SDGE(1); };
             auto sort = graph.add(new SmallSort(comparator), {bypartAgg});
@@ -122,14 +122,15 @@ namespace lqf {
             FilterJoin validPsJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto validps = FilterMat().mat(*validPsJoin.join(*partsupp, *validSupplier));
 
-            function<vector<AggField *>()> agg_fields = []() { return vector<AggField *>{new CostField()}; };
-            SimpleAgg totalAgg(vector<uint32_t>({1}), agg_fields);
+            function<vector<agg::AggField *>()> agg_fields = []() { return vector<agg::AggField *>{new CostField()}; };
+            SimpleAgg totalAgg(agg_fields);
             auto total = totalAgg.agg(*validps);
             double total_value = (*(*total->blocks()->collect())[0]->rows())[0][0].asDouble();
             double threshold = total_value * fraction;
 
-            HashAgg bypartAgg(vector<uint32_t>({1, 1}), {AGI(PartSupp::PARTKEY)}, agg_fields,
-                              COL_HASHER(PartSupp::PARTKEY));
+            HashAgg bypartAgg(COL_HASHER(PartSupp::PARTKEY),
+                              RowCopyFactory().field(F_REGULAR, PartSupp::PARTKEY, 0)->buildSnapshot(),
+                              agg_fields);
             bypartAgg.setPredicate([=](DataRow &input) {
                 return input[1].asDouble() >= threshold;
             });

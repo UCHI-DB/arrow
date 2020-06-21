@@ -22,8 +22,8 @@ namespace lqf {
             public:
                 PriceField() : DoubleSum(0) {}
 
-                void reduce(DataRow &dataRow) {
-                    *value_ += dataRow[1].asDouble() * (1 - dataRow[2].asDouble());
+                void reduce(DataRow &dataRow) override {
+                    value_ = value_.asDouble() + dataRow[1].asDouble() * (1 - dataRow[2].asDouble());
                 }
             };
         }
@@ -77,9 +77,11 @@ namespace lqf {
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{new PriceField()};
             };
-            auto orderItemAgg = graph.add(
-                    new HashAgg(vector<uint32_t>{1, 1, 1, 1}, {AGI(0), AGI(3), AGI(4)}, aggFields, hasher),
-                    {orderItemJoin});
+            auto orderItemAgg = graph.add(new HashAgg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)
+                                                  ->field(F_REGULAR, 3, 1)
+                                                  ->field(F_REGULAR, 4, 2)
+                                                  ->buildSnapshot(), aggFields),
+                                          {orderItemJoin});
 //            orderItemAgg.useVertical();
 
             auto comparator = [](DataRow *a, DataRow *b) {
@@ -143,7 +145,9 @@ namespace lqf {
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{new PriceField()};
             };
-            HashAgg orderItemAgg(vector<uint32_t>{1, 1, 1, 1}, {AGI(0), AGI(3), AGI(4)}, aggFields, hasher);
+            HashAgg orderItemAgg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)
+                                         ->field(F_REGULAR, 3, 1)->field(F_REGULAR, 4, 2)->buildSnapshot(),
+                                 aggFields);
 //            orderItemAgg.useVertical();
             auto result = orderItemAgg.agg(*orderItemTable);
 

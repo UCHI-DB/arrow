@@ -13,7 +13,7 @@ namespace lqf {
 
         ByteArrayBuffer ByteArrayBuffer::instance;
 
-        ByteArrayBuffer::ByteArrayBuffer() {}
+        ByteArrayBuffer::ByteArrayBuffer():buffer_(100) {}
 
         ByteArrayBuffer::~ByteArrayBuffer() {
             for (auto &slab:buffer_) {
@@ -25,6 +25,8 @@ namespace lqf {
             uint8_t *new_buffer = (uint8_t *) malloc(SLAB_SIZE);
 
             std::lock_guard<mutex> lock(assign_lock_);
+            // Beware this push back may have data race with line 39
+            // We init the buffer to a large size to hide this problem
             buffer_.push_back(new_buffer);
             index_ = buffer_.size() - 1;
             offset_ = 0;

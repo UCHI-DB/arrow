@@ -66,9 +66,8 @@ namespace lqf {
             join_obj->useOuter();
             auto join = graph.add(join_obj, {lineitemShipdateFilter, partFilter});
 
-            auto simpleAgg = graph.add(
-                    new SimpleAgg(vector<uint32_t>{1, 1},
-                                  []() { return vector<AggField *>{new DoubleSum(0), new DoubleSum(1)}; }), {join});
+            auto simpleAgg = graph.add(new SimpleAgg(
+                    []() { return vector<AggField *>{new DoubleSum(0), new DoubleSum(1)}; }), {join});
 
             graph.add(new Printer(PBEGIN PD(0) PD(1) PEND), {simpleAgg});
             graph.execute();

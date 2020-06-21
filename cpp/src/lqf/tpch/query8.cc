@@ -46,7 +46,7 @@ namespace lqf {
                 NationFilterField(int nationKey) : DoubleSum(1), nationKey_(nationKey) {}
 
                 void reduce(DataRow &input) override {
-                    *value_ += (input[2].asInt() == nationKey_) ? input[1].asDouble() : 0;
+                    value_ = value_.asDouble() + ((input[2].asInt() == nationKey_) ? input[1].asDouble() : 0);
                 }
             };
         }
@@ -95,7 +95,7 @@ namespace lqf {
                     new SboostPredicate<ByteArrayType>(Part::TYPE, bind(&ByteArrayDictEq::build, partType))), {part});
 
             auto lineitemOnPartFilter = graph.add(new FilterJoin(LineItem::PARTKEY, Part::PARTKEY),
-                                                 {lineitem, partFilter});
+                                                  {lineitem, partFilter});
 
             auto orderJoin = graph.add(new HashJoin(LineItem::ORDERKEY, Orders::ORDERKEY, new OrderJoinBuilder()),
                                        {lineitemOnPartFilter, orderCustFilter});
@@ -111,20 +111,21 @@ namespace lqf {
                 return row[Nation::NAME].asByteArray() == nationName;
             }).find(*nationTable);
 
-            auto agg = graph.add(new HashAgg(vector<uint32_t>({1, 1, 1}), {AGI(0)},
+            auto agg = graph.add(new HashAgg(COL_HASHER(0),
+                                             RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
                                              [=]() {
-                                                 return vector<AggField *>(
-                                                         {new agg::DoubleSum(1), new NationFilterField(nationKey2)});
-                                             }, COL_HASHER(0)),
+                                                 return vector<AggField *>{new agg::DoubleSum(1),
+                                                                           new NationFilterField(nationKey2)};
+                                             }),
                                  {itemWithSupplierJoin});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SILE(0);
             };
 
-            auto sort = graph.add(new SmallSort(comparator),{agg});
+            auto sort = graph.add(new SmallSort(comparator), {agg});
 
-            graph.add(new Printer(PBEGIN PI(0) PD(1) PD(2) PEND),{sort});
+            graph.add(new Printer(PBEGIN PI(0) PD(1) PD(2) PEND), {sort});
 
             graph.execute();
         }
@@ -180,10 +181,10 @@ namespace lqf {
             int nationKey2 = KeyFinder(Nation::NATIONKEY, [=](DataRow &row) {
                 return row[Nation::NAME].asByteArray() == nationName;
             }).find(*nation);
-            HashAgg agg(vector<uint32_t>({1, 1, 1}), {AGI(0)},
+            HashAgg agg(COL_HASHER(0), RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
                         [=]() {
                             return vector<AggField *>({new agg::DoubleSum(1), new NationFilterField(nationKey2)});
-                        }, COL_HASHER(0));
+                        });
             result = agg.agg(*result);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

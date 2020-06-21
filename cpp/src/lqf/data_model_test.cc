@@ -352,6 +352,27 @@ TEST(MemvBlockTest, RowCopy) {
     }
 }
 
+TEST(FlexBlockTest, Access) {
+
+    MemFlexBlock flex(colOffset(3));
+    for (int i = 0; i < 100; ++i) {
+        DataRow &writeto = flex.push_back();
+        writeto[0] = i;
+        writeto[1] = i * 2 + 0.1;
+        writeto[2] = i * 3;
+    }
+    EXPECT_EQ(100, flex.size());
+    auto rows = flex.rows();
+    for (int i = 0; i < 100; ++i) {
+        DataRow &row = rows->next();
+        EXPECT_EQ(row[0].asInt(), i);
+        EXPECT_EQ(row[1].asDouble(), i * 2 + 0.1);
+        EXPECT_EQ(row[2].asInt(), i * 3);
+    }
+
+}
+
+
 class ParquetBlockTest : public ::testing::Test {
 protected:
     shared_ptr<ParquetFileReader> fileReader_;

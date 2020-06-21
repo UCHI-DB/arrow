@@ -83,9 +83,13 @@ namespace lqf {
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 return (input[1].asInt() << 20) + (input[2].asInt() << 10) + input[3].asInt();
             };
-            auto psagg = graph.add(new HashAgg(vector<uint32_t>({1, 1, 1, 1}), {AGI(1), AGI(2), AGI(3)},
-                                               []() { return vector<AggField *>({new IntDistinctCount(0)}); },
-                                               hasher), {pswithsJoin});
+            auto psagg = graph.add(new HashAgg(hasher,
+                                               RowCopyFactory().field(F_REGULAR, 1, 0)->field(F_REGULAR, 2, 1)
+                                                       ->field(F_REGULAR, 3, 2)->from(I_RAW)
+                                                       ->to(I_RAW)->from_layout(colOffset(4))->to_layout(
+                                                               colOffset(3))->buildSnapshot(),
+                                               []() { return vector<AggField *>({new IntDistinctCount(0)}); }),
+                                   {pswithsJoin});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SILE(3) || (SIE(3) && SILE(0)) || (SIE(3) && SIE(0) && SILE(1)) ||
@@ -146,9 +150,12 @@ namespace lqf {
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 return (input[1].asInt() << 20) + (input[2].asInt() << 10) + input[3].asInt();
             };
-            HashAgg psagg(vector<uint32_t>({1, 1, 1, 1}), {AGI(1), AGI(2), AGI(3)},
-                          []() { return vector<AggField *>({new IntDistinctCount(0)}); },
-                          hasher);
+            HashAgg psagg(hasher,
+                          RowCopyFactory().field(F_REGULAR, 1, 0)->field(F_REGULAR, 2, 1)
+                                  ->field(F_REGULAR, 3, 2)->from(I_RAW)
+                                  ->to(I_RAW)->from_layout(colOffset(4))->to_layout(
+                                          colOffset(3))->buildSnapshot(),
+                          []() { return vector<AggField *>({new IntDistinctCount(0)}); });
             auto result = psagg.agg(*partWithSupplier);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

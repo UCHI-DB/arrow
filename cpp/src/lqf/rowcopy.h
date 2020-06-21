@@ -39,28 +39,22 @@ namespace lqf {
             vector<function<void(DataRow &, DataRow &)>> contents_;
 
         public:
-            void add(function<void(DataRow &, DataRow &)>&& f) {
-                contents_.emplace_back(f);
-            }
+            void add(function<void(DataRow &, DataRow &)> &&f);
+
+            void operator()(DataRow &to, DataRow &from);
         };
 
         class Snapshoter : public FunctorBase {
         protected:
             vector<uint32_t> col_offset_;
         public:
-            Snapshoter(vector<uint32_t> &col_offset) : col_offset_(col_offset) {}
+            Snapshoter(vector<uint32_t> &col_offset);
 
-            virtual unique_ptr<MemDataRow> operator()(DataRow &input) {
-                unique_ptr<MemDataRow> result = unique_ptr<MemDataRow>(new MemDataRow(col_offset_));
-                for (auto &p:contents_) {
-                    p(*result, input);
-                }
-                return result;
-            }
+            unique_ptr<MemDataRow> operator()(DataRow &input);
 
-            vector<uint32_t> &colOffset() {
-                return col_offset_;
-            }
+            void operator()(DataRow &to, DataRow &from);
+
+            inline vector<uint32_t> &colOffset() { return col_offset_; }
         };
 
         /**
@@ -73,7 +67,7 @@ namespace lqf {
             vector<uint32_t> from_offset_;
             vector<uint32_t> to_offset_;
             vector<FieldInst> fields_;
-            vector<function<void(DataRow&,DataRow&)>> processors_;
+            vector<function<void(DataRow &, DataRow &)>> processors_;
 
             void buildInternal(FunctorBase &);
 
@@ -89,6 +83,8 @@ namespace lqf {
             RowCopyFactory *field(FIELD_TYPE type, uint32_t from, uint32_t to);
 
             RowCopyFactory *process(function<void(DataRow &, DataRow &)>);
+
+            RowCopyFactory *layout_snapshot();
 
             unique_ptr<function<void(DataRow &, DataRow &)>> build();
 

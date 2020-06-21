@@ -35,6 +35,7 @@ namespace lqf {
         }
 
         using namespace q13;
+        using namespace agg;
 
         void executeQ13_graph() {
             ExecutionGraph graph;
@@ -54,9 +55,12 @@ namespace lqf {
                         return true;
                     })), {order});
 
-            auto orderCustAgg = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(Orders::CUSTKEY)},
-                                                      []() { return vector<AggField *>{new agg::Count()}; },
-                                                      COL_HASHER(Orders::CUSTKEY)), {orderCommentFilter});
+            using namespace agg;
+            auto orderCustAgg = graph.add(new HashAgg(COL_HASHER(Orders::CUSTKEY),
+                                                      RowCopyFactory().field(F_REGULAR, Orders::CUSTKEY,
+                                                                             0)->buildSnapshot(),
+                                                      []() { return vector<AggField *>{new Count()}; }),
+                                          {orderCommentFilter});
             // CUSTKEY, COUNT
 
             auto join_obj = new HashJoin(Customer::CUSTKEY, 0, new CustCountBuilder());
@@ -64,9 +68,10 @@ namespace lqf {
             auto join = graph.add(join_obj, {customer, orderCustAgg});
             // CUSTKEY, COUNT
 
-            auto countAgg = graph.add(
-                    new HashAgg(vector<uint32_t>{1, 1}, {AGI(1)}, []() { return vector<AggField *>{new agg::Count()}; },
-                                COL_HASHER(1)), {join});
+            auto countAgg = graph.add(new HashAgg(COL_HASHER(1),
+                                                  RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                                                  []() { return vector<AggField *>{new agg::Count()}; }),
+                                      {join});
             // COUNT, DIST
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -94,20 +99,23 @@ namespace lqf {
             })});
             auto validOrder = orderCommentFilter.filter(*order);
 
-            HashAgg orderCustAgg(vector<uint32_t>({1, 1}), {AGI(Orders::CUSTKEY)},
-                                 []() { return vector<AggField *>{new agg::Count()}; }, COL_HASHER(Orders::CUSTKEY));
+            HashAgg orderCustAgg(COL_HASHER(1),
+                    RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                    []() { return vector<AggField *>{new agg::Count()}; });
             // CUSTKEY, COUNT
             auto orderCount = orderCustAgg.agg(*validOrder);
 
-//            cout << orderCount->size() << endl;
+            cout << orderCount->size() << endl;
 /*
             HashJoin join(Customer::CUSTKEY, 0, new CustCountBuilder());
             join.useOuter();
             // CUSTKEY, COUNT
             auto custCount = join.join(*customer, *orderCount);
 
-            HashAgg countAgg(vector<uint32_t>{1, 1}, {AGI(1)}, []() { return vector<AggField *>{new agg::Count()}; },
-                             COL_HASHER(1));
+            HashAgg countAgg(new HeaderMaker(colOffset(2),
+                                    RowCopyFactory().field(F_REGULAR, 1, 0)->build(),
+                                    []() { return vector<AggField *>{new agg::Count()}; }),
+                    COL_HASHER(1));
             // COUNT, DIST
             auto result = countAgg.agg(*custCount);
 

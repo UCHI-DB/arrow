@@ -175,9 +175,11 @@ namespace lqf {
                                                          new ColumnBuilder({JL(1), JL(2), JR(Supplier::NATIONKEY)})),
                                       {ps2lJoin, suppFilter});
 
-            auto agg = graph.add(new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(2), AGI(0)},
-                                             []() { return vector<AggField *>({new agg::DoubleSum(1)}); },
-                                             COL_HASHER2(0, 2), true), {suppJoin});
+            auto agg = graph.add(new HashAgg(COL_HASHER2(0, 2),
+                                             RowCopyFactory().field(F_REGULAR, 2, 0)
+                                                     ->field(F_REGULAR, 0, 1)->buildSnapshot(),
+                                             []() { return vector<agg::AggField *>({new agg::DoubleSum(1)}); }),
+                                 {suppJoin});
             // NATIONKEY, ORDERYEAR, SUM
 
             auto withNationJoin = graph.add(new HashJoin(0, Nation::NATIONKEY,
@@ -260,8 +262,9 @@ namespace lqf {
             HashColumnJoin suppJoin(0, Supplier::SUPPKEY, new ColumnBuilder({JL(1), JL(2), JR(Supplier::NATIONKEY)}));
             auto itemWithNation = suppJoin.join(*itemWithRev, *validsupp);
 
-            HashAgg agg(vector<uint32_t>{1, 1, 1}, {AGI(2), AGI(0)},
-                        []() { return vector<AggField *>({new agg::DoubleSum(1)}); }, COL_HASHER2(0, 2), true);
+            HashAgg agg(COL_HASHER2(0, 2), RowCopyFactory().field(F_REGULAR, 2, 0)
+                                ->field(F_REGULAR, 0, 1)->buildSnapshot(),
+                        []() { return vector<agg::AggField *>({new agg::DoubleSum(1)}); });
             // NATIONKEY, ORDERYEAR, SUM
             auto result = agg.agg(*itemWithNation);
 

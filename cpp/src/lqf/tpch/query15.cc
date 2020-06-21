@@ -28,11 +28,13 @@ namespace lqf {
                 PriceField() : DoubleSum(0) {}
 
                 void reduce(DataRow &input) override {
-                    *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * (1 - input[LineItem::DISCOUNT].asDouble());
+                    value_ = value_.asInt() +
+                             input[LineItem::EXTENDEDPRICE].asDouble() * (1 - input[LineItem::DISCOUNT].asDouble());
                 }
             };
         }
         using namespace q15;
+        using namespace agg::recording;
 
         void executeQ15() {
             ExecutionGraph graph;
@@ -49,26 +51,26 @@ namespace lqf {
                                                                      bind(&ByteArrayDictRangele::build, dateFrom,
                                                                           dateTo))), {lineitem});
 
-            auto suppkeyAgg = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::SUPPKEY)},
-                                                    []() { return vector<AggField *>{new PriceField()}; },
-                                                    COL_HASHER(LineItem::SUPPKEY)), {lineitemDateFilter});
+            auto suppkeyAgg = graph.add(new HashAgg(
+                    COL_HASHER(LineItem::SUPPKEY),
+                    RowCopyFactory().field(F_REGULAR, LineItem::SUPPKEY, 0)->buildSnapshot(),
+                    []() { return vector<AggField *>{new PriceField()}; }),
+                                        {lineitemDateFilter});
             // SUPPKEY, REVENUE
 
-            auto maxAgg_obj = new SimpleAgg(vector<uint32_t>{1, 1},
-                                            []() { return vector<AggField *>{new DoubleRecordingMax(1, 0)}; });
-            maxAgg_obj->useRecording();
+            auto maxAgg_obj = new RecordingSimpleAgg([]() { return new RecordingDoubleMax(1, 0); });
             auto maxAgg = graph.add(maxAgg_obj, {suppkeyAgg});
-            // SUPPKEY, REV
+            // REV, SUPPKEY
 
             auto join = graph.add(
-                    new HashJoin(Supplier::SUPPKEY, 0,
+                    new HashJoin(Supplier::SUPPKEY, 1,
                                  new RowBuilder(
-                                         {JLS(Supplier::NAME), JLS(Supplier::ADDRESS), JLS(Supplier::PHONE), JR(1)},
-                                         true, false)), {supplier,maxAgg});
+                                         {JLS(Supplier::NAME), JLS(Supplier::ADDRESS), JLS(Supplier::PHONE), JR(0)},
+                                         true, false)), {supplier, maxAgg});
 
-            auto sort = graph.add(new SmallSort([](DataRow *a, DataRow *b) { return SILE(0); }),{join});
+            auto sort = graph.add(new SmallSort([](DataRow *a, DataRow *b) { return SILE(0); }), {join});
 
-            graph.add(new Printer(PBEGIN PI(0) PB(1) PB(2) PB(3) PD(4) PEND),{sort});
+            graph.add(new Printer(PBEGIN PI(0) PB(1) PB(2) PB(3) PD(4) PEND), {sort});
 
             graph.execute();
         }
@@ -87,20 +89,18 @@ namespace lqf {
             auto filteredLineitem = lineitemDateFilter.filter(*lineitem);
 
 
-            HashAgg suppkeyAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::SUPPKEY)},
-                               []() { return vector<AggField *>{new PriceField()}; },
-                               COL_HASHER(LineItem::SUPPKEY));
+            HashAgg suppkeyAgg(COL_HASHER(LineItem::SUPPKEY),
+                               RowCopyFactory().field(F_REGULAR, LineItem::SUPPKEY, 0)->buildSnapshot(),
+                               []() { return vector<AggField *>{new PriceField()}; });
             // SUPPKEY, REVENUE
             auto revenueView = suppkeyAgg.agg(*filteredLineitem);
 
-            SimpleAgg maxAgg(vector<uint32_t>{1, 1},
-                             []() { return vector<AggField *>{new DoubleRecordingMax(1, 0)}; });
-            maxAgg.useRecording();
-            // SUPPKEY, REV
+            RecordingSimpleAgg maxAgg([]() { return new RecordingDoubleMax(1, 0); });
+            // REV, SUPPKEY
             auto maxRevenue = maxAgg.agg(*revenueView);
 
-            HashJoin join(Supplier::SUPPKEY, 0, new RowBuilder({JLS(Supplier::NAME), JLS(Supplier::ADDRESS),
-                                                                JLS(Supplier::PHONE), JR(1)}, true, false));
+            HashJoin join(Supplier::SUPPKEY, 1, new RowBuilder({JLS(Supplier::NAME), JLS(Supplier::ADDRESS),
+                                                                JLS(Supplier::PHONE), JR(0)}, true, false));
             auto supplierWithRev = join.join(*supplier, *maxRevenue);
 
             SmallSort sort([](DataRow *a, DataRow *b) { return SILE(0); });

@@ -118,9 +118,11 @@ namespace lqf {
             function<uint64_t(DataRow &)> indexer = [](DataRow &input) {
                 return (input[0].asInt() << 16) + (input[1].asInt() << 11) + input[2].asInt();
             };
-            auto pagg = new HashAgg(vector<uint32_t>({1, 1, 1, 1}), {AGI(0), AGI(1), AGI(2)},
-                                    []() { return vector<AggField *>({new DoubleSum(3)}); }, indexer);
-            pagg->useVertical();
+            auto pagg = new HashAgg(indexer,
+                                    RowCopyFactory().field(F_REGULAR, 0, 0)
+                                            ->field(F_REGULAR, 1, 1)
+                                            ->field(F_REGULAR, 2, 2)->buildSnapshot(),
+                                    []() { return vector<AggField *>({new DoubleSum(3)}); });
             auto agg = graph.add(pagg, {itemWithOrderJoin});
 
             auto joinNation1 = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JRS(0), JL(1), JL(2), JL(3)})),
@@ -205,9 +207,9 @@ namespace lqf {
             function<uint64_t(DataRow &)> indexer = [](DataRow &input) {
                 return (input[0].asInt() << 16) + (input[1].asInt() << 11) + input[2].asInt();
             };
-            HashAgg agg(vector<uint32_t>({1, 1, 1, 1}), {AGI(0), AGI(1), AGI(2)},
-                        []() { return vector<AggField *>({new DoubleSum(3)}); }, indexer);
-            agg.useVertical();
+            HashAgg agg(indexer, RowCopyFactory().field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
+                                ->field(F_REGULAR, 2, 2)->buildSnapshot(),
+                        []() { return vector<AggField *>({new DoubleSum(3)}); });
             auto agged = agg.agg(*joined);
 
             HashColumnJoin joinNation1(0, 0, new ColumnBuilder({JRS(0), JL(1), JL(2), JL(3)}));

@@ -28,8 +28,9 @@ namespace lqf {
             public:
                 PriceField() : DoubleSum(0) {}
 
-                void reduce(DataRow &input) {
-                    *value_ += input[LineItem::EXTENDEDPRICE].asDouble() * input[LineItem::DISCOUNT].asDouble();
+                void reduce(DataRow &input) override {
+                    value_ = value_.asDouble() +
+                             input[LineItem::EXTENDEDPRICE].asDouble() * input[LineItem::DISCOUNT].asDouble();
                 }
             };
         }
@@ -41,21 +42,23 @@ namespace lqf {
                                                      LineItem::EXTENDEDPRICE});
             ExecutionGraph graph;
 
-            auto lineitem = graph.add(new TableNode(lineitemTable),{});
+            auto lineitem = graph.add(new TableNode(lineitemTable), {});
 
             auto filter = graph.add(new ColFilter({new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE,
-                                                                 bind(&ByteArrayDictRangele::build, dateFrom,
-                                                                      dateTo)),
-                              new SboostPredicate<DoubleType>(LineItem::DISCOUNT,
-                                                              bind(&DoubleDictBetween::build, discountFrom,
-                                                                   discountTo)),
-                              new SboostPredicate<Int32Type>(LineItem::QUANTITY,
-                                                             bind(&Int32DictLess::build, quantity))
-                             }),{lineitem});
+                                                                                      bind(&ByteArrayDictRangele::build,
+                                                                                           dateFrom,
+                                                                                           dateTo)),
+                                                   new SboostPredicate<DoubleType>(LineItem::DISCOUNT,
+                                                                                   bind(&DoubleDictBetween::build,
+                                                                                        discountFrom,
+                                                                                        discountTo)),
+                                                   new SboostPredicate<Int32Type>(LineItem::QUANTITY,
+                                                                                  bind(&Int32DictLess::build, quantity))
+                                                  }), {lineitem});
 
-            auto agg = graph.add(new SimpleAgg(vector<uint32_t>({1}), []() { return vector<AggField *>({new PriceField()}); }),{filter});
+            auto agg = graph.add(new SimpleAgg([]() { return vector<AggField *>({new PriceField()}); }), {filter});
 
-            graph.add(new Printer(PBEGIN PD(0) PEND),{agg});
+            graph.add(new Printer(PBEGIN PD(0) PEND), {agg});
             graph.execute();
         }
 
@@ -74,7 +77,7 @@ namespace lqf {
                              });
             auto filtered = filter.filter(*lineitemTable);
 
-            SimpleAgg agg(vector<uint32_t>({1}), []() { return vector<AggField *>({new PriceField()}); });
+            SimpleAgg agg([]() { return vector<AggField *>({new PriceField()}); });
             auto agged = agg.agg(*filtered);
 
             Printer printer(PBEGIN PD(0) PEND);

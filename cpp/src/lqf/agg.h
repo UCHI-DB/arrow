@@ -1,261 +1,364 @@
 //
-// Created by harper on 2/21/20.
+// Created by Harper on 6/17/20.
 //
 
-#ifndef LQF_OPERATOR_AGG_H
-#define LQF_OPERATOR_AGG_H
+#ifndef ARROW_AGG_H
+#define ARROW_AGG_H
 
+#include <unordered_set>
 #include "data_model.h"
+#include "data_container.h"
+#include "rowcopy.h"
 #include "parallel.h"
 
-#define AGI(x) x
-#define AGD(x) 0x10000 | x
-#define AGB(x) 0x20000 | x
-#define AGR(x) 0x30000 | x
-
-using namespace std;
-using namespace std::placeholders;
 namespace lqf {
-
+    using namespace datacontainer;
+    using namespace rowcopy;
     namespace agg {
+
+        struct AsDouble {
+            static double get(DataField &df) { return df.asDouble(); }
+
+            static double MAX;
+
+            static double MIN;
+        };
+
+        struct AsInt {
+            static int32_t get(DataField &df) { return df.asInt(); }
+
+            static int MAX;
+
+            static int MIN;
+        };
+
         class AggField {
         protected:
-            uint32_t readIndex_;
+            uint32_t size_;
+            uint32_t read_idx_;
+            uint32_t write_idx_;
+            DataField value_;
+            bool need_dump_;
         public:
-            DataField storage_;
-
-            AggField(uint32_t readIndex);
+            AggField(uint32_t size, uint32_t read_idx, bool need_dump = false);
 
             virtual ~AggField() = default;
 
-            virtual void init() = 0;
+            virtual void attach(DataRow &);
+
+            virtual void init();
 
             virtual void reduce(DataRow &) = 0;
 
             virtual void merge(AggField &) = 0;
 
-            virtual void dump() {}
+            inline bool need_dump() { return need_dump_; }
+
+            virtual void dump();
+
+            inline void write_at(uint32_t at) { write_idx_ = at; }
+
+            inline uint32_t size() { return size_; }
         };
 
-        class AggRecordingField : public AggField {
-        protected:
-            vector<int32_t> keys_;
-            uint32_t keyIndex_;
+        class Count : public AggField {
         public:
-            AggRecordingField(uint32_t rIndex, uint32_t kIndex);
+            Count();
 
-            virtual ~AggRecordingField() = default;
+            void reduce(DataRow &) override;
 
-            vector<int32_t> &keys();
+            void merge(AggField &) override;
         };
 
-
-        struct AsDouble {
-            static double get(DataField &df) { return df.asDouble(); }
-        };
-
-        struct AsInt {
-            static int32_t get(DataField &df) { return df.asInt(); }
-        };
-
-        template<typename T, typename ACC>
-        class Sum : public AggField {
+        class IntDistinctCount : public AggField {
         protected:
-            T *value_;
+            unordered_set<int32_t> *distinct_;
         public:
-            Sum(uint32_t index);
+            IntDistinctCount(uint32_t);
+
+            void attach(DataRow &) override;
 
             void init() override;
+
+            void reduce(DataRow &) override;
+
+            void merge(AggField &) override;
+
+            void dump() override;
+        };
+
+        class IntSum : public AggField {
+        public:
+            IntSum(uint32_t);
 
             virtual void reduce(DataRow &) override;
 
             void merge(AggField &) override;
         };
 
-        using IntSum = Sum<int32_t, AsInt>;
-        using DoubleSum = Sum<double, AsDouble>;
-
-        class Count : public AggField {
-        protected:
-            int32_t *count_;
+        class DoubleSum : public AggField {
         public:
-            Count();
+            DoubleSum(uint32_t);
 
-            void init() override;
-
-            void reduce(DataRow &) override;
+            virtual void reduce(DataRow &) override;
 
             void merge(AggField &) override;
         };
 
-        template<typename T, typename ACC>
-        class Max : public AggField {
-        protected:
-            T *value_;
-        public:
-            Max(uint32_t rIndex);
-
-            void init() override;
-
-            void reduce(DataRow &) override;
-
-            void merge(AggField &) override;
-        };
-
-        using IntMax = Max<int32_t, AsInt>;
-        using DoubleMax = Max<double, AsDouble>;
-
-        template<typename T, typename ACC>
-        class RecordingMax : public AggRecordingField {
-        protected:
-            T *value_;
-        public:
-            RecordingMax(uint32_t vIndex, uint32_t kIndex);
-
-            void init() override;
-
-            void reduce(DataRow &) override;
-
-            void merge(AggField &) override;
-        };
-
-        using IntRecordingMax = RecordingMax<int32_t, AsInt>;
-        using DoubleRecordingMax = RecordingMax<double, AsDouble>;
-
-        template<typename T, typename ACC>
-        class Min : public AggField {
-        protected:
-            T *value_;
-        public:
-            Min(uint32_t rIndex);
-
-            void init() override;
-
-            void reduce(DataRow &) override;
-
-            void merge(AggField &) override;
-        };
-
-        using IntMin = Min<int32_t, AsInt>;
-        using DoubleMin = Min<double, AsDouble>;
-
-        template<typename T, typename ACC>
-        class RecordingMin : public AggRecordingField {
-        protected:
-            T *value_;
-        public:
-            RecordingMin(uint32_t vIndex, uint32_t kIndex);
-
-            void init() override;
-
-            void reduce(DataRow &) override;
-
-            void merge(AggField &) override;
-        };
-
-        using IntRecordingMin = RecordingMin<int32_t, AsInt>;
-        using DoubleRecordingMin = RecordingMin<double, AsDouble>;
-
-        template<typename T, typename ACC>
+        template<typename ACC>
         class Avg : public AggField {
         protected:
-            T value_;
-            uint32_t count_;
+            DataField count_;
         public:
-            Avg(uint32_t rIndex);
+            Avg(uint32_t);
 
-            virtual ~Avg() = default;
+            void attach(DataRow &) override;
 
             void init() override;
 
-            void reduce(DataRow &) override;
+            virtual void reduce(DataRow &) override;
 
             void merge(AggField &) override;
 
             void dump() override;
         };
 
-        using IntAvg = Avg<int32_t, AsInt>;
-        using DoubleAvg = Avg<double, AsDouble>;
+        template
+        class Avg<AsInt>;
 
-        template<typename T, typename ACC>
-        class DistinctCount : public AggField {
-        protected:
-            unordered_set<T> values_;
+        using IntAvg = Avg<AsInt>;
+
+        template
+        class Avg<AsDouble>;
+
+        using DoubleAvg = Avg<AsDouble>;
+
+        template<typename ACC>
+        class Max : public AggField {
         public:
-            DistinctCount(uint32_t rIndex);
-
-            virtual ~DistinctCount() = default;
+            Max(uint32_t);
 
             void init() override;
 
             void reduce(DataRow &) override;
 
             void merge(AggField &) override;
-
-            void dump() override;
         };
 
-        using IntDistinctCount = DistinctCount<int32_t, AsInt>;
+        template
+        class Max<AsInt>;
+
+        using IntMax = Max<AsInt>;
+
+        template
+        class Max<AsDouble>;
+
+        using DoubleMax = Max<AsDouble>;
+
+        template<typename ACC>
+        class Min : public AggField {
+        public:
+            Min(uint32_t);
+
+            void init() override;
+
+            void reduce(DataRow &) override;
+
+            void merge(AggField &) override;
+        };
+
+        template
+        class Min<AsInt>;
+
+        using IntMin = Min<AsInt>;
+
+        template
+        class Min<AsDouble>;
+
+        using DoubleMin = Min<AsDouble>;
 
         class AggReducer {
         protected:
-            uint32_t header_size_;
-            MemDataRow storage_;
             vector<unique_ptr<AggField>> fields_;
+            DataRow *storage_;
+            Snapshoter *header_copier_;
+            function<void(DataRow &, DataRow &)> *row_copier_;
         public:
-            AggReducer(uint32_t numHeaders, vector<AggField *> fields);
+            AggReducer(Snapshoter *, function<void(DataRow &, DataRow &)> *, vector<AggField *>,
+                       const vector<uint32_t> &);
 
-            AggReducer(const vector<uint32_t> &, vector<AggField *> fields);
+            AggReducer(Snapshoter *, function<void(DataRow &, DataRow &)> *, AggField *,
+                       uint32_t);
 
-            virtual ~AggReducer() = default;
+            void attach(DataRow &);
 
-            inline uint32_t header_size() { return header_size_; }
-
-            inline MemDataRow &storage() { return storage_; }
-
-            inline vector<unique_ptr<AggField>> &fields() { return fields_; }
+            void init(DataRow &);
 
             void reduce(DataRow &);
 
-            void merge(AggReducer &reducer);
+            void dump();
 
-            virtual void dump(MemDataRow &);
+            void merge(AggReducer &);
 
-            virtual uint32_t size() { return 1; }
+            void assign(AggReducer &);
+
+            inline vector<unique_ptr<AggField>> &fields() { return fields_; }
+
+            inline function<void(DataRow &, DataRow &)> *row_copier() {
+                return row_copier_;
+            }
         };
 
-        class AggRecordingReducer : public AggReducer {
+        class HashCore {
         protected:
-            AggRecordingField *field_;
+            unique_ptr<AggReducer> reducer_;
+            function<uint64_t(DataRow &)> &hasher_;
+            MemRowMap map_;
+            bool need_dump_;
         public:
+            HashCore(const vector<uint32_t> &, unique_ptr<AggReducer>, function<uint64_t(DataRow &)> &, bool);
 
-            AggRecordingReducer(vector<uint32_t> &, AggRecordingField *field);
+            void reduce(DataRow &row);
 
-            virtual ~AggRecordingReducer() = default;
+            void merge(HashCore &another);
 
-            void dump(MemDataRow &) override;
+            void dump(MemTable &table, function<bool(DataRow &)>);
 
-            uint32_t size() override;
+            inline uint32_t size() { return map_.size(); };
         };
 
+        class SimpleCore {
+        protected:
+            unique_ptr<AggReducer> reducer_;
+            MemDataRow storage_;
+            bool need_dump_;
+        public:
+            SimpleCore(const vector<uint32_t> &, unique_ptr<AggReducer>, bool);
+
+            void reduce(DataRow &row);
+
+            void merge(SimpleCore &another);
+
+            void dump(MemTable &table, function<bool(DataRow &)>);
+
+            inline uint32_t size() { return 1; };
+        };
+
+        namespace recording {
+
+            class RecordingAggField : public AggField {
+            protected:
+                uint32_t key_idx_;
+                unordered_set<int32_t> *keys_;
+            public:
+                RecordingAggField(uint32_t read_idx, uint32_t key_idx);
+
+                void attach(DataRow &) override;
+
+                virtual void init() override;
+
+                virtual void merge(AggField &) override;
+
+                inline unordered_set<int32_t> *keys() { return keys_; }
+            };
+
+            template<typename ACC>
+            class RecordingMin : public RecordingAggField {
+            public:
+                RecordingMin(uint32_t, uint32_t);
+
+                virtual void init() override;
+
+                void reduce(DataRow &) override;
+
+                void merge(AggField &) override;
+            };
+
+            template
+            class RecordingMin<AsInt>;
+
+            using RecordingIntMin = RecordingMin<AsInt>;
+
+            template
+            class RecordingMin<AsDouble>;
+
+            using RecordingDoubleMin = RecordingMin<AsDouble>;
+
+            template<typename ACC>
+            class RecordingMax : public RecordingAggField {
+            public:
+                RecordingMax(uint32_t, uint32_t);
+
+                virtual void init() override;
+
+                void reduce(DataRow &) override;
+
+                void merge(AggField &) override;
+            };
+
+            template
+            class RecordingMax<AsInt>;
+
+            using RecordingIntMax = RecordingMax<AsInt>;
+
+            template
+            class RecordingMax<AsDouble>;
+
+            using RecordingDoubleMax = RecordingMax<AsDouble>;
+
+//            class RecordingAggReducer : public AggReducer {
+//            protected:
+//                RecordingAggField *field_;
+//                vector<shared_ptr<vector<int32_t>>> keys_;
+//            public:
+//                RecordingAggReducer(Snapshoter *, function<void(DataRow &, DataRow &)> *,
+//                                    RecordingAggField *, uint32_t);
+//
+//                void init(DataRow &);
+//
+//                void assign(RecordingAggReducer &);
+//
+//                inline RecordingAggField *field() { return field_; }
+//            };
+
+            class RecordingHashCore : public HashCore {
+            protected:
+                uint32_t write_key_index_;
+            public:
+                RecordingHashCore(const vector<uint32_t> &, unique_ptr<AggReducer>,
+                                  function<uint64_t(DataRow &)> &);
+
+                void dump(MemTable &table, function<bool(DataRow &)>);
+            };
+
+            class RecordingSimpleCore : public SimpleCore {
+            protected:
+                uint32_t write_key_index_;
+            public:
+                RecordingSimpleCore(const vector<uint32_t> &, unique_ptr<AggReducer>);
+
+                void dump(MemTable &table, function<bool(DataRow &)>);
+            };
+        }
     }
-    using namespace agg;
+
     using namespace parallel;
 
     template<typename CORE>
     class Agg : public Node {
     protected:
-        vector<uint32_t> output_col_size_;
-        bool vertical_;
+        vector<uint32_t> col_offset_;
+        vector<uint32_t> col_size_;
         function<bool(DataRow &)> predicate_;
+        bool vertical_;
+        bool need_field_dump_;
 
         virtual shared_ptr<CORE> processBlock(const shared_ptr<Block> &block);
 
         virtual shared_ptr<CORE> makeCore();
 
     public:
-        Agg(const vector<uint32_t> &output_col_size, bool vertical = false);
+        Agg(function<bool(DataRow &)> pred = nullptr, bool vertical = false);
 
         virtual ~Agg() = default;
 
@@ -263,147 +366,84 @@ namespace lqf {
 
         shared_ptr<Table> agg(Table &input);
 
-        void useVertical();
-
-        void setPredicate(function<bool(DataRow &)>);
+        inline void setPredicate(function<bool(DataRow &)> p) { predicate_ = p; }
     };
 
-    class CoreMaker {
+    class HashAgg : public Agg<agg::HashCore> {
     protected:
-        bool useRecording_ = false;
-
-        vector<uint32_t> output_offset_;
-        vector<uint32_t> output_col_size_;
-
-        vector<pair<uint32_t, uint32_t>> int_fields_;
-        vector<pair<uint32_t, uint32_t>> double_fields_;
-        vector<pair<uint32_t, uint32_t>> bytearray_fields_;
-        vector<pair<uint32_t, uint32_t>> raw_fields_;
-
-        function<vector<AggField *>()> agg_fields_;
-
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit();
-
-    public:
-        CoreMaker(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>);
-
-        virtual ~CoreMaker() = default;
-
-        unique_ptr<AggReducer> initHeader(DataRow &row);
-
-        unique_ptr<AggReducer> initRecordingHeader(DataRow &row);
-
-        void useRecording();
-    };
-
-    class HashCore {
-    protected:
-        unordered_map<uint64_t, unique_ptr<AggReducer>> container_;
         function<uint64_t(DataRow &)> hasher_;
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
+        unique_ptr<Snapshoter> header_copier_;
+        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
+
+        function<vector<agg::AggField *>()> fields_gen_;
+        vector<uint32_t> fields_start_;
+
+        unique_ptr<agg::AggReducer> createReducer();
+
+        shared_ptr<agg::HashCore> makeCore() override;
+
     public:
-        HashCore(function<uint64_t(DataRow &)> hasher,
-                 function<unique_ptr<AggReducer>(DataRow &)> headerInit);
+        HashAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
+                function<vector<agg::AggField *>()>,
+                function<bool(DataRow &)> pred = nullptr, bool vertical = false);
 
-        virtual ~HashCore() = default;
-
-        void consume(DataRow &row);
-
-        inline uint32_t size() { return container_.size(); };
-
-        void reduce(HashCore &another);
-
-        void dump(MemTable &table, function<bool(DataRow &)>);
     };
 
-    class HashAgg : public Agg<HashCore>, public CoreMaker {
+    class SimpleAgg : public Agg<agg::SimpleCore> {
+    protected:
+        unique_ptr<Snapshoter> header_copier_;
+        function<vector<agg::AggField *>()> fields_gen_;
+        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
+
+        unique_ptr<agg::AggReducer> createReducer();
+
+        shared_ptr<agg::SimpleCore> makeCore() override;
+
+    public:
+        SimpleAgg(function<vector<agg::AggField *>()>,
+                  function<bool(DataRow &)> pred = nullptr, bool vertical = false);
+
+    };
+
+    using namespace agg;
+    using namespace agg::recording;
+
+    class RecordingHashAgg : public Agg<RecordingHashCore> {
+    protected:
         function<uint64_t(DataRow &)> hasher_;
+        unique_ptr<Snapshoter> header_copier_;
+        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
+
+        function<RecordingAggField *()> field_gen_;
+        uint32_t field_start_;
+
+        unique_ptr<AggReducer> createReducer();
+
+        shared_ptr<RecordingHashCore> makeCore() override;
+
     public:
-        HashAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
-                function<uint64_t(DataRow &)>, bool vertical = false);
+        RecordingHashAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
+                         function<RecordingAggField *()>,
+                         function<bool(DataRow &)> pred = nullptr, bool vertical = false);
 
-        virtual ~HashAgg() = default;
+    };
 
+    class RecordingSimpleAgg : public Agg<RecordingSimpleCore> {
     protected:
-        shared_ptr<HashCore> makeCore() override;
-    };
+        unique_ptr<Snapshoter> header_copier_;
+        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
 
-    class TableCore {
-    private:
-        vector<unique_ptr<AggReducer>> container_;
-        function<uint32_t(DataRow &)> indexer_;
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
+        function<RecordingAggField *()> field_gen_;
+
+        unique_ptr<AggReducer> createReducer();
+
+        shared_ptr<RecordingSimpleCore> makeCore() override;
+
     public:
-        TableCore(uint32_t tableSize, function<uint32_t(DataRow &)> indexer,
-                  function<unique_ptr<AggReducer>(DataRow &)> headerInit);
-
-        virtual ~TableCore() = default;
-
-        void consume(DataRow &row);
-
-        inline uint32_t size() { return container_.size(); }
-
-        void reduce(TableCore &another);
-
-        void dump(MemTable &table, function<bool(DataRow &)>);
-    };
-
-    class TableAgg : public Agg<TableCore>, public CoreMaker {
-        uint32_t table_size_;
-        function<uint32_t(DataRow &)> indexer_;
-    public:
-        TableAgg(const vector<uint32_t> &, const initializer_list<int32_t> &, function<vector<AggField *>()>,
-                 uint32_t, function<uint32_t(DataRow &)>);
-
-        virtual ~TableAgg() = default;
-
-    protected:
-        shared_ptr<TableCore> makeCore() override;
-    };
-
-    class SimpleCore {
-    private:
-        function<unique_ptr<AggReducer>(DataRow &)> headerInit_;
-        unique_ptr<AggReducer> reducer_;
-    public:
-        SimpleCore(function<unique_ptr<AggReducer>(DataRow &)> headerInit);
-
-        virtual ~SimpleCore() = default;
-
-        void consume(DataRow &row);
-
-        inline uint32_t size() { return 1; }
-
-        void reduce(SimpleCore &another);
-
-        void dump(MemTable &table, function<bool(DataRow &)>);
-    };
-
-    class SimpleAgg : public Agg<SimpleCore>, public CoreMaker {
-    public:
-        SimpleAgg(const vector<uint32_t> &, function<vector<AggField *>()>);
-
-        virtual ~SimpleAgg() = default;
-
-    protected:
-        shared_ptr<SimpleCore> makeCore() override;
-    };
-
-    class StripeAgg : public Node {
-    protected:
-        uint32_t num_stripes_;
-
-        void processBlock(shared_ptr<Block> &);
-
-        void processStripe(vector<uint32_t>*);
-    public:
-        StripeAgg(uint32_t);
-
-        virtual ~StripeAgg() = default;
-
-        shared_ptr<Table> agg(Table &input);
-
-        virtual unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+        RecordingSimpleAgg(function<RecordingAggField *()>,
+                           function<bool(DataRow &)> pred = nullptr, bool vertical = false);
     };
 }
-#endif //LQF_OPERATOR_AGG_H
+
+
+#endif //ARROW_AGG_H

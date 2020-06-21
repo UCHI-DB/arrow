@@ -35,9 +35,9 @@ namespace lqf {
             auto customer = graph.add(
                     new TableNode(ParquetTable::Open(Customer::path, {Customer::NAME, Customer::CUSTKEY})), {});
 
-            auto hashAgg_obj = new HashAgg(vector<uint32_t>{1, 1}, {AGI(LineItem::ORDERKEY)},
-                                           []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; },
-                                           COL_HASHER(LineItem::ORDERKEY));
+            auto hashAgg_obj = new HashAgg(COL_HASHER(LineItem::ORDERKEY),
+                                           RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)->buildSnapshot(),
+                                           []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; });
             hashAgg_obj->setPredicate([=](DataRow &row) { return row[1].asInt() > quantity; });
             auto hashAgg = graph.add(hashAgg_obj, {lineitem});
             // ORDERKEY, SUM_QUANTITY
@@ -56,9 +56,9 @@ namespace lqf {
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SDGE(3) || (SDE(3) && SBLE(2));
             };
-            auto topn = graph.add(new TopN(100, comparator),{withCustomerJoin});
+            auto topn = graph.add(new TopN(100, comparator), {withCustomerJoin});
 
-            graph.add(new Printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND),{topn});
+            graph.add(new Printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND), {topn});
             graph.execute();
         }
 
@@ -69,9 +69,9 @@ namespace lqf {
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::ORDERKEY, LineItem::QUANTITY});
             auto customer = ParquetTable::Open(Customer::path, {Customer::NAME, Customer::CUSTKEY});
 
-            HashAgg hashAgg(vector<uint32_t>{1, 1}, {AGI(LineItem::ORDERKEY)},
-                            []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; },
-                            COL_HASHER(LineItem::ORDERKEY));
+            HashAgg hashAgg(COL_HASHER(LineItem::ORDERKEY),
+                            RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)->buildSnapshot(),
+                            []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; });
             hashAgg.setPredicate([=](DataRow &row) { return row[1].asInt() > quantity; });
             // ORDERKEY, SUM_QUANTITY
             auto validLineitem = hashAgg.agg(*lineitem);

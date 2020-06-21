@@ -7,6 +7,34 @@
 namespace lqf {
     namespace rowcopy {
 
+        class RowCopier : public FunctorBase {
+        };
+
+        void FunctorBase::add(function<void(DataRow &, DataRow &)> &&f) {
+            contents_.emplace_back(f);
+        }
+
+        void FunctorBase::operator()(DataRow &to, DataRow &from) {
+            for (auto &p:contents_) {
+                p(to, from);
+            }
+        }
+
+        Snapshoter::Snapshoter(vector<uint32_t> &col_offset)
+                : col_offset_(col_offset) {}
+
+        unique_ptr<MemDataRow> Snapshoter::operator()(DataRow &input) {
+            unique_ptr<MemDataRow> result = unique_ptr<MemDataRow>(new MemDataRow(col_offset_));
+            for (auto &p:contents_) {
+                p(*result, input);
+            }
+            return result;
+        }
+
+        void Snapshoter::operator()(DataRow &to, DataRow &from) {
+            FunctorBase::operator()(to, from);
+        }
+
         INPUT_TYPE table_type(Table &table) {
             if (table.isExternal()) {
                 return I_EXTERNAL;
@@ -50,15 +78,6 @@ namespace lqf {
             processors_.emplace_back(move(f));
             return this;
         }
-
-        class RowCopier : public FunctorBase {
-        public:
-            void operator()(DataRow &to, DataRow &from) {
-                for (auto &p:contents_) {
-                    p(to, from);
-                }
-            }
-        };
 
         void RowCopyFactory::buildInternal(FunctorBase &base) {
             if (!fields_.empty()) {
@@ -117,13 +136,7 @@ namespace lqf {
             }
         }
 
-        unique_ptr<function<void(DataRow &, DataRow &)> > RowCopyFactory::build() {
-            RowCopier rc;
-            buildInternal(rc);
-            return unique_ptr<function<void(DataRow &, DataRow &)>>(new function<void(DataRow &, DataRow &)>(move(rc)));
-        }
-
-        unique_ptr<Snapshoter> RowCopyFactory::buildSnapshot() {
+        RowCopyFactory *RowCopyFactory::layout_snapshot() {
             if (to_offset_.empty()) {
                 sort(fields_.begin(), fields_.end(),
                      [](FieldInst &a, FieldInst &b) { return a.to_ < b.to_; });
@@ -136,6 +149,17 @@ namespace lqf {
                     to_offset_.push_back(last);
                 }
             }
+            return this;
+        }
+
+        unique_ptr<function<void(DataRow &, DataRow &)> > RowCopyFactory::build() {
+            RowCopier rc;
+            buildInternal(rc);
+            return unique_ptr<function<void(DataRow &, DataRow &)>>(new function<void(DataRow &, DataRow &)>(move(rc)));
+        }
+
+        unique_ptr<Snapshoter> RowCopyFactory::buildSnapshot() {
+            layout_snapshot();
             auto s = unique_ptr<Snapshoter>(new Snapshoter(to_offset_));
             buildInternal(*s);
             return s;

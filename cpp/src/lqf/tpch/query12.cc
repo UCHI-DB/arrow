@@ -34,7 +34,7 @@ namespace lqf {
                 void reduce(DataRow &input) override {
                     int32_t orderpriority = input[2].asInt();
                     if (orderpriority == 0 || orderpriority == 1) {
-                        *value_ += input[1].asInt();
+                        value_ = value_.asInt() + input[1].asInt();
                     }
                 }
             };
@@ -46,7 +46,7 @@ namespace lqf {
                 void reduce(DataRow &input) override {
                     int32_t orderpriority = input[2].asInt();
                     if (!(orderpriority == 0 || orderpriority == 1)) {
-                        *value_ += input[1].asInt();
+                        value_ = value_.asInt() + input[1].asInt();
                     }
                 }
             };
@@ -85,10 +85,11 @@ namespace lqf {
                 return (row[LineItem::ORDERKEY].asInt() << 3) + row(LineItem::SHIPMODE).asInt();
             };
 
-            auto lineitemAgg_obj = new HashAgg(vector<uint32_t>({1, 1, 1}),
-                                               {AGI(LineItem::ORDERKEY), AGR(LineItem::SHIPMODE)},
-                                               []() { return vector<AggField *>({new agg::Count()}); }, hasher);
-            lineitemAgg_obj->useVertical();
+            auto lineitemAgg_obj = new HashAgg(
+                    hasher,
+                    RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
+                            ->field(F_RAW, LineItem::SHIPMODE, 1)->buildSnapshot(),
+                    []() { return vector<AggField *>({new agg::Count()}); });
             auto lineitemAgg = graph.add(lineitemAgg_obj, {lineItemAgainFilter});
             // ORDER_KEY, SHIPMODE, COUNT
 
@@ -99,9 +100,11 @@ namespace lqf {
                                   {lineitemAgg, orderFilter});
             // SHIPMODE, COUNT, ORDERPRIORITY
 
-            auto finalAgg = graph.add(new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(0)}, []() {
-                return vector<AggField *>{new OrderHighPriorityField(), new OrderLowPriorityField()};
-            }, COL_HASHER(0)), {join});
+            auto finalAgg = graph.add(
+                    new HashAgg(COL_HASHER(0),
+                                RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(), []() {
+                                return vector<AggField *>{new OrderHighPriorityField(), new OrderLowPriorityField()};
+                            }), {join});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SILE(0);
@@ -146,9 +149,10 @@ namespace lqf {
                 return (row[LineItem::ORDERKEY].asInt() << 3) + row(LineItem::SHIPMODE).asInt();
             };
 
-            HashAgg lineitemAgg(vector<uint32_t>({1, 1, 1}), {AGI(LineItem::ORDERKEY), AGR(LineItem::SHIPMODE)},
-                                []() { return vector<AggField *>({new agg::Count()}); }, hasher);
-            lineitemAgg.useVertical();
+            HashAgg lineitemAgg(hasher,
+                                RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
+                                        ->field(F_RAW, LineItem::SHIPMODE, 1)->buildSnapshot(),
+                                []() { return vector<AggField *>({new agg::Count()}); });
             // ORDER_KEY, SHIPMODE, COUNT
             auto agglineitem = lineitemAgg.agg(*validDateLineitem);
 
@@ -159,9 +163,12 @@ namespace lqf {
             // SHIPMODE, COUNT, ORDERPRIORITY
             auto itemwithorder = join.join(*agglineitem, *filteredOrder);
 
-            HashAgg finalAgg(vector<uint32_t>{1, 1, 1}, {AGI(0)}, []() {
-                return vector<AggField *>{new OrderHighPriorityField(), new OrderLowPriorityField()};
-            }, COL_HASHER(0));
+            HashAgg finalAgg(COL_HASHER(0),
+                             RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                             []() {
+                                 return vector<AggField *>{new OrderHighPriorityField(),
+                                                           new OrderLowPriorityField()};
+                             });
             auto result = finalAgg.agg(*itemwithorder);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

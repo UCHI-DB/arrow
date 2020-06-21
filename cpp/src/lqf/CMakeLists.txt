@@ -67,6 +67,7 @@ set(LQF_SRCS
         lang.cc
         memorypool.cc
         rowcopy.cc
+        data_container.cc
         )
 
 add_arrow_lib(lqf
@@ -105,6 +106,7 @@ set(LQF_TEST_SRC
         parallel_test.cc
         rowcopy_test.cc
         dict_test.cc
+        data_container_test.cc
         )
 
 add_test_case(all-test

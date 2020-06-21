@@ -34,7 +34,8 @@ namespace lqf {
                 PriceField() : DoubleSum(LineItem::EXTENDEDPRICE) {}
 
                 void reduce(DataRow &row) override {
-                    *value_ += row[LineItem::EXTENDEDPRICE].asDouble() * (1 - row[LineItem::DISCOUNT].asDouble());
+                    value_ = value_.asDouble() +
+                             row[LineItem::EXTENDEDPRICE].asDouble() * (1 - row[LineItem::DISCOUNT].asDouble());
                 }
             };
         }
@@ -120,8 +121,7 @@ namespace lqf {
 
             auto funion = graph.add(new FilterUnion(3), {itemOnPart1, itemOnPart2, itemOnPart3});
 
-            auto sumagg = graph.add(new SimpleAgg({1}, []() { return vector<AggField *>{new PriceField()}; }),
-                                    {funion});
+            auto sumagg = graph.add(new SimpleAgg([]() { return vector<AggField *>{new PriceField()}; }), {funion});
 
             graph.add(new Printer(PBEGIN PD(0) PEND), {sumagg});
 
@@ -215,7 +215,7 @@ namespace lqf {
                     vector<Table *>{itemWithPart1.get(), itemWithPart2.get(), itemWithPart3.get()});
 
 
-            SimpleAgg sumagg({1}, []() { return vector<AggField *>{new PriceField()}; });
+            SimpleAgg sumagg([]() { return vector<AggField *>{new PriceField()}; });
             auto result = sumagg.agg(*unioneditem);
 
             Printer printer(PBEGIN PD(0) PEND);

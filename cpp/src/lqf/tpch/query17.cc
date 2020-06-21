@@ -27,7 +27,7 @@ namespace lqf {
                 YearSumField() : DoubleSum(0) {}
 
                 void dump() override {
-                    *value_ /= 7;
+                    value_ = value_.asDouble() / 7;
                 }
             };
         }
@@ -54,11 +54,11 @@ namespace lqf {
                                             {lineitem, partFilter});
             auto lineitemMat = graph.add(new FilterMat(), {lineitemFilter});
 
-            auto avgquantity = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(LineItem::PARTKEY)},
-                                                     []() {
-                                                         return vector<AggField *>{new IntAvg(LineItem::QUANTITY)};
-                                                     },
-                                                     COL_HASHER(LineItem::PARTKEY)), {lineitemMat});
+            auto avgquantity = graph.add(
+                    new HashAgg(COL_HASHER(LineItem::PARTKEY),
+                                RowCopyFactory().field(F_REGULAR, LineItem::PARTKEY, 0)->buildSnapshot(),
+                                []() { return vector<AggField *>{new IntAvg(LineItem::QUANTITY)}; }),
+                    {lineitemMat});
             // PARTKEY, AVG_QTY
 
             auto withAvgJoin = graph.add(
@@ -68,10 +68,10 @@ namespace lqf {
                                  }), {lineitemMat, avgquantity});
 
             auto sumagg = graph.add(
-                    new SimpleAgg(vector<uint32_t>({1}), []() { return vector<AggField *>{new YearSumField()}; }),
+                    new SimpleAgg([]() { return vector<AggField *>{new YearSumField()}; }),
                     {withAvgJoin});
 
-            graph.add(new Printer(PBEGIN PD(0) PEND),{sumagg});
+            graph.add(new Printer(PBEGIN PD(0) PEND), {sumagg});
 
             graph.execute();
         }
@@ -91,9 +91,9 @@ namespace lqf {
             FilterJoin lineitemFilter(LineItem::PARTKEY, Part::PARTKEY);
             auto validlineitem = FilterMat().mat(*lineitemFilter.join(*lineitem, *validPart));
 
-            HashAgg avgquantity(vector<uint32_t>({1, 1}), {AGI(LineItem::PARTKEY)},
-                                []() { return vector<AggField *>{new IntAvg(LineItem::QUANTITY)}; },
-                                COL_HASHER(LineItem::PARTKEY));
+            HashAgg avgquantity(COL_HASHER(LineItem::PARTKEY),
+                                                RowCopyFactory().field(F_REGULAR, LineItem::PARTKEY, 0)->buildSnapshot(),
+                                                []() { return vector<AggField *>{new IntAvg(LineItem::QUANTITY)}; });
             // PARTKEY, AVG_QTY
             auto aggedlineitem = avgquantity.agg(*validlineitem);
 
@@ -104,7 +104,7 @@ namespace lqf {
             auto result = withAvgJoin.join(*validlineitem, *aggedlineitem);
 
 
-            SimpleAgg sumagg(vector<uint32_t>({1}), []() { return vector<AggField *>{new YearSumField()}; });
+            SimpleAgg sumagg([]() { return vector<AggField *>{new YearSumField()}; });
             result = sumagg.agg(*result);
 
             Printer printer(PBEGIN PD(0) PEND);

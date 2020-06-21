@@ -33,7 +33,7 @@ namespace lqf {
 
             void phone_snapshot(DataRow &to, DataRow &from) {
                 auto &phone = from[Customer::PHONE].asByteArray();
-                to[0] = (int)((phone.ptr[0] - '0') * 10 + (phone.ptr[1] - '0'));
+                to[0] = (int) ((phone.ptr[0] - '0') * 10 + (phone.ptr[1] - '0'));
                 to[1] = from[Customer::ACCTBAL];
             }
 
@@ -115,7 +115,7 @@ namespace lqf {
 //            auto validCust = FilterMat().mat(*custFilter.filter(*customer));
 
             auto avgagg = graph.add(new AvgAgg(
-                    new SimpleAgg(vector<uint32_t>{1}, []() { return vector<AggField *>{new PositiveAvg()}; })),
+                    new SimpleAgg([]() { return vector<AggField *>{new PositiveAvg()}; })),
                                     {matCust});
 //            auto avgCust = avgagg.agg(*validCust);
 //            double avg = (*(*avgCust->blocks()->collect())[0]).rows()->next()[0].asDouble();
@@ -137,9 +137,10 @@ namespace lqf {
                 ByteArray &val = input[0].asByteArray();
                 return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
             };
-            auto agg = graph.add(new HashAgg(vector<uint32_t>{2, 1, 1}, {AGI(0)},
-                                             []() { return vector<AggField *>{new DoubleSum(1), new Count()}; },
-                                             hasher), {notExistJoin});
+            auto agg = graph.add(new HashAgg(
+                    hasher,
+                    RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                    []() { return vector<AggField *>{new DoubleSum(1), new Count()}; }), {notExistJoin});
 //            auto result = agg.agg(*noorderCust);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -163,7 +164,7 @@ namespace lqf {
             }));
             auto validCust = FilterMat().mat(*custFilter.filter(*customer));
 
-            SimpleAgg avgagg(vector<uint32_t>{1}, []() { return vector<AggField *>{new PositiveAvg()}; });
+            SimpleAgg avgagg([]() { return vector<AggField *>{new PositiveAvg()}; });
             auto avgCust = avgagg.agg(*validCust);
             double avg = (*(*avgCust->blocks()->collect())[0]).rows()->next()[0].asDouble();
 
@@ -181,8 +182,9 @@ namespace lqf {
                 ByteArray &val = input[0].asByteArray();
                 return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
             };
-            HashAgg agg(vector<uint32_t>{2, 1, 1}, {AGI(0)},
-                        []() { return vector<AggField *>{new DoubleSum(1), new Count()}; }, hasher);
+            HashAgg agg(hasher,
+                        RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                        []() { return vector<AggField *>{new DoubleSum(1), new Count()}; });
             auto result = agg.agg(*noorderCust);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

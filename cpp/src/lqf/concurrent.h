@@ -7,7 +7,12 @@
 
 #include <cstdint>
 #include <mutex>
+#include <shared_mutex>
 #include <condition_variable>
+#include <thread>
+#include <unordered_map>
+#include <memory>
+#include <functional>
 
 namespace lqf {
     namespace concurrent {
@@ -31,6 +36,33 @@ namespace lqf {
             bool try_wait();
 
             bool try_wait(uint32_t num);
+        };
+
+        template<typename T>
+        class ThreadLocal {
+        protected:
+            std::function<T()> init_;
+            std::unordered_map<std::thread::id, std::shared_ptr<T>> content_;
+            std::shared_mutex access_lock_;
+        public:
+            ThreadLocal(std::function<T()> init) : init_(init) {}
+
+            std::shared_ptr<T> get() {
+                auto this_thread_id = std::this_thread::get_id();
+                access_lock_.lock_shared();
+                auto found = content_.find(this_thread_id);
+                if (found != content_.end()) {
+                    access_lock_.unlock_shared();
+                    return found->second;
+                } else {
+                    access_lock_.unlock_shared();
+                    access_lock_.lock();
+                    auto created = std::make_shared<T>(init_());
+                    content_[this_thread_id] = created;
+                    access_lock_.unlock();
+                    return created;
+                }
+            }
         };
     }
 }

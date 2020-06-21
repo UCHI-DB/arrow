@@ -74,16 +74,17 @@ namespace lqf {
 
             auto pssJoin = graph.add(new FilterJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY), {pspJoin, supplierMat});
 
-            auto psAgg = new HashAgg(lqf::colSize(3), {AGI(PartSupp::PARTKEY)}, []() {
-                return vector<AggField *>{new agg::DoubleRecordingMin(PartSupp::SUPPLYCOST, PartSupp::SUPPKEY)};
-            }, COL_HASHER(PartSupp::PARTKEY));
-            psAgg->useVertical();
-            psAgg->useRecording();
-            // PARTKEY SUPPKEY SUPPLYCOST
-            auto psMinCost = graph.add(psAgg, {pssJoin});
+            auto psMinCost = graph.add(new RecordingHashAgg(COL_HASHER(PartSupp::PARTKEY),
+                                                            RowCopyFactory().field(F_REGULAR, PartSupp::PARTKEY,
+                                                                                   0)->buildSnapshot(),
+                                                            []() {
+                                                                return new agg::recording::RecordingDoubleMin(
+                                                                        PartSupp::SUPPLYCOST, PartSupp::SUPPKEY);
+                                                            }), {pssJoin});
+            // PARTKEY SUPPLYCOST SUPPKEY
 
             auto ps2partJoin = graph.add(
-                    new HashColumnJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(1), JRS(Part::MFGR)})),
+                    new HashColumnJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(2), JRS(Part::MFGR)})),
                     {psMinCost, partMat});
             // 0 PARTKEY 1 SUPPKEY 2 P_MFGR
 
@@ -158,15 +159,16 @@ namespace lqf {
             FilterJoin pssJoin(PartSupp::SUPPKEY, Supplier::SUPPKEY);
             auto filteredPss = pssJoin.join(*filteredPs, *matSupplier);
 
-            HashAgg psAgg(lqf::colSize(3), {AGI(PartSupp::PARTKEY)}, []() {
-                return vector<AggField *>{new agg::DoubleRecordingMin(PartSupp::SUPPLYCOST, PartSupp::SUPPKEY)};
-            }, COL_HASHER(PartSupp::PARTKEY));
-            psAgg.useVertical();
-            psAgg.useRecording();
-            // PARTKEY SUPPKEY SUPPLYCOST
+            RecordingHashAgg psAgg(COL_HASHER(PartSupp::PARTKEY),
+                                   RowCopyFactory().field(F_REGULAR, PartSupp::PARTKEY, 0)->buildSnapshot(),
+                                   []() {
+                                       return new agg::recording::RecordingDoubleMin(PartSupp::SUPPLYCOST,
+                                                                                     PartSupp::SUPPKEY);
+                                   });
+            // PARTKEY SUPPLYCOST SUPPKEY
             auto psMinCostTable = psAgg.agg(*filteredPss);
 
-            HashColumnJoin ps2partJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(1), JRS(Part::MFGR)}));
+            HashColumnJoin ps2partJoin(0, Part::PARTKEY, new ColumnBuilder({JL(0), JL(2), JRS(Part::MFGR)}));
             // 0 PARTKEY 1 SUPPKEY 2 P_MFGR
             auto pswithPartTable = ps2partJoin.join(*psMinCostTable, *matPart);
 

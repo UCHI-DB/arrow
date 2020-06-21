@@ -26,8 +26,8 @@ namespace lqf {
                 Field3() : DoubleSum(0) {}
 
                 void reduce(DataRow &dataRow) {
-                    *value_ += dataRow[LineItem::EXTENDEDPRICE].asDouble()
-                               * (1 - dataRow[LineItem::DISCOUNT].asDouble());
+                    value_ = value_.asDouble() + dataRow[LineItem::EXTENDEDPRICE].asDouble()
+                                                 * (1 - dataRow[LineItem::DISCOUNT].asDouble());
                 }
             };
 
@@ -36,9 +36,9 @@ namespace lqf {
                 Field4() : DoubleSum(0) {}
 
                 void reduce(DataRow &dataRow) {
-                    *value_ += dataRow[LineItem::EXTENDEDPRICE].asDouble()
-                               * (1 - dataRow[LineItem::DISCOUNT].asDouble()) *
-                               (1 + dataRow[LineItem::TAX].asDouble());
+                    value_ = value_.asDouble() + dataRow[LineItem::EXTENDEDPRICE].asDouble()
+                                                 * (1 - dataRow[LineItem::DISCOUNT].asDouble()) *
+                                                 (1 + dataRow[LineItem::TAX].asDouble());
                 }
             };
 
@@ -58,7 +58,7 @@ namespace lqf {
                     {new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))});
             auto filtered = colFilter.filter(*lineItemTable);
 
-            function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
+            function<uint64_t(DataRow &row)> indexer = [](DataRow &row) {
                 return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
             };
 
@@ -75,9 +75,9 @@ namespace lqf {
                 };
             };
 
-            TableAgg agg(lqf::colSize(10),
-                         {AGR(LineItem::RETURNFLAG), AGR(LineItem::LINESTATUS)},
-                         aggFields, 10, indexer);
+            HashAgg agg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
+                                ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
+                        aggFields);
             auto agged = agg.agg(*filtered);
 //
             SmallSort sort(SORTER2(0, 1));
@@ -118,7 +118,7 @@ namespace lqf {
                     new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))),
                                        {lineitemTable});
 
-            function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
+            function<uint64_t(DataRow &row)> indexer = [](DataRow &row) {
                 return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
             };
             function<vector<AggField *>()> aggFields = []() {
@@ -134,9 +134,9 @@ namespace lqf {
                 };
             };
 
-            auto agg = graph.add(new TableAgg(lqf::colSize(10),
-                                              {AGR(LineItem::RETURNFLAG), AGR(LineItem::LINESTATUS)},
-                                              aggFields, 10, indexer), {colFilter});
+            auto agg = graph.add(new HashAgg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
+                                                     ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
+                                             aggFields), {colFilter});
 
             auto sort = graph.add(new SmallSort(SORTER2(0, 1)), {agg});
 

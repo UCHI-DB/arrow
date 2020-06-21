@@ -128,10 +128,11 @@ namespace lqf {
                                                 {l1withdate, validSupplier});
 //            auto l1withsupplier = l1withsupplierJoin.join(*l1withdate, *validSupplier);
 
-            auto l1agg = graph.add(
-                    new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::ORDERKEY), AGI(LineItem::SUPPKEY)},
-                                []() { return vector<AggField *>{new Count()}; },
-                                COL_HASHER2(LineItem::ORDERKEY, LineItem::SUPPKEY)), {l1withsupplierJoin});
+            auto l1agg = graph.add(new HashAgg(COL_HASHER2(LineItem::ORDERKEY, LineItem::SUPPKEY),
+                                               RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)->field(
+                                                       F_REGULAR, LineItem::SUPPKEY, 1)->buildSnapshot(),
+                                               []() { return vector<AggField *>{new Count()}; }),
+                                   {l1withsupplierJoin});
             // ORDERKEY, SUPPKEY, COUNT
 //            auto l1agged = l1agg.agg(*l1withsupplier);
 
@@ -155,9 +156,10 @@ namespace lqf {
             // ORDERKEY, SUPPKEY, COUNT
 //            auto l1valid = notExistJoin.join(*l1withdate, *l1exist);
 
-            auto suppsum = graph.add(new HashAgg(vector<uint32_t>{1, 1}, {AGI(1)},
-                                                 []() { return vector<AggField *>{new IntSum(2)}; }, COL_HASHER(1)),
-                                     {l1valid});
+            auto suppsum = graph.add(new HashAgg(
+                    COL_HASHER(1),
+                    RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                    []() { return vector<AggField *>{new IntSum(2)}; }), {l1valid});
             // SUPPKEY, COUNT
 //            auto suppsum = countagg.agg(*l1valid);
 
@@ -208,9 +210,10 @@ namespace lqf {
             FilterJoin l1withsupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY);
             auto l1withsupplier = l1withsupplierJoin.join(*l1withdate, *validSupplier);
 
-            HashAgg l1agg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::ORDERKEY), AGI(LineItem::SUPPKEY)},
-                          []() { return vector<AggField *>{new Count()}; },
-                          COL_HASHER2(LineItem::ORDERKEY, LineItem::SUPPKEY));
+            HashAgg l1agg(COL_HASHER2(LineItem::ORDERKEY, LineItem::SUPPKEY),
+                          RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
+                                  ->field(F_REGULAR, LineItem::SUPPKEY, 1)->buildSnapshot(),
+                          []() { return vector<AggField *>{new Count()}; });
             // ORDERKEY, SUPPKEY, COUNT
             auto l1agged = l1agg.agg(*l1withsupplier);
 
@@ -231,8 +234,9 @@ namespace lqf {
             // ORDERKEY, SUPPKEY, COUNT
             auto l1valid = notExistJoin.join(*l1withdate, *l1exist);
 
-            HashAgg countagg(vector<uint32_t>{1, 1}, {AGI(1)},
-                             []() { return vector<AggField *>{new IntSum(2)}; }, COL_HASHER(1));
+            HashAgg countagg(COL_HASHER(1),
+                             RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                             []() { return vector<AggField *>{new IntSum(2)}; });
             // SUPPKEY, COUNT
             auto suppsum = countagg.agg(*l1valid);
 

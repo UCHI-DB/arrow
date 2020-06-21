@@ -411,11 +411,6 @@ namespace lqf {
     };
 
     unique_ptr<DataRowIterator> MemvBlock::rows() {
-//        auto cols = new vector<unique_ptr<ColumnIterator>>();
-//        auto col_size = col_size_.size();
-//        for (auto i = 0u; i < col_size; ++i) {
-//            cols->push_back(col(i));
-//        }
         return unique_ptr<DataRowIterator>(new MemvDataRowIterator(&content_, col_size_));
     }
 
@@ -435,6 +430,171 @@ namespace lqf {
         }
         // The old memblock is discarded
         another.content_.clear();
+    }
+
+    void FlexAccessor::init(const vector<uint32_t> &offset) {
+        offset_ = offset;
+        size_ = offset2size(offset);
+    }
+
+    DataField &FlexAccessor::operator[](uint64_t i) {
+        view_ = pointer_ + offset_[i];
+        view_.size_ = size_[i];
+        return view_;
+    }
+
+    uint64_t *FlexAccessor::raw() {
+        return pointer_;
+    }
+
+    unique_ptr<DataRow> FlexAccessor::snapshot() {
+        return nullptr;
+    }
+
+    DataRow &FlexAccessor::operator=(DataRow &row) {
+        if (row.raw()) {
+            memcpy(static_cast<void *>(pointer_), static_cast<void *>(row.raw()),
+                   sizeof(uint64_t) * offset_.back());
+        } else {
+            auto offset_size = offset_.size();
+            for (uint32_t i = 0; i < offset_size - 1; ++i) {
+                (*this)[i] = row[i];
+            }
+        }
+        return *this;
+    }
+
+    MemFlexBlock::MemFlexBlock(const vector<uint32_t> &col_offset)
+            :  size_(0),col_offset_(col_offset), pointer_(0) {
+        accessor_.init(col_offset);
+        memory_.push_back(make_shared<vector<uint64_t>>(FLEX_SLAB_SIZE_));
+        row_size_ = col_offset.back();
+        stripe_size_ = FLEX_SLAB_SIZE_ / row_size_;
+    }
+
+    uint64_t MemFlexBlock::size() {
+        return size_;
+    }
+
+    DataRow &MemFlexBlock::push_back() {
+        auto current = pointer_;
+        pointer_ += row_size_;
+        if (pointer_ > FLEX_SLAB_SIZE_) {
+            memory_.push_back(make_shared<vector<uint64_t>>(FLEX_SLAB_SIZE_));
+            pointer_ = row_size_;
+            current = 0;
+        }
+        size_++;
+        accessor_.raw(memory_.back()->data() + current);
+        return accessor_;
+    }
+
+    DataRow &MemFlexBlock::operator[](uint32_t index) {
+        auto stripe_index = index / stripe_size_;
+        auto offset = index % stripe_size_;
+        accessor_.raw(memory_[stripe_index]->data() + offset * row_size_);
+        return accessor_;
+    }
+
+    void MemFlexBlock::assign(vector<shared_ptr<vector<uint64_t>>> &content, uint32_t size) {
+        size_ = size;
+        memory_ = move(content);
+    }
+
+    shared_ptr<Block> MemFlexBlock::mask(shared_ptr<Bitmap> mask) {
+        return make_shared<MaskedBlock>(shared_from_this(), mask);
+    }
+
+    class FlexColumnIterator : public ColumnIterator {
+    private:
+        vector<shared_ptr<vector<uint64_t>>> &data_;
+        uint32_t stripe_size_;
+        uint32_t row_size_;
+        uint32_t col_offset_;
+        uint64_t row_index_;
+        uint64_t stripe_index_;
+        uint64_t stripe_offset_;
+        DataField view_;
+    public:
+        FlexColumnIterator(vector<shared_ptr<vector<uint64_t>>> &data, uint32_t stripe_size,
+                           uint32_t row_size, uint32_t col_offset, uint32_t col_size)
+                : data_(data), stripe_size_(stripe_size), row_size_(row_size), col_offset_(col_offset),
+                  row_index_(-1), stripe_index_(0), stripe_offset_(-1) {
+            view_.size_ = col_size;
+        }
+
+        DataField &operator[](uint64_t idx) override {
+            row_index_ = idx;
+            stripe_index_ = idx / stripe_size_;
+            stripe_offset_ = idx % stripe_size_;
+            view_ = data_[stripe_index_]->data() + stripe_offset_ * row_size_ + col_offset_;
+            return view_;
+        }
+
+        DataField &next() override {
+            ++row_index_;
+            ++stripe_offset_;
+            if (stripe_offset_ >= stripe_size_) {
+                stripe_index_ += 1;
+                stripe_offset_ = 0;
+            }
+            view_ = data_[stripe_index_]->data() + stripe_offset_ * row_size_ + col_offset_;
+            return view_;
+        }
+
+        uint64_t pos() override {
+            return row_index_;
+        }
+    };
+
+    unique_ptr<ColumnIterator> MemFlexBlock::col(uint32_t col_index) {
+        return unique_ptr<ColumnIterator>(
+                new FlexColumnIterator(memory_, stripe_size_, row_size_, col_offset_[col_index],
+                                       col_offset_[col_index + 1] - col_offset_[col_index]));
+    }
+
+    class FlexRowIterator : public DataRowIterator {
+    private:
+        vector<shared_ptr<vector<uint64_t>>> &data_;
+        FlexAccessor reference_;
+        uint32_t stripe_size_;
+        uint32_t row_size_;
+        uint64_t row_index_;
+        uint64_t stripe_index_;
+        uint64_t stripe_offset_;
+    public:
+        FlexRowIterator(vector<shared_ptr<vector<uint64_t>>> &data, const vector<uint32_t> &col_offset)
+                : data_(data), row_size_(col_offset.back()), row_index_(-1), stripe_index_(0), stripe_offset_(-1) {
+            stripe_size_ = FLEX_SLAB_SIZE_/row_size_;
+            reference_.init(col_offset);
+        }
+
+        DataRow &operator[](uint64_t idx) override {
+            row_index_ = idx;
+            stripe_index_ = idx / stripe_size_;
+            stripe_offset_ = idx % stripe_size_;
+            reference_.raw(data_[stripe_index_]->data() + stripe_offset_ * row_size_);
+            return reference_;
+        }
+
+        DataRow &next() override {
+            ++row_index_;
+            ++stripe_offset_;
+            if (stripe_offset_ >= stripe_size_) {
+                stripe_index_ += 1;
+                stripe_offset_ = 0;
+            }
+            reference_.raw(data_[stripe_index_]->data() + stripe_offset_ * row_size_);
+            return reference_;
+        }
+
+        uint64_t pos() override {
+            return row_index_;
+        }
+    };
+
+    unique_ptr<DataRowIterator> MemFlexBlock::rows() {
+        return unique_ptr<DataRowIterator>(new FlexRowIterator(memory_, col_offset_));
     }
 
     MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)
@@ -817,6 +977,16 @@ namespace lqf {
         lock.unlock();
 
         return block;
+    }
+
+    shared_ptr<MemFlexBlock> MemTable::allocateFlex() {
+        if (vertical_)
+            return nullptr;
+        auto flex = make_shared<MemFlexBlock>(col_offset_);
+        std::unique_lock lock(write_lock_);
+        blocks_.push_back(flex);
+
+        return flex;
     }
 
     void MemTable::append(shared_ptr<Block> block) {

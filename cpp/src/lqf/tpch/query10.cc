@@ -68,9 +68,10 @@ namespace lqf {
                                              {lineitemFilter, orderDateFilter});
             // CUSTKEY, REV
 
-            auto itemAgg = graph.add(new HashAgg(vector<uint32_t>({1, 1}), {AGI(0)},
-                                                 []() { return vector<AggField *>({new DoubleSum(1)}); },
-                                                 COL_HASHER(0)), {orderItemFilter});
+            auto itemAgg = graph.add(new HashAgg(COL_HASHER(0),
+                                                 RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                                                 []() { return vector<AggField *>({new DoubleSum(1)}); }),
+                                     {orderItemFilter});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SDGE(1);
@@ -120,8 +121,9 @@ namespace lqf {
             // CUSTKEY, REV
             validLineitem = orderItemFilter.join(*validLineitem, *validOrder);
 
-            HashAgg itemAgg(vector<uint32_t>({1, 1}), {AGI(0)},
-                            []() { return vector<AggField *>({new DoubleSum(1)}); }, COL_HASHER(0));
+            HashAgg itemAgg(COL_HASHER(0),
+                            RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                            []() { return vector<AggField *>({new DoubleSum(1)}); });
             auto agglineitem = itemAgg.agg(*validLineitem);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

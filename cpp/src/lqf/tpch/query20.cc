@@ -85,10 +85,11 @@ namespace lqf {
             auto psFilterItem = graph.add(new PowerHashFilterJoin(key_ext_1, key_ext), {lineitemFilter, matPs});
 //            auto lineitemWithPs = psFilterItem.join(*validLineitem, *matPs);
 
-            auto lineitemQuanAgg = graph.add(
-                    new HashAgg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::PARTKEY), AGI(LineItem::SUPPKEY)},
-                                []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; },
-                                COL_HASHER2(LineItem::PARTKEY, LineItem::SUPPKEY)), {psFilterItem});
+            auto lineitemQuanAgg = graph.add(new HashAgg(
+                    COL_HASHER2(LineItem::PARTKEY, LineItem::SUPPKEY),
+                    RowCopyFactory().field(F_REGULAR, LineItem::PARTKEY, 0)->field(
+                            F_REGULAR, LineItem::SUPPKEY, 1)->buildSnapshot(),
+                    []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; }), {psFilterItem});
             // PARTKEY SUPPKEY SUM(QUANTITY)
 //            auto agglineitem = lineitemQuanAgg.agg(*lineitemWithPs);
 
@@ -173,9 +174,10 @@ namespace lqf {
             PowerHashFilterJoin psFilterItem(key_ext_1, key_ext);
             auto lineitemWithPs = psFilterItem.join(*validLineitem, *matPs);
 
-            HashAgg lineitemQuanAgg(vector<uint32_t>{1, 1, 1}, {AGI(LineItem::PARTKEY), AGI(LineItem::SUPPKEY)},
-                                    []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; },
-                                    COL_HASHER2(LineItem::PARTKEY, LineItem::SUPPKEY));
+            HashAgg lineitemQuanAgg(COL_HASHER2(LineItem::PARTKEY, LineItem::SUPPKEY),
+                                    RowCopyFactory().field(F_REGULAR, LineItem::PARTKEY, 0)->field(
+                                            F_REGULAR, LineItem::SUPPKEY, 1)->buildSnapshot(),
+                                    []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; });
             // PARTKEY SUPPKEY SUM(QUANTITY)
             auto agglineitem = lineitemQuanAgg.agg(*lineitemWithPs);
 

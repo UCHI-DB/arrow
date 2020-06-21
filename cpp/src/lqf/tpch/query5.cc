@@ -93,10 +93,10 @@ namespace lqf {
                                            {itemOnSupplierJoin, orderOnCustomerJoin});
             // ORDERKEY NATIONKEY PRICE
 
-            auto pagg = new TableAgg(vector<uint32_t>{1, 1}, {AGI(1)},
-                                     []() { return vector<AggField *>{new agg::DoubleSum(2)}; },
-                                     30, COL_HASHER(1));
-            pagg->useVertical();
+            auto pagg = new HashAgg(COL_HASHER(1),
+                                    RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                                    []() { return vector<AggField *>{new agg::DoubleSum(2)}; });
+
             auto agg = graph.add(pagg, {orderItemJoin});
             // NATIONKEY PRICE
 
@@ -165,9 +165,8 @@ namespace lqf {
             // ORDERKEY NATIONKEY PRICE
             auto joined = orderItemJoin.join(*validLineitem, *validOrder);
 
-            TableAgg agg(vector<uint32_t>{1, 1}, {AGI(1)}, []() { return vector<AggField *>{new agg::DoubleSum(2)}; },
-                         30, COL_HASHER(1));
-            agg.useVertical();
+            HashAgg agg(COL_HASHER(1), RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                                         []() { return vector<AggField *>{new agg::DoubleSum(2)}; });
             // NATIONKEY PRICE
             auto agged = agg.agg(*joined);
 

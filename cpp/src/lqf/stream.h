@@ -561,12 +561,11 @@ namespace lqf {
         template<typename T, typename SRC, typename REDUCER>
         T reduce(StreamSource<SRC> *source, Mapper<T, SRC> *mapper, REDUCER reducer) {
             if (parallel_) {
-                vector<function<T()>> tasks;
+
                 // execute reduce in parallel
                 auto collected = collect(source, mapper);
                 while (collected->size() > 1) {
-                    tasks.clear();
-
+                    vector<function<T()>> tasks;
                     auto pair = collected->size() / 2;
                     auto remain = collected->size() % 2;
                     for (auto i = 0u; i < pair; ++i) {

@@ -51,9 +51,9 @@ namespace lqf {
                 return row(Orders::ORDERPRIORITY).asInt();
             };
 
-            auto agg = graph.add(new HashAgg(vector<uint32_t>{1, 1}, {AGR(Orders::ORDERPRIORITY)}, []() {
-                return vector<AggField *>{new agg::Count()};
-            }, indexer), {existJoin});
+            auto agg = graph.add(new HashAgg(indexer,
+                                             RowCopyFactory().field(F_RAW, Orders::ORDERPRIORITY, 0)->buildSnapshot(),
+                                             []() { return vector<agg::AggField *>{new agg::Count()}; }), {existJoin});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return (*a)[0].asInt() < (*b)[0].asInt();
@@ -105,9 +105,8 @@ namespace lqf {
                 return row(Orders::ORDERPRIORITY).asInt();
             };
 
-            HashAgg agg(vector<uint32_t>{1, 1}, {AGR(Orders::ORDERPRIORITY)}, []() {
-                return vector<AggField *>{new agg::Count()};
-            }, indexer);
+            HashAgg agg(indexer, RowCopyFactory().field(F_RAW, Orders::ORDERPRIORITY, 0)->buildSnapshot(),
+                        []() { return vector<agg::AggField *>{new agg::Count()}; });
 
             auto agged = agg.agg(*existOrderTable);
 
