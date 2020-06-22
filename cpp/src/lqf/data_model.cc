@@ -98,6 +98,53 @@ namespace lqf {
         return offset;
     }
 
+    class MemRowRef : public DataRow {
+    private:
+        uint64_t *start_;
+        const vector<uint32_t> &col_offset_;
+        DataField view_;
+    public:
+        MemRowRef(uint64_t *start, const vector<uint32_t> &offset)
+                : start_(start), col_offset_(offset) {}
+
+        virtual ~MemRowRef() = default;
+
+        unique_ptr<DataRow> snapshot() override {
+            return nullptr;
+        }
+
+        DataField &operator[](uint64_t i) override {
+            view_ = start_ + col_offset_[i];
+            view_.size_ = col_offset_[i + 1] - col_offset_[i];
+            return view_;
+        }
+
+        uint64_t *raw() override {
+            return start_;
+        }
+
+        uint32_t size() override {
+            return col_offset_.back();
+        }
+
+        uint32_t num_fields() override {
+            return col_offset_.size() - 1;
+        }
+
+        DataRow &operator=(DataRow &row) override {
+            if (row.raw()) {
+                memcpy(static_cast<void *>(start_), static_cast<void *>(row.raw()),
+                       sizeof(uint64_t) * col_offset_.back());
+            } else {
+                auto offset_size = col_offset_.size();
+                for (uint32_t i = 0; i < offset_size - 1; ++i) {
+                    (*this)[i] = row[i];
+                }
+            }
+            return *this;
+        }
+    };
+
     MemDataRow MemDataRow::EMPTY = MemDataRow(0);
 
     MemDataRow::MemDataRow(uint8_t num_fields)
@@ -107,9 +154,7 @@ namespace lqf {
             : data_(offset.back(), 0x0), offset_(offset) {}
 
     unique_ptr<DataRow> MemDataRow::snapshot() {
-        MemDataRow *mdr = new MemDataRow(offset_);
-        *mdr = *this;
-        return unique_ptr<DataRow>(mdr);
+        return unique_ptr<DataRow>(new MemRowRef(data_.data(), offset_));
     }
 
     DataField &MemDataRow::operator[](uint64_t i) {
@@ -183,8 +228,7 @@ namespace lqf {
         void next() { ++index_; }
 
         unique_ptr<DataRow> snapshot() override {
-            MemDataRowView *snapshot = new MemDataRowView(data_, row_size_, col_offset_);
-            snapshot->index_ = index_;
+            MemRowRef *snapshot = new MemRowRef(data_.data() + index_ * row_size_, col_offset_);
             return unique_ptr<DataRow>(snapshot);
         }
 
@@ -432,9 +476,8 @@ namespace lqf {
         another.content_.clear();
     }
 
-    void FlexAccessor::init(const vector<uint32_t> &offset) {
-        offset_ = offset;
-        size_ = offset2size(offset);
+    FlexAccessor::FlexAccessor(const vector<uint32_t> &col_offset) : offset_(col_offset) {
+        size_ = offset2size(col_offset);
     }
 
     DataField &FlexAccessor::operator[](uint64_t i) {
@@ -448,7 +491,7 @@ namespace lqf {
     }
 
     unique_ptr<DataRow> FlexAccessor::snapshot() {
-        return nullptr;
+        return unique_ptr<DataRow>(new MemRowRef(pointer_, offset_));
     }
 
     DataRow &FlexAccessor::operator=(DataRow &row) {
@@ -465,8 +508,7 @@ namespace lqf {
     }
 
     MemFlexBlock::MemFlexBlock(const vector<uint32_t> &col_offset)
-            :  size_(0),col_offset_(col_offset), pointer_(0) {
-        accessor_.init(col_offset);
+            : size_(0), col_offset_(col_offset), pointer_(0), accessor_(col_offset_) {
         memory_.push_back(make_shared<vector<uint64_t>>(FLEX_SLAB_SIZE_));
         row_size_ = col_offset.back();
         stripe_size_ = FLEX_SLAB_SIZE_ / row_size_;
@@ -564,9 +606,9 @@ namespace lqf {
         uint64_t stripe_offset_;
     public:
         FlexRowIterator(vector<shared_ptr<vector<uint64_t>>> &data, const vector<uint32_t> &col_offset)
-                : data_(data), row_size_(col_offset.back()), row_index_(-1), stripe_index_(0), stripe_offset_(-1) {
-            stripe_size_ = FLEX_SLAB_SIZE_/row_size_;
-            reference_.init(col_offset);
+                : data_(data), reference_(col_offset), row_size_(col_offset.back()), row_index_(-1), stripe_index_(0),
+                  stripe_offset_(-1) {
+            stripe_size_ = FLEX_SLAB_SIZE_ / row_size_;
         }
 
         DataRow &operator[](uint64_t idx) override {

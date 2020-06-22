@@ -443,6 +443,43 @@ namespace lqf {
         RecordingSimpleAgg(function<RecordingAggField *()>,
                            function<bool(DataRow &)> pred = nullptr, bool vertical = false);
     };
+
+    class StripeHashAgg : public Node {
+    protected:
+        uint32_t num_stripe_;
+        function<uint64_t(DataRow &)> hasher_;
+        function<uint64_t(DataRow &)> stripe_hasher_;
+        unique_ptr<Snapshoter> stripe_copier_;
+        unique_ptr<Snapshoter> header_copier_;
+        unique_ptr<function<void(DataRow &, DataRow &)>> data_copier_;
+        function<vector<AggField *>()> fields_gen_;
+
+        vector<uint32_t> col_offset_;
+        vector<uint32_t> col_size_;
+        vector<uint32_t> fields_start_;
+        bool need_field_dump_;
+
+        shared_ptr<vector<shared_ptr<MemRowVector>>> makeStripes(const shared_ptr<Block> &);
+
+        shared_ptr<vector<shared_ptr<HashCore>>> aggStripes(const shared_ptr<vector<shared_ptr<MemRowVector>>> &);
+
+        shared_ptr<vector<shared_ptr<HashCore>>>
+        mergeCore(shared_ptr<vector<shared_ptr<HashCore>>>, shared_ptr<vector<shared_ptr<HashCore>>>);
+
+        unique_ptr<AggReducer> createReducer();
+
+        shared_ptr<HashCore> makeCore();
+
+    public:
+        StripeHashAgg(uint32_t num_stripe, function<uint64_t(DataRow &)>, function<uint64_t(DataRow &)>,
+                      unique_ptr<Snapshoter>, unique_ptr<Snapshoter>, function<vector<agg::AggField *>()>);
+
+        virtual ~StripeHashAgg() = default;
+
+        virtual unique_ptr<NodeOutput> execute(const vector<NodeOutput *> &) override;
+
+        shared_ptr<Table> agg(Table &input);
+    };
 }
 
 

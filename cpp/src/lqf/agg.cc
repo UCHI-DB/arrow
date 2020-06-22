@@ -657,4 +657,102 @@ namespace lqf {
         return make_shared<RecordingSimpleCore>(col_offset_, createReducer());
     }
 
+    StripeHashAgg::StripeHashAgg(uint32_t num_stripe, function<uint64_t(DataRow &)> hasher,
+                                 function<uint64_t(DataRow &)> stripe_hasher, unique_ptr<Snapshoter> stripe_copier,
+                                 unique_ptr<Snapshoter> header_copier, function<vector<agg::AggField *>()> fields_gen)
+            : Node(1), num_stripe_(num_stripe), hasher_(hasher), stripe_hasher_(stripe_hasher),
+              stripe_copier_(move(stripe_copier)), header_copier_(move(header_copier)),
+              fields_gen_(fields_gen) {
+
+        auto &header_offset = header_copier_->colOffset();
+        col_offset_.insert(col_offset_.end(), header_offset.begin(), header_offset.end());
+        auto fields = fields_gen_();
+        need_field_dump_ = false;
+        for (auto field: fields) {
+            fields_start_.push_back(col_offset_.back());
+            col_offset_.push_back(col_offset_.back() + field->size());
+            need_field_dump_ |= field->need_dump();
+            delete field;
+        }
+        col_size_ = offset2size(col_offset_);
+        data_copier_ = RowCopyFactory().buildAssign(I_RAW, I_RAW, col_offset_);
+    }
+
+    unique_ptr<NodeOutput> StripeHashAgg::execute(const vector<NodeOutput *> &input) {
+        auto input0 = static_cast<TableOutput *>(input[0]);
+        auto result = agg(*(input0->get()));
+        return unique_ptr<TableOutput>(new TableOutput(result));
+    }
+
+    shared_ptr<Table> StripeHashAgg::agg(Table &input) {
+        function<shared_ptr<vector<shared_ptr<MemRowVector>>>(const shared_ptr<Block> &)> stripeMaker =
+                bind(&StripeHashAgg::makeStripes, this, _1);
+        function<shared_ptr<vector<shared_ptr<HashCore>>>(
+                const shared_ptr<vector<shared_ptr<MemRowVector>>> &)> stripeProcessor = bind(
+                &StripeHashAgg::aggStripes, this, _1);
+
+        auto cores = input.blocks()->map(stripeMaker)->map(stripeProcessor)->reduce(
+                bind(&StripeHashAgg::mergeCore, this, _1, _2));
+
+        auto outputTable = MemTable::Make(col_size_);
+        for (auto &core: *cores) {
+            core->dump(*outputTable, nullptr);
+        }
+        return outputTable;
+    }
+
+    shared_ptr<vector<shared_ptr<MemRowVector>>> StripeHashAgg::makeStripes(const shared_ptr<Block> &block) {
+        auto block_size = block->size();
+        auto rows = block->rows();
+        auto stripes = make_shared<vector<shared_ptr<MemRowVector>>>();
+        auto stripe_offsets = stripe_copier_->colOffset();
+        for (auto i = 0u; i < num_stripe_; ++i) {
+            stripes->push_back(make_shared<MemRowVector>(stripe_offsets));
+        }
+        auto mask = num_stripe_ - 1;
+        for (auto i = 0u; i < block_size; ++i) {
+            DataRow &row = rows->next();
+            auto index = hasher_(row) & mask;
+            auto stripe = (*stripes)[index];
+            DataRow &writeto = stripe->push_back();
+            (*stripe_copier_)(writeto, row);
+        }
+        return stripes;
+    }
+
+    shared_ptr<vector<shared_ptr<HashCore>>>
+    StripeHashAgg::aggStripes(const shared_ptr<vector<shared_ptr<MemRowVector>>> &stripes) {
+        auto cores = make_shared<vector<shared_ptr<HashCore>>>(num_stripe_);
+        for (auto i = 0u; i < num_stripe_; ++i) {
+            auto stripe = (*stripes)[i];
+            auto core = makeCore();
+            auto ite = stripe->iterator();
+            while (ite->hasNext()) {
+                core->reduce(ite->next());
+            }
+            (*cores)[i] = core;
+        }
+        return cores;
+    }
+
+    shared_ptr<vector<shared_ptr<HashCore>>>
+    StripeHashAgg::mergeCore(shared_ptr<vector<shared_ptr<HashCore>>> lefts,
+                             shared_ptr<vector<shared_ptr<HashCore>>> rights) {
+        for (auto i = 0u; i < num_stripe_; ++i) {
+            auto left = (*lefts)[i];
+            auto right = (*rights)[i];
+            left->merge(*right);
+        }
+        return lefts;
+    }
+
+    unique_ptr<AggReducer> StripeHashAgg::createReducer() {
+        return unique_ptr<AggReducer>(new AggReducer(header_copier_.get(),
+                                                     data_copier_.get(), fields_gen_(), fields_start_));
+    }
+
+    shared_ptr<HashCore> StripeHashAgg::makeCore() {
+        return make_shared<HashCore>(col_offset_, createReducer(), stripe_hasher_, need_field_dump_);
+    }
+
 }

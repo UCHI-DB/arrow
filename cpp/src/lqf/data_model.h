@@ -266,15 +266,13 @@ namespace lqf {
     class FlexAccessor : public DataRow {
     private:
         uint64_t *pointer_;
-        vector<uint32_t> offset_;
+        const vector<uint32_t>& offset_;
         vector<uint32_t> size_;
         DataField view_;
     public:
-        FlexAccessor() = default;
+        FlexAccessor(const vector<uint32_t>&);
 
         virtual ~FlexAccessor() = default;
-
-        void init(const vector<uint32_t> &offset);
 
         DataField &operator[](uint64_t i) override;
 
@@ -296,12 +294,12 @@ namespace lqf {
     class MemFlexBlock : public Block {
     private:
         vector<shared_ptr<vector<uint64_t>>> memory_;
-        FlexAccessor accessor_;
         uint32_t size_;
         uint32_t row_size_;
         uint32_t stripe_size_;
         vector<uint32_t> col_offset_;
         uint32_t pointer_;
+        FlexAccessor accessor_;
     public:
         MemFlexBlock(const vector<uint32_t> &col_offset);
 

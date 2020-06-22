@@ -762,5 +762,59 @@ TEST(RecordingSimpleAggTest, AggRecording) {
     row = rows->next();
     EXPECT_EQ(row[0].asInt(), 0);
     EXPECT_EQ(row[1].asInt(), 90);
+}
 
+TEST(StripeHashAggTest, agg) {
+    function<uint64_t(DataRow &)> hasher = [](DataRow &row) {
+        return row[2].asInt();
+    };
+    function<uint64_t(DataRow &)> stripe_hasher = [](DataRow &row) {
+        return row[0].asInt();
+    };
+    // 0 1 2 3 4 -> 2 1 0
+    StripeHashAgg agg(32, hasher, stripe_hasher,
+                      RowCopyFactory().field(F_REGULAR, 2, 0)
+                              ->field(F_REGULAR, 1, 1)->field(F_REGULAR, 0, 2)->buildSnapshot(),
+                      RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                      []() { return vector<AggField *>{new Count(), new IntSum(1), new DoubleMax(2)}; });
+
+    vector<int> count(50, 0);
+    vector<int> sum(50, 0);
+    vector<double> max(50, 0);
+
+    srand(time(NULL));
+
+    auto input = MemTable::Make(5);
+    for (auto i = 0; i < 5; ++i) {
+        auto block = input->allocate(150);
+        auto rows = block->rows();
+        for (auto j = 0; j < 150; ++j) {
+            int head = abs(rand()) % 50;
+            int intval = rand() % 1000;
+            double doubleval = static_cast<double>(rand()) / RAND_MAX;
+            count[head] += 1;
+            sum[head] += intval;
+            max[head] = std::max(max[head], doubleval);
+            DataRow &next = rows->next();
+            next[2] = head;
+            next[1] = intval;
+            next[0] = doubleval;
+        }
+    }
+
+    auto result = agg.agg(*input);
+    auto blocks = result->blocks()->collect();
+    EXPECT_EQ(blocks->size(), 32);
+
+    for (auto &block:*blocks) {
+        auto rows = block->rows();
+        auto block_size = block->size();
+        for (auto i = 0u; i < block_size; ++i) {
+            DataRow &row = rows->next();
+            auto key = row[0].asInt();
+            EXPECT_EQ(row[1].asInt(), count[key]) << key;
+            EXPECT_EQ(row[2].asInt(), sum[key]) << key;
+            EXPECT_EQ(row[3].asDouble(), max[key]) << key;
+        }
+    }
 }
