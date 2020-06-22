@@ -15,7 +15,7 @@
 #include <lqf/util.h>
 #include "tpchquery.h"
 
-
+using namespace std::chrono;
 namespace lqf {
     namespace tpch {
 
@@ -38,10 +38,10 @@ namespace lqf {
             protected:
                 int num_stripes_ = 32;
 
-                shared_ptr<vector<shared_ptr<vector<int>>>> makeStripes(const shared_ptr<Block> &block) {
-                    shared_ptr<vector<shared_ptr<vector<int>>>> stripes = make_shared<vector<shared_ptr<vector<int>>>>();
+                shared_ptr<vector<shared_ptr<vector<int64_t>>>> makeStripes(const shared_ptr<Block> &block) {
+                    shared_ptr<vector<shared_ptr<vector<int64_t>>>> stripes = make_shared<vector<shared_ptr<vector<int64_t>>>>();
                     for (auto i = 0; i < num_stripes_; ++i) {
-                        stripes->push_back(make_shared<vector<int>>());
+                        stripes->push_back(make_shared<vector<int64_t>>());
                     }
 
                     auto block_size = block->size();
@@ -56,12 +56,12 @@ namespace lqf {
                     return stripes;
                 }
 
-                shared_ptr<vector<shared_ptr<unordered_map<int, int>>>>
-                processStripes(const shared_ptr<vector<shared_ptr<vector<int>>>> stripes) {
-                    auto maps = make_shared<vector<shared_ptr<unordered_map<int, int>>>>();
+                shared_ptr<vector<shared_ptr<unordered_map<int64_t, int64_t>>>>
+                processStripes(const shared_ptr<vector<shared_ptr<vector<int64_t>>>> stripes) {
+                    auto maps = make_shared<vector<shared_ptr<unordered_map<int64_t, int64_t>>>>();
 
                     for (auto i = 0; i < num_stripes_; ++i) {
-                        auto map = make_shared<unordered_map<int, int>>();
+                        auto map = make_shared<unordered_map<int64_t, int64_t>>();
                         maps->push_back(map);
                         auto keys = (*stripes)[i];
                         auto end = map->cend();
@@ -77,9 +77,9 @@ namespace lqf {
                     return maps;
                 }
 
-                shared_ptr<vector<shared_ptr<unordered_map<int, int>>>>
-                merge(shared_ptr<vector<shared_ptr<unordered_map<int, int>>>> lefts,
-                      shared_ptr<vector<shared_ptr<unordered_map<int, int>>>> rights) {
+                shared_ptr<vector<shared_ptr<unordered_map<int64_t, int64_t>>>>
+                merge(shared_ptr<vector<shared_ptr<unordered_map<int64_t, int64_t>>>> lefts,
+                      shared_ptr<vector<shared_ptr<unordered_map<int64_t, int64_t>>>> rights) {
                     for (auto i = 0; i < num_stripes_; ++i) {
                         auto left = (*lefts)[i];
                         auto right = (*rights)[i];
@@ -107,10 +107,10 @@ namespace lqf {
                 }
 
                 shared_ptr<Table> agg(Table &input) {
-                    function<shared_ptr<vector<shared_ptr<vector<int>>>>(const shared_ptr<Block> &)> striper =
+                    function<shared_ptr<vector<shared_ptr<vector<int64_t>>>>(const shared_ptr<Block> &)> striper =
                             bind(&CustCountAgg::makeStripes, this, _1);
-                    function<shared_ptr<vector<shared_ptr<unordered_map<int, int>>>>(
-                            const shared_ptr<vector<shared_ptr<vector<int>>>> &)> counter =
+                    function<shared_ptr<vector<shared_ptr<unordered_map<int64_t, int64_t>>>>(
+                            const shared_ptr<vector<shared_ptr<vector<int64_t>>>> &)> counter =
                             bind(&CustCountAgg::processStripes, this, _1);
                     auto counted = input.blocks()->map(striper)->map(counter)->reduce(
                             bind(&CustCountAgg::merge, this, _1, _2));
@@ -123,8 +123,8 @@ namespace lqf {
                         auto rows = block->rows();
                         for (auto &entry: *stripe) {
                             DataRow &next = rows->next();
-                            next[0] = entry.first;
-                            next[1] = entry.second;
+                            next[0] = (int) entry.first;
+                            next[1] = (int) entry.second;
                         }
                     }
                     return result;
@@ -156,11 +156,12 @@ namespace lqf {
                     })), {order});
 
             using namespace agg;
-            auto orderCustAgg = graph.add(new HashAgg(COL_HASHER(Orders::CUSTKEY),
-                                                      RowCopyFactory().field(F_REGULAR, Orders::CUSTKEY,
-                                                                             0)->buildSnapshot(),
-                                                      []() { return vector<AggField *>{new Count()}; }),
-                                          {orderCommentFilter});
+            auto orderCustAgg = graph.add(
+                    new StripeHashAgg(32, COL_HASHER(Orders::CUSTKEY), COL_HASHER(0),
+                                      RowCopyFactory().field(F_REGULAR, Orders::CUSTKEY, 0)->buildSnapshot(),
+                                      RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                                      []() { return vector<AggField *>{new Count()}; }),
+                    {orderCommentFilter});
             // CUSTKEY, COUNT
 
             auto join_obj = new HashJoin(Customer::CUSTKEY, 0, new CustCountBuilder());
@@ -199,10 +200,14 @@ namespace lqf {
             })});
             auto validOrder = orderCommentFilter.filter(*order);
 
-//            HashAgg orderCustAgg(COL_HASHER(1),
-//                                 RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
-//                                 []() { return vector<AggField *>{new agg::Count()}; });
-            CustCountAgg orderCustAgg;
+//            HashAgg orderCustAgg(COL_HASHER(Orders::CUSTKEY),
+//                                 RowCopyFactory().field(F_REGULAR, Orders::CUSTKEY, 0)->buildSnapshot(),
+//                                 []() { return vector<AggField *>{new Count()}; });
+//            CustCountAgg orderCustAgg;
+            StripeHashAgg orderCustAgg(32, COL_HASHER(Orders::CUSTKEY), COL_HASHER(0),
+                                       RowCopyFactory().field(F_REGULAR, Orders::CUSTKEY, 0)->buildSnapshot(),
+                                       RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                                       []() { return vector<AggField *>{new Count()}; });
             // CUSTKEY, COUNT
             auto orderCount = orderCustAgg.agg(*validOrder);
 
@@ -212,8 +217,8 @@ namespace lqf {
             auto custCount = join.join(*customer, *orderCount);
 
             HashAgg countAgg(COL_HASHER(1),
-                                    RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
-                                    []() { return vector<AggField *>{new Count()}; });
+                             RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                             []() { return vector<AggField *>{new Count()}; });
             // COUNT, DIST
             auto result = countAgg.agg(*custCount);
 

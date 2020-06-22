@@ -43,8 +43,8 @@ namespace lqf {
             inline const vector<uint32_t> &offset() const { return offset_; };
 
         };
-
-#define VECTOR_SLAB_SIZE_  1048576
+// The buffer size actually affect running speed.
+#define VECTOR_SLAB_SIZE_ 131072
 
         class MemRowVector {
         protected:
