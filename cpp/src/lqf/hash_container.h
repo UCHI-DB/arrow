@@ -8,6 +8,9 @@
 #include "container.h"
 #include "data_model.h"
 #include "rowcopy.h"
+#include "data_container.h"
+
+#define CONTAINER_SIZE 1048576
 
 namespace lqf {
 
@@ -69,40 +72,44 @@ namespace lqf {
             bool test(int32_t) override;
         };
 
-        template<typename DTYPE>
+        using namespace datacontainer;
+
+        template<typename DTYPE, typename MAP>
         class HashContainer : public IntPredicate<DTYPE> {
             using ktype = typename DTYPE::type;
         protected:
-            PhaseConcurrentHashMap<DTYPE, MemDataRow *> hashmap_;
+            MAP map_;
             atomic<ktype> min_;
             atomic<ktype> max_;
 
         public:
-            HashContainer();
+            HashContainer(const vector<uint32_t> &);
 
-            HashContainer(uint32_t size);
+            HashContainer(const vector<uint32_t> &, uint32_t size);
 
             virtual ~HashContainer() = default;
 
-            void add(ktype key, unique_ptr<MemDataRow> dataRow);
+            DataRow &add(ktype key);
 
             bool test(ktype) override;
 
-            MemDataRow *get(ktype key);
+            DataRow *get(ktype key);
 
-            unique_ptr<MemDataRow> remove(ktype key);
+            DataRow *remove(ktype key);
 
-            unique_ptr<lqf::Iterator<std::pair<ktype, MemDataRow *>>> iterator();
+            unique_ptr<lqf::Iterator<std::pair<ktype, DataRow &> &>> iterator();
 
-            inline uint32_t size() { return hashmap_.size(); }
+            inline uint32_t size() { return map_.size(); }
 
             inline ktype min() { return min_.load(); }
 
             inline ktype max() { return max_.load(); }
         };
 
-        using Hash32Container = HashContainer<Int32>;
-        using Hash64Container = HashContainer<Int64>;
+        using Hash32Container = HashContainer<Int32, CInt32MemRowMap>;
+        using Hash64Container = HashContainer<Int64, CInt64MemRowMap>;
+
+        using namespace datacontainer;
 
         template<typename CONTENT>
         class HashMemBlock : public MemBlock {
@@ -119,17 +126,18 @@ namespace lqf {
         class HashBuilder {
         public:
             static shared_ptr<Int32Predicate>
-            buildHashPredicate(Table &input, uint32_t, uint32_t expect_size = 0xFFFFFFFF);
+            buildHashPredicate(Table &input, uint32_t, uint32_t expect_size = CONTAINER_SIZE);
 
             static shared_ptr<Int64Predicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 
             static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t, uint32_t);
 
             static shared_ptr<Hash32Container>
-            buildContainer(Table &input, uint32_t, Snapshoter *, uint32_t expect_size = 0xFFFFFFFF);
+            buildContainer(Table &input, uint32_t, Snapshoter *, uint32_t expect_size = CONTAINER_SIZE);
 
             static shared_ptr<Hash64Container>
-            buildContainer(Table &input, function<int64_t(DataRow &)>, Snapshoter *, uint32_t expect_size = 0xFFFFFFFF);
+            buildContainer(Table &input, function<int64_t(DataRow &)>, Snapshoter *,
+                           uint32_t expect_size = CONTAINER_SIZE);
         };
 
     }

@@ -45,7 +45,7 @@ namespace lqf {
             // Make Container
             auto table = MemTable::Make(offset2size(snapshoter_->colOffset()));
             auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_.get());
-            auto block = make_shared<HashMemBlock<HashContainer<Int32>>>(move(container));
+            auto block = make_shared<HashMemBlock<Hash32Container>>(move(container));
             table->append(block);
             return table;
         } else {
@@ -72,7 +72,7 @@ namespace lqf {
         if (snapshoter_) {
             // Make Container
             auto container = HashBuilder::buildContainer(input, key_maker_, snapshoter_.get());
-            auto block = make_shared<HashMemBlock<HashContainer<Int64>>>(move(container));
+            auto block = make_shared<HashMemBlock<Hash64Container>>(move(container));
             table->append(block);
         } else {
             auto predicate = HashBuilder::buildHashPredicate(input, key_maker_);

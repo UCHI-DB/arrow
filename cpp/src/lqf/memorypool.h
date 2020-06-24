@@ -11,7 +11,7 @@
 #include <mutex>
 #include <parquet/types.h>
 
-#define SLAB_SIZE 1048576
+#define SLAB_SIZE 131072
 
 namespace lqf {
     namespace memory {
@@ -28,6 +28,7 @@ namespace lqf {
 
             mutex assign_lock_;
             vector<uint8_t *> buffer_;
+            uint32_t buffer_watermark_;
 
             void new_slab();
 

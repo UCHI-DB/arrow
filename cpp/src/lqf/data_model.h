@@ -263,16 +263,16 @@ namespace lqf {
 
 #define FLEX_SLAB_SIZE_  1048576
 
-    class FlexAccessor : public DataRow {
+    class MemDataRowPointer : public DataRow {
     private:
         uint64_t *pointer_;
         const vector<uint32_t>& offset_;
         vector<uint32_t> size_;
         DataField view_;
     public:
-        FlexAccessor(const vector<uint32_t>&);
+        MemDataRowPointer(const vector<uint32_t>&);
 
-        virtual ~FlexAccessor() = default;
+        virtual ~MemDataRowPointer() = default;
 
         DataField &operator[](uint64_t i) override;
 
@@ -299,7 +299,7 @@ namespace lqf {
         uint32_t stripe_size_;
         vector<uint32_t> col_offset_;
         uint32_t pointer_;
-        FlexAccessor accessor_;
+        MemDataRowPointer accessor_;
     public:
         MemFlexBlock(const vector<uint32_t> &col_offset);
 

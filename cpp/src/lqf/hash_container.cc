@@ -49,14 +49,16 @@ namespace lqf {
             return bitmap_.check(val);
         }
 
-        template<typename DTYPE>
-        HashContainer<DTYPE>::HashContainer() : hashmap_(), min_(DTYPE::max), max_(DTYPE::min) {}
+        template<typename DTYPE, typename MAP>
+        HashContainer<DTYPE, MAP>::HashContainer(const vector<uint32_t> &offset)
+                :HashContainer(offset, 1048576) {}
 
-        template<typename DTYPE>
-        HashContainer<DTYPE>::HashContainer(uint32_t size) : hashmap_(size), min_(DTYPE::max), max_(DTYPE::min) {}
+        template<typename DTYPE, typename MAP>
+        HashContainer<DTYPE, MAP>::HashContainer(const vector<uint32_t> &offset, uint32_t size)
+                : map_(size, offset), min_(DTYPE::max), max_(DTYPE::min) {}
 
-        template<typename DTYPE>
-        void HashContainer<DTYPE>::add(ktype key, unique_ptr<MemDataRow> dataRow) {
+        template<typename DTYPE, typename MAP>
+        DataRow &HashContainer<DTYPE, MAP>::add(ktype key) {
             ktype current;
 
             current = min_.load();
@@ -64,42 +66,38 @@ namespace lqf {
 
             current = max_.load();
             while (key > current && !max_.compare_exchange_strong(current, key));
-            hashmap_.put(key, dataRow.release());
+            return map_.insert(key);
         }
 
-        template<typename DTYPE>
-        MemDataRow *HashContainer<DTYPE>::get(ktype key) {
+        template<typename DTYPE, typename MAP>
+        DataRow *HashContainer<DTYPE, MAP>::get(ktype key) {
             if (key > max_ || key < min_)
                 return nullptr;
-            return hashmap_.get(key);
+            return map_.find(key);
         }
 
-        template<typename DTYPE>
-        unique_ptr<MemDataRow> HashContainer<DTYPE>::remove(ktype key) {
+        template<typename DTYPE, typename MAP>
+        DataRow *HashContainer<DTYPE, MAP>::remove(ktype key) {
             if (key > max_ || key < min_)
                 return nullptr;
-            auto result = hashmap_.remove(key);
-            if (result != nullptr) {
-                return unique_ptr<MemDataRow>(result);
-            }
-            return nullptr;
+            return map_.remove(key);
         }
 
-        template<typename DTYPE>
-        bool HashContainer<DTYPE>::test(ktype key) {
-            return hashmap_.get(key) != nullptr;
+        template<typename DTYPE, typename MAP>
+        bool HashContainer<DTYPE, MAP>::test(ktype key) {
+            return map_.find(key) != nullptr;
         }
 
-        template<typename DTYPE>
-        unique_ptr<Iterator<pair<typename DTYPE::type, MemDataRow *>>> HashContainer<DTYPE>::iterator() {
-            return hashmap_.iterator();
+        template<typename DTYPE, typename MAP>
+        unique_ptr<Iterator<pair<typename DTYPE::type, DataRow &> &>> HashContainer<DTYPE, MAP>::iterator() {
+            return map_.map_iterator();
         }
 
         template
-        class HashContainer<Int32>;
+        class HashContainer<Int32, CInt32MemRowMap>;
 
         template
-        class HashContainer<Int64>;
+        class HashContainer<Int64, CInt64MemRowMap>;
 
         template<typename CONTENT>
         HashMemBlock<CONTENT>::HashMemBlock(shared_ptr<CONTENT> predicate) : MemBlock(0, 0) {
@@ -131,8 +129,7 @@ namespace lqf {
 
         shared_ptr<Int32Predicate>
         HashBuilder::buildHashPredicate(Table &input, uint32_t keyIndex, uint32_t expect_size) {
-            Hash32Predicate *pred = (expect_size != 0xFFFFFFFF) ? new Hash32Predicate(expect_size)
-                                                                : new Hash32Predicate();
+            Hash32Predicate *pred = new Hash32Predicate(expect_size);
             shared_ptr<Int32Predicate> retval = shared_ptr<Int32Predicate>(pred);
 
             function<void(const shared_ptr<Block> &)> processor =
@@ -204,8 +201,7 @@ namespace lqf {
 
         shared_ptr<Hash32Container> HashBuilder::buildContainer(Table &input, uint32_t keyIndex,
                                                                 Snapshoter *builder, uint32_t expect_size) {
-            Hash32Container *container = expect_size == 0xFFFFFFFF ? new Hash32Container() :
-                                         new Hash32Container(expect_size);
+            Hash32Container *container = new Hash32Container(builder->colOffset(), expect_size);
             shared_ptr<Hash32Container> retval = shared_ptr<Hash32Container>(container);
 
             function<void(const shared_ptr<Block> &)> processor = [builder, keyIndex, &container, &retval](
@@ -220,7 +216,8 @@ namespace lqf {
                 for (uint32_t i = 0; i < block_size; ++i) {
                     DataRow &row = rows->next();
                     auto key = row[keyIndex].asInt();
-                    container->add(key, (*builder)(row));
+                    DataRow &writeto = container->add(key);
+                    (*builder)(writeto, row);
                 }
             };
             input.blocks()->foreach(processor);
@@ -230,8 +227,7 @@ namespace lqf {
         shared_ptr<Hash64Container> HashBuilder::buildContainer(Table &input,
                                                                 function<int64_t(DataRow &)> key_maker,
                                                                 Snapshoter *builder, uint32_t expect_size) {
-            Hash64Container *container = expect_size == 0xFFFFFFFF ?
-                                         new Hash64Container() : new Hash64Container(expect_size);
+            Hash64Container *container = new Hash64Container(builder->colOffset(), expect_size);
             shared_ptr<Hash64Container> retval = shared_ptr<Hash64Container>(container);
             function<void(const shared_ptr<Block> &)> processor = [builder, &container, &retval, key_maker](
                     const shared_ptr<Block> &block) {
@@ -244,7 +240,8 @@ namespace lqf {
                 for (uint32_t i = 0; i < block_size; ++i) {
                     DataRow &row = rows->next();
                     auto key = key_maker(row);
-                    container->add(key, (*builder)(row));
+                    DataRow &writeto = container->add(key);
+                    (*builder)(writeto, row);
                 }
             };
             input.blocks()->foreach(processor);

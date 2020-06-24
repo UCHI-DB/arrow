@@ -397,8 +397,8 @@ namespace lqf {
             function<shared_ptr<Bitmap>(const shared_ptr<Block> &)> prober = bind(
                     &HashNotExistJoin::probeWithPredicate, this, _1);
             auto reducer = [](const shared_ptr<Bitmap> &a, const shared_ptr<Bitmap> &b) {
-                        return (*a) | (*b);
-                    };
+                return (*a) | (*b);
+            };
             auto exist = left.blocks()->map(prober)->reduce(reducer);
             auto memblock = memTable->allocate(container_->size() - exist->cardinality());
 
@@ -409,12 +409,12 @@ namespace lqf {
             while (ite->hasNext()) {
                 auto entry = ite->next();
                 if (!exist->check(entry.first)) {
-                    (*writerows)[writecount++] = *(entry.second);
+                    (*writerows)[writecount++] = entry.second;
                 }
             }
         } else {
-            function<void(const shared_ptr<Block> &)> prober = bind(&HashNotExistJoin::probe, this, memTable.get(),
-                                                                    _1);
+            function<void(const shared_ptr<Block> &)> prober =
+                    bind(&HashNotExistJoin::probe, this, memTable.get(), _1);
             left.blocks()->foreach(prober);
 
             auto resultBlock = memTable->allocate(container_->size());
@@ -422,7 +422,7 @@ namespace lqf {
             auto iterator = container_->iterator();
             while (iterator->hasNext()) {
                 auto entry = iterator->next();
-                writeRows->next() = *entry.second;
+                writeRows->next() = entry.second;
             }
         }
         return memTable;

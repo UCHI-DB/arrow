@@ -712,7 +712,7 @@ TEST(SimpleAggTest, Agg) {
     auto aggblock = (*agged)[0];
     EXPECT_EQ(1, aggblock->size());
     auto rows = aggblock->rows();
-    EXPECT_DOUBLE_EQ(sum, (*rows)[0][0].asDouble());
+    EXPECT_NEAR(sum, (*rows)[0][0].asDouble(),0.0000001);
     EXPECT_EQ(count, (*rows)[0][1].asInt());
     EXPECT_EQ(max, (*rows)[0][2].asInt());
 }

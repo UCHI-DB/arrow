@@ -150,8 +150,8 @@ TEST(MemRowMapTest, MapIterator) {
 }
 
 
-TEST(ConcurrentMemRowMapTest, Insert) {
-    ConcurrentMemRowMap map(1048576, colOffset(3));
+TEST(CMemRowMapTest, Insert) {
+    CInt32MemRowMap map(1048576, colOffset(3));
     for (int i = 0; i < 500000; ++i) {
         DataRow &row = map.insert(i + 42824);
         row[0] = i;
@@ -161,9 +161,9 @@ TEST(ConcurrentMemRowMapTest, Insert) {
     EXPECT_EQ(map.size(), 500000);
 }
 
-TEST(ConcurrentMemRowMapTest, InsertMultiThread) {
+TEST(CMemRowMapTest, InsertMultiThread) {
     auto executor = Executor::Make(10);
-    ConcurrentMemRowMap map(1048576, colOffset(3));
+    CInt32MemRowMap map(1048576, colOffset(3));
     vector<function<int()>> tasks;
     for (int i = 0; i < 10; ++i) {
         tasks.push_back([i, &map]() {
@@ -182,8 +182,8 @@ TEST(ConcurrentMemRowMapTest, InsertMultiThread) {
     EXPECT_EQ(map.size(), 500000);
 }
 
-TEST(ConcurrentMemRowMapTest, Access) {
-    ConcurrentMemRowMap map(1048576, colOffset(3));
+TEST(CMemRowMapTest, Access) {
+    CInt32MemRowMap map(1048576, colOffset(3));
     auto executor = Executor::Make(10);
     vector<function<int()>> tasks;
     for (int i = 0; i < 10; ++i) {
@@ -214,8 +214,8 @@ TEST(ConcurrentMemRowMapTest, Access) {
     }
 }
 
-TEST(ConcurrentMemRowMapTest, AccessMultiThread) {
-    ConcurrentMemRowMap map(1048576, colOffset(3));
+TEST(CMemRowMapTest, AccessMultiThread) {
+    CInt32MemRowMap map(1048576, colOffset(3));
     for (int i = 0; i < 500000; ++i) {
         DataRow &row = map.insert(i + 42824);
         row[0] = i;
@@ -240,4 +240,210 @@ TEST(ConcurrentMemRowMapTest, AccessMultiThread) {
         });
     }
     executor->invokeAll(tasks);
+}
+
+TEST(CMemRowMapTest, Remove) {
+    CInt32MemRowMap map(1048576, colOffset(3));
+    for (int i = 0; i < 500000; ++i) {
+        DataRow &row = map.insert(i + 42824);
+        row[0] = i;
+        row[1] = i * 2 + 0.1;
+        row[2] = 3 * i;
+    }
+    EXPECT_EQ(map.size(), 500000);
+
+    auto executor = Executor::Make(10);
+    vector<function<int()>> tasks;
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back([i, &map]() {
+            for (int j = 0; j < 50000; ++j) {
+                int key = i * 50000 + j;
+                int value = key + 42824;
+                DataRow *row = map.remove(value);
+                EXPECT_EQ((*row)[0].asInt(), key);
+                EXPECT_EQ((*row)[1].asDouble(), key * 2 + 0.1);
+                EXPECT_EQ((*row)[2].asInt(), key * 3);
+            }
+
+            for (int j = 0; j < 100; ++j) {
+                int key = 500000 + j;
+                EXPECT_EQ(nullptr, map.remove(key));
+            }
+            return 0;
+        });
+    }
+    executor->invokeAll(tasks);
+}
+
+
+TEST(CMemRowMapTest, Iterator) {
+    CInt32MemRowMap map(1048576, colOffset(3));
+    for (int i = 0; i < 500000; ++i) {
+        DataRow &row = map.insert(i + 42824);
+        row[0] = i;
+        row[1] = i * 2 + 0.1;
+        row[2] = 3 * i;
+    }
+    EXPECT_EQ(map.size(), 500000);
+
+    auto iterator = map.map_iterator();
+    int count = 0;
+    while (iterator->hasNext()) {
+        auto next = iterator->next();
+        int key = next.first - 42824;
+        EXPECT_EQ(key, next.second[0].asInt());
+        EXPECT_EQ(key * 2 + 0.1, next.second[1].asDouble());
+        EXPECT_EQ(key * 3, next.second[2].asInt());
+        count++;
+    }
+    EXPECT_EQ(count, 500000);
+}
+
+
+TEST(CInt64MemRowMapTest, Insert) {
+    CInt64MemRowMap map(1048576, colOffset(3));
+    for (int i = 0; i < 500000; ++i) {
+        DataRow &row = map.insert(i + 42824);
+        row[0] = i;
+        row[1] = i * 2 + 0.1;
+        row[2] = 3 * i;
+    }
+    EXPECT_EQ(map.size(), 500000);
+}
+
+TEST(CInt64MemRowMapTest, InsertMultiThread) {
+    auto executor = Executor::Make(10);
+    CInt64MemRowMap map(1048576, colOffset(3));
+    vector<function<int()>> tasks;
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back([i, &map]() {
+            for (int j = 0; j < 50000; ++j) {
+                int key = i * 50000 + j;
+                DataRow &row = map.insert(key);
+                row[0] = key;
+                row[1] = key * 2 + 0.1;
+                row[2] = key * 3;
+            }
+            return 0;
+        });
+    }
+    executor->invokeAll(tasks);
+
+    EXPECT_EQ(map.size(), 500000);
+}
+
+TEST(CInt64MemRowMapTest, Access) {
+    CInt64MemRowMap map(1048576, colOffset(3));
+    auto executor = Executor::Make(10);
+    vector<function<int()>> tasks;
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back([i, &map]() {
+            for (int j = 0; j < 50000; ++j) {
+                int key = i * 50000 + j;
+                DataRow &row = map.insert(key);
+                row[0] = key;
+                row[1] = key * 2 + 0.1;
+                row[2] = key * 3;
+            }
+            return 0;
+        });
+    }
+    executor->invokeAll(tasks);
+
+    EXPECT_EQ(map.size(), 500000);
+
+    for (int i = 0; i < 500000; ++i) {
+        DataRow *row = map.find(i);
+        EXPECT_EQ((*row)[0].asInt(), i);
+        EXPECT_EQ((*row)[1].asDouble(), i * 2 + 0.1);
+        EXPECT_EQ((*row)[2].asInt(), i * 3);
+    }
+    for (int i = 0; i < 1000; ++i) {
+        DataRow *row = map.find(i + 500000);
+        EXPECT_EQ(nullptr, row);
+    }
+}
+
+TEST(CInt64MemRowMapTest, AccessMultiThread) {
+    CInt64MemRowMap map(1048576, colOffset(3));
+    for (int i = 0; i < 500000; ++i) {
+        DataRow &row = map.insert(i + 42824);
+        row[0] = i;
+        row[1] = i * 2 + 0.1;
+        row[2] = 3 * i;
+    }
+    EXPECT_EQ(map.size(), 500000);
+
+    auto executor = Executor::Make(10);
+    vector<function<int()>> tasks;
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back([i, &map]() {
+            for (int j = 0; j < 50000; ++j) {
+                int key = i * 50000 + j;
+                int value = key + 42824;
+                DataRow *row = map.find(value);
+                EXPECT_EQ((*row)[0].asInt(), key);
+                EXPECT_EQ((*row)[1].asDouble(), key * 2 + 0.1);
+                EXPECT_EQ((*row)[2].asInt(), key * 3);
+            }
+            return 0;
+        });
+    }
+    executor->invokeAll(tasks);
+}
+
+TEST(CInt64MemRowMapTest, Remove) {
+    CInt64MemRowMap map(1048576, colOffset(3));
+    for (int i = 0; i < 500000; ++i) {
+        DataRow &row = map.insert(i + 42824);
+        row[0] = i;
+        row[1] = i * 2 + 0.1;
+        row[2] = 3 * i;
+    }
+    EXPECT_EQ(map.size(), 500000);
+
+    auto executor = Executor::Make(10);
+    vector<function<int()>> tasks;
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back([i, &map]() {
+            for (int j = 0; j < 50000; ++j) {
+                int key = i * 50000 + j;
+                int value = key + 42824;
+                DataRow *row = map.remove(value);
+                EXPECT_EQ((*row)[0].asInt(), key);
+                EXPECT_EQ((*row)[1].asDouble(), key * 2 + 0.1);
+                EXPECT_EQ((*row)[2].asInt(), key * 3);
+            }
+
+            for (int j = 0; j < 100; ++j) {
+                int key = 500000 + j;
+                EXPECT_EQ(nullptr, map.remove(key));
+            }
+            return 0;
+        });
+    }
+    executor->invokeAll(tasks);
+}
+
+TEST(CInt64MemRowMapTest, Iterator) {
+    CInt64MemRowMap map(1048576, colOffset(3));
+    for (int i = 0; i < 500000; ++i) {
+        DataRow &row = map.insert(i + 42824);
+        row[0] = i;
+        row[1] = i * 2 + 0.1;
+        row[2] = 3 * i;
+    }
+    EXPECT_EQ(map.size(), 500000);
+
+    auto iterator = map.map_iterator();
+    int count = 0;
+    while (iterator->hasNext()) {
+        auto next = iterator->next();
+        int key = next.first - 42824;
+        EXPECT_EQ(key, next.second[0].asInt());
+        EXPECT_EQ(key * 2 + 0.1, next.second[1].asDouble());
+        EXPECT_EQ(key * 3, next.second[2].asInt());
+        count++;
+    }
+    EXPECT_EQ(count, 500000);
 }

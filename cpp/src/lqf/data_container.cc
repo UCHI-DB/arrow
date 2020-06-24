@@ -9,41 +9,8 @@ using namespace lqf;
 namespace lqf {
     namespace datacontainer {
 
-        void MemDataRowAccessor::init(const vector<uint32_t> &offset) {
-            offset_ = offset;
-            size_ = offset2size(offset);
-        }
-
-        DataField &MemDataRowAccessor::operator[](uint64_t i) {
-            view_ = pointer_ + offset_[i];
-            view_.size_ = size_[i];
-            return view_;
-        }
-
-        uint64_t *MemDataRowAccessor::raw() {
-            return pointer_;
-        }
-
-        unique_ptr<DataRow> MemDataRowAccessor::snapshot() {
-            return nullptr;
-        }
-
-        DataRow &MemDataRowAccessor::operator=(DataRow &row) {
-            if (row.raw()) {
-                memcpy(static_cast<void *>(pointer_), static_cast<void *>(row.raw()),
-                       sizeof(uint64_t) * offset_.back());
-            } else {
-                auto offset_size = offset_.size();
-                for (uint32_t i = 0; i < offset_size - 1; ++i) {
-                    (*this)[i] = row[i];
-                }
-            }
-            return *this;
-        }
-
         MemRowVector::MemRowVector(const vector<uint32_t> &offset)
-                : stripe_offset_(0), size_(0) {
-            accessor_.init(offset);
+                : accessor_(offset), stripe_offset_(0), size_(0) {
             memory_.push_back(make_shared<vector<uint64_t>>(VECTOR_SLAB_SIZE_));
             row_size_ = offset.back();
             stripe_size_ = VECTOR_SLAB_SIZE_ / row_size_;
@@ -76,15 +43,13 @@ namespace lqf {
             uint32_t pointer_;
             uint32_t counter_;
             uint32_t size_;
-            MemDataRowAccessor accessor_;
             uint32_t row_size_;
+            MemDataRowPointer accessor_;
         public:
             MemRowVectorIterator(vector<shared_ptr<vector<uint64_t>>> &ref,
                                  const vector<uint32_t> &offset, uint32_t size)
                     : memory_ref_(ref), index_(0), pointer_(0), counter_(0),
-                      size_(size), row_size_(offset.back()) {
-                accessor_.init(offset);
-            }
+                      size_(size), row_size_(offset.back()), accessor_(offset) {}
 
             bool hasNext() override {
                 return counter_ < size_;
@@ -146,14 +111,13 @@ namespace lqf {
             vector<shared_ptr<vector<uint64_t>>> &memory_ref_;
             unordered_map<uint64_t, uint64_t>::iterator map_it_;
             unordered_map<uint64_t, uint64_t>::const_iterator map_end_;
-            MemDataRowAccessor accessor_;
+            MemDataRowPointer accessor_;
             pair<uint64_t, DataRow &> pair_;
         public:
             MemRowMapIterator(vector<shared_ptr<vector<uint64_t>>> &ref,
                               const vector<uint32_t> &offset, unordered_map<uint64_t, uint64_t> &map)
-                    : memory_ref_(ref), map_it_(map.begin()), map_end_(map.cend()), pair_(0, accessor_) {
-                accessor_.init(offset);
-            }
+                    : memory_ref_(ref), map_it_(map.begin()), map_end_(map.cend()), accessor_(offset),
+                      pair_(0, accessor_) {}
 
             bool hasNext() override {
                 return map_it_ != map_end_;
@@ -175,24 +139,26 @@ namespace lqf {
                     new MemRowMapIterator(memory_, accessor_.offset(), map_));
         }
 
-        ConcurrentMemRowMap::ConcurrentMemRowMap(uint32_t expect_size, const vector<uint32_t> &col_offset)
+        template<typename KEY, typename MAP>
+        CMemRowMap<KEY, MAP>::CMemRowMap(uint32_t expect_size, const vector<uint32_t> &col_offset)
                 : anchor_([col_offset]() {
-            MapAnchor anchor;
-            anchor.offset_ = CMAP_SLAB_SIZE_;
-            anchor.accessor_.init(col_offset);
+            MapAnchor anchor{0, CMAP_SLAB_SIZE_, MemDataRowPointer(col_offset)};
             return anchor;
-        }), map_(expect_size), memory_(1000), col_offset_(col_offset), row_size_(col_offset.back()) {}
+        }), map_(expect_size), memory_(1000), col_offset_(col_offset), memory_watermark_(0),
+                  row_size_(col_offset.back()) {}
 
-        void ConcurrentMemRowMap::new_slab() {
+        template<typename KEY, typename MAP>
+        void CMemRowMap<KEY, MAP>::new_slab() {
             auto anchor = anchor_.get();
             memory_lock_.lock();
-            anchor->index_ = memory_.size();
-            memory_.push_back(make_shared<vector<uint64_t>>(CMAP_SLAB_SIZE_));
+            anchor->index_ = memory_watermark_;
+            memory_[memory_watermark_++] = make_shared<vector<uint64_t>>(CMAP_SLAB_SIZE_);
             anchor->offset_ = 0;
             memory_lock_.unlock();
         }
 
-        DataRow &ConcurrentMemRowMap::insert(int key) {
+        template<typename KEY, typename MAP>
+        DataRow &CMemRowMap<KEY, MAP>::insert(KEY key) {
             auto anchor = anchor_.get();
             if (anchor->offset_ + row_size_ > CMAP_SLAB_SIZE_) {
                 new_slab();
@@ -203,32 +169,81 @@ namespace lqf {
             return anchor->accessor_;
         }
 
-        DataRow &ConcurrentMemRowMap::operator[](int key) {
-            auto anchor = anchor_.get();
+        template<typename KEY, typename MAP>
+        DataRow &CMemRowMap<KEY, MAP>::operator[](KEY key) {
             int pos = map_.get(key);
             if (pos == INT32_MIN) {
                 return insert(key);
             }
+            auto anchor = anchor_.get();
             int index = pos >> 20;
             int offset = pos & 0xFFFFF;
             anchor->accessor_.raw(memory_[index]->data() + offset);
             return anchor->accessor_;
         }
 
-        DataRow *ConcurrentMemRowMap::find(int key) {
-            auto anchor = anchor_.get();
+        template<typename KEY, typename MAP>
+        DataRow *CMemRowMap<KEY, MAP>::find(KEY key) {
             int pos = map_.get(key);
             if (pos == INT32_MIN) {
                 return nullptr;
             }
+            auto anchor = anchor_.get();
             int index = pos >> 20;
             int offset = pos & 0xFFFFF;
             anchor->accessor_.raw(memory_[index]->data() + offset);
             return &(anchor->accessor_);
         }
 
-        uint32_t ConcurrentMemRowMap::size() {
+        template<typename KEY, typename MAP>
+        DataRow *CMemRowMap<KEY, MAP>::remove(KEY key) {
+            int pos = map_.remove(key);
+            if (pos == INT32_MIN) {
+                return nullptr;
+            }
+            auto anchor = anchor_.get();
+            int index = pos >> 20;
+            int offset = pos & 0xFFFFF;
+            anchor->accessor_.raw(memory_[index]->data() + offset);
+            return &(anchor->accessor_);
+        }
+
+        template<typename KEY, typename MAP>
+        uint32_t CMemRowMap<KEY, MAP>::size() {
             return map_.size();
+        }
+
+        template<typename KEY>
+        class CMemRowMapIterator : public Iterator<pair<KEY, DataRow &> &> {
+        protected:
+            vector<shared_ptr<vector<uint64_t>>> &memory_ref_;
+            unique_ptr<Iterator<pair<KEY, int32_t>>> map_iterator_;
+            MemDataRowPointer accessor_;
+            pair<KEY, DataRow &> pair_;
+        public:
+            CMemRowMapIterator(vector<shared_ptr<vector<uint64_t>>> &ref,
+                               const vector<uint32_t> &offset, unique_ptr<Iterator<pair<KEY, int32_t>>> map_iterator)
+                    : memory_ref_(ref), map_iterator_(move(map_iterator)), accessor_(offset), pair_(0, accessor_) {}
+
+            bool hasNext() override {
+                return map_iterator_->hasNext();
+            }
+
+            pair<KEY, DataRow &> &next() override {
+                auto entry = map_iterator_->next();
+                auto anchor = entry.second;
+                auto index = anchor >> 20;
+                auto pointer = anchor & 0xFFFFF;
+                accessor_.raw(memory_ref_[index]->data() + pointer);
+                pair_.first = entry.first;
+                return pair_;
+            }
+        };
+
+        template<typename KEY, typename MAP>
+        unique_ptr<Iterator<pair<KEY, DataRow &> &> > CMemRowMap<KEY, MAP>::map_iterator() {
+            return unique_ptr<Iterator<pair<KEY, DataRow &> &>>(
+                    new CMemRowMapIterator<KEY>(memory_, col_offset_, map_.iterator()));
         }
     }
 }

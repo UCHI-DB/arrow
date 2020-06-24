@@ -126,7 +126,7 @@ namespace lqf {
         uint32_t expect_size_;
     public:
         HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
-                      JoinBuilder *builder, uint32_t expect_size = 0xFFFFFFFF);
+                      JoinBuilder *builder, uint32_t expect_size = CONTAINER_SIZE);
 
         virtual ~HashBasedJoin() = default;
 
@@ -139,8 +139,8 @@ namespace lqf {
 
     class HashJoin : public HashBasedJoin {
     public:
-        HashJoin(uint32_t, uint32_t, RowBuilder *,
-                 function<bool(DataRow &, DataRow &)> pred = nullptr, uint32_t expect_size = 0xFFFFFFFF);
+        HashJoin(uint32_t, uint32_t, RowBuilder *, function<bool(DataRow &, DataRow &)> pred = nullptr,
+                 uint32_t expect_size = CONTAINER_SIZE);
 
         virtual ~HashJoin() = default;
 
@@ -160,7 +160,7 @@ namespace lqf {
         bool anti_ = false;
         bool useBitmap_;
     public:
-        FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = 0xFFFFFFFF,
+        FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size = CONTAINER_SIZE,
                    bool useBitmap = false);
 
         virtual ~FilterJoin() = default;

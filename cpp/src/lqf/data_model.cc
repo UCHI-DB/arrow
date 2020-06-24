@@ -476,25 +476,24 @@ namespace lqf {
         another.content_.clear();
     }
 
-    FlexAccessor::FlexAccessor(const vector<uint32_t> &col_offset) : offset_(col_offset) {
-        size_ = offset2size(col_offset);
-    }
+    MemDataRowPointer::MemDataRowPointer(const vector<uint32_t> &col_offset)
+            : offset_(col_offset), size_(offset2size(col_offset)) {}
 
-    DataField &FlexAccessor::operator[](uint64_t i) {
+    DataField &MemDataRowPointer::operator[](uint64_t i) {
         view_ = pointer_ + offset_[i];
         view_.size_ = size_[i];
         return view_;
     }
 
-    uint64_t *FlexAccessor::raw() {
+    uint64_t *MemDataRowPointer::raw() {
         return pointer_;
     }
 
-    unique_ptr<DataRow> FlexAccessor::snapshot() {
+    unique_ptr<DataRow> MemDataRowPointer::snapshot() {
         return unique_ptr<DataRow>(new MemRowRef(pointer_, offset_));
     }
 
-    DataRow &FlexAccessor::operator=(DataRow &row) {
+    DataRow &MemDataRowPointer::operator=(DataRow &row) {
         if (row.raw()) {
             memcpy(static_cast<void *>(pointer_), static_cast<void *>(row.raw()),
                    sizeof(uint64_t) * offset_.back());
@@ -598,7 +597,7 @@ namespace lqf {
     class FlexRowIterator : public DataRowIterator {
     private:
         vector<shared_ptr<vector<uint64_t>>> &data_;
-        FlexAccessor reference_;
+        MemDataRowPointer reference_;
         uint32_t stripe_size_;
         uint32_t row_size_;
         uint64_t row_index_;

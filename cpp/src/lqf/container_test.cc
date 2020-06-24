@@ -309,6 +309,136 @@ TEST(PhaseConcurrentIntHashMapTest, Iterator) {
 }
 
 
+TEST(PhaseConcurrentInt64HashMapTest, Insert) {
+
+    PhaseConcurrentInt64HashMap hashMap;
+
+    auto executor = Executor::Make(10);
+
+    vector<function<int()>> tasks;
+
+    unordered_map<int64_t, int> serial;
+    vector<int64_t> keys;
+    vector<int32_t> values;
+
+    srand(time(NULL));
+
+    int total = 100000;
+    int sliver = total / 10;
+
+    for (int i = 0; i < total; ++i) {
+        int64_t key = i;
+        int value = rand();
+
+        keys.push_back(key);
+        values.push_back(value);
+
+        serial[key] = value;
+    }
+    function<int(int)> task = [&hashMap, &keys, &values, sliver](int input) {
+        for (int i = 0; i < sliver; ++i) {
+            auto index = input * sliver + i;
+            hashMap.put(keys[index], values[index]);
+        }
+        return input;
+    };
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back(bind(task, i));
+    }
+    executor->invokeAll(tasks);
+
+    EXPECT_EQ(hashMap.size(), serial.size());
+    for (auto &entry:serial) {
+        EXPECT_EQ(hashMap.get(entry.first), entry.second);
+    }
+
+    executor->shutdown();
+}
+
+TEST(PhaseConcurrentInt64HashMapTest, Delete) {
+    PhaseConcurrentInt64HashMap map;
+//    srand(time(NULL));
+    for (int i = 0; i < 5000; ++i) {
+        map.put(i, i + 2);
+    }
+    EXPECT_EQ(5000, map.size());
+
+    auto executor = Executor::Make(20);
+
+    function<int(int)> task = [&map](int index) {
+        for (int i = 0; i < 200; ++i) {
+            auto key = index * 200 + i;
+            auto item = map.remove(index * 200 + i);
+            EXPECT_EQ(item, key + 2);
+        }
+        return 0;
+    };
+    vector<function<int()>> tasks;
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back(bind(task, i));
+    }
+    executor->invokeAll(tasks);
+
+    EXPECT_EQ(3000, map.size());
+    for (int i = 0; i < 3000; ++i) {
+        auto key = 2000 + i;
+        auto item = map.get(key);
+        EXPECT_EQ(item, key + 2);
+    }
+
+    function<int(int)> task1p = [&map](int index) {
+        for (int i = 0; i < 200; ++i) {
+            auto key = index * 200 + i;
+            auto item = map.remove(index * 200 + i);
+            EXPECT_EQ(item, INT32_MIN);
+        }
+        return 0;
+    };
+
+    function<int(int)> task2 = [&map](int index) {
+        for (int i = 0; i < 200; ++i) {
+            auto notExist = map.remove(5000 + index * 200 + i);
+            EXPECT_EQ(notExist, INT32_MIN);
+        }
+        return 0;
+    };
+
+    tasks.clear();
+    for (int i = 0; i < 10; ++i) {
+        tasks.push_back(bind(task1p, i));
+        tasks.push_back(bind(task2, i));
+    }
+    executor->invokeAll(tasks);
+
+    EXPECT_EQ(3000, map.size());
+
+    executor->shutdown();
+}
+
+TEST(PhaseConcurrentInt64HashMapTest, Iterator) {
+    PhaseConcurrentInt64HashMap map;
+//    srand(time(NULL));
+    for (int i = 0; i < 5000; ++i) {
+        map.put(i + 35200, i + 2);
+    }
+    EXPECT_EQ(5000, map.size());
+
+    auto iterator = map.iterator();
+    auto counter = 0;
+    unordered_set<int32_t> ref_set;
+
+    while (iterator->hasNext()) {
+        auto next = iterator->next();
+        EXPECT_EQ(next.second, next.first + 2 - 35200);
+        ref_set.insert(next.first - 35200);
+        ++counter;
+    }
+    EXPECT_EQ(5000, counter);
+    for (int i = 0; i < 5000; ++i) {
+        EXPECT_TRUE(ref_set.find(i) != ref_set.end());
+    }
+}
+
 struct DemoObject {
     int value1;
     int value2;

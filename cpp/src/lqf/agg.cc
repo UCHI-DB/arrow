@@ -705,7 +705,7 @@ namespace lqf {
         auto block_size = block->size();
         auto rows = block->rows();
         auto stripes = make_shared<vector<shared_ptr<MemRowVector>>>();
-        auto stripe_offsets = stripe_copier_->colOffset();
+        auto& stripe_offsets = stripe_copier_->colOffset();
         for (auto i = 0u; i < num_stripe_; ++i) {
             stripes->push_back(make_shared<MemRowVector>(stripe_offsets));
         }

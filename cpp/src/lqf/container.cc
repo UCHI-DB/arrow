@@ -193,5 +193,189 @@ namespace lqf {
         unique_ptr<Iterator<pair<int, int>>> PhaseConcurrentIntHashMap::iterator() {
             return unique_ptr<Iterator<pair<int, int>>>(new PCIHMIterator(content_, content_len_));
         }
+
+        bool PhaseConcurrentInt64HashMap::_insert(Entry64 *content, uint32_t content_len, Entry64 entry) {
+            auto data = content;
+            auto content_mask = content_len - 1;
+            auto insert_index = knuth_hash(entry.pair.key_) & content_mask;
+
+            auto insert_value = entry;
+
+            while (insert_value.pair.key_ != Int64::empty) {
+                auto exist = content[insert_index];
+
+                if (exist.pair.key_ == insert_value.pair.key_) {
+                    // We do not copy the data here as in a parallel env it is not clear who goes first.
+                    // Copying data here may cause a data race and need either a CAS or a lock.
+                    // As we can always assume the exist one goes later, not copying the data is also not wrong.
+                    return 0;
+                } else if (exist.pair.key_ > insert_value.pair.key_) {
+                    insert_index = (insert_index + 1) & content_mask;
+                } else if (cas128((__uint128_t *) data + insert_index, exist.whole, insert_value.whole)) {
+                    insert_value = exist;
+                    insert_index = (insert_index + 1) & content_mask;
+                }
+            }
+            return 1;
+        }
+
+        pair<uint32_t, Entry64>
+        PhaseConcurrentInt64HashMap::_findreplacement(uint32_t start_index) {
+            auto content_mask = content_len_ - 1;
+            auto ref_index = start_index;
+            Entry64 ref_entry;
+            do {
+                ++ref_index;
+                ref_entry = content_[ref_index & content_mask];
+            } while (ref_entry.pair.key_ != Int64::empty &&
+                     (knuth_hash(ref_entry.pair.key_) & content_mask) > start_index);
+            auto back_index = ref_index - 1;
+            while (back_index > start_index) {
+                auto cand_entry = content_[back_index & content_mask];
+                if (cand_entry.pair.key_ == Int64::empty ||
+                    (knuth_hash(cand_entry.pair.key_) & content_mask) <= start_index) {
+                    ref_index = back_index;
+                    ref_entry = cand_entry;
+                }
+                --back_index;
+            }
+            return pair<uint32_t, Entry64>(ref_index, ref_entry);
+        }
+
+        PhaseConcurrentInt64HashMap::PhaseConcurrentInt64HashMap() : PhaseConcurrentInt64HashMap(1048576) {}
+
+        PhaseConcurrentInt64HashMap::PhaseConcurrentInt64HashMap(uint32_t expect_size) : size_(0) {
+            content_len_ = ceil2(expect_size * SCALE);
+            content_ = (Entry64 *) aligned_alloc(16, sizeof(Entry64) * content_len_);
+            memset(content_, -1, sizeof(Entry64) * content_len_);
+        }
+
+        PhaseConcurrentInt64HashMap::~PhaseConcurrentInt64HashMap() {
+            free(content_);
+        }
+
+        void PhaseConcurrentInt64HashMap::put(int64_t key, int32_t value) {
+            Entry64 entry;
+            entry.pair = {key, value};
+            if (_insert(content_, content_len_, entry)) {
+                size_++;
+                if (size_ >= limit()) {
+                    // TODO What error?
+                    throw std::invalid_argument("hash map is full");
+                }
+            }
+        }
+
+        int32_t PhaseConcurrentInt64HashMap::get(int64_t key) {
+            auto content_size = content_len_;
+            auto content_mask = content_size - 1;
+            auto index = knuth_hash(key) & content_mask;
+            while (content_[index].pair.key_ != Int64::empty && content_[index].pair.key_ != key) {
+                index = (index + 1) & content_mask;
+            }
+            if (content_[index].pair.key_ == Int64::empty) {
+                return INT32_MIN;
+            }
+            return content_[index].pair.value_;
+        }
+
+        int32_t PhaseConcurrentInt64HashMap::remove(int64_t key) {
+            auto content_size = content_len_;
+            auto content_mask = content_size - 1;
+            int base_index = knuth_hash(key) & content_mask;
+            int ref_index = base_index;
+            Entry64 ref_entry;
+            ref_entry.pair.key_ = key;
+            int32_t retval = INT32_MIN;
+            bool cas_success = false;
+            while (content_[ref_index & content_mask].pair.key_ != Int64::empty &&
+                   key < content_[ref_index & content_mask].pair.key_) {
+                ref_index += 1;
+            }
+            while (ref_index >= base_index) {
+                if (ref_entry.pair.key_ == Int64::empty ||
+                    ref_entry.pair.key_ != content_[ref_index & content_mask].pair.key_) {
+                    ref_index -= 1;
+                } else {
+                    int64_t ref_key = ref_entry.pair.key_;
+                    ref_entry = content_[ref_index & content_mask];
+                    ref_entry.pair.key_ = ref_key;
+                    auto cand = _findreplacement(ref_index);
+                    auto cand_index = cand.first;
+                    auto cand_entry = cand.second;
+                    if (cas128((__uint128_t *) (content_ + (ref_index & content_mask)),
+                               ref_entry.whole, cand_entry.whole)) {
+                        cas_success = true;
+                        if (retval == INT32_MIN) {
+                            retval = ref_entry.pair.value_;
+                        }
+                        if (cand_entry.pair.key_ != Int64::empty) {
+                            base_index = knuth_hash(cand_entry.pair.key_) & content_mask;
+                            ref_index = cand_index;
+                            ref_entry = cand_entry;
+                        } else {
+                            if (cas_success) {
+                                size_--;
+                            }
+                            return retval;
+                        }
+                    } else {
+                        ref_index -= 1;
+                    }
+                }
+            }
+            if (cas_success) {
+                size_--;
+            }
+            return retval;
+        }
+
+        void PhaseConcurrentInt64HashMap::resize(uint64_t expect) {
+            auto new_size = ceil2(expect);
+
+            auto new_content_len = ceil2(new_size);
+            auto new_content = (Entry64 *) aligned_alloc(16, sizeof(Entry64) * new_content_len);
+            memset(content_, -1, sizeof(Entry64) * new_content_len);
+
+            // Rehash all elements
+            for (uint32_t i = 0; i < content_len_; ++i) {
+                auto entry = content_[i];
+                if (entry.pair.key_ != Int64::empty) {
+                    _insert(new_content, new_content_len, entry);
+                }
+            }
+            free(content_);
+            content_ = new_content;
+            content_len_ = new_content_len;
+        }
+
+        class PCI64HMIterator : public Iterator<pair<int64_t, int32_t>> {
+            Entry64 *content_;
+            uint32_t content_len_;
+            uint32_t pointer_;
+        public:
+            PCI64HMIterator(Entry64 *content, uint32_t content_len) : content_(content), content_len_(content_len),
+                                                                      pointer_(0) {
+                while (pointer_ < content_len_ && content_[pointer_].pair.key_ == Int64::empty) {
+                    ++pointer_;
+                }
+            }
+
+            virtual ~PCI64HMIterator() = default;
+
+            bool hasNext() {
+                return pointer_ < content_len_;
+            }
+
+            pair<int64_t, int32_t> next() {
+                Entry64 value = content_[pointer_];
+                do { ++pointer_; } while (pointer_ < content_len_ && content_[pointer_].pair.key_ == Int64::empty);
+                return pair<int64_t, int32_t>{value.pair.key_, value.pair.value_};
+            }
+        };
+
+        unique_ptr<Iterator<pair<int64_t, int32_t>>> PhaseConcurrentInt64HashMap::iterator() {
+            return unique_ptr<Iterator<pair<int64_t, int32_t>>>(new PCI64HMIterator(content_, content_len_));
+        }
     }
 }

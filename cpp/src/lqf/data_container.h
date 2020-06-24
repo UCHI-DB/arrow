@@ -12,43 +12,12 @@
 
 namespace lqf {
     namespace datacontainer {
-
-        class MemDataRowAccessor : public DataRow {
-        private:
-            uint64_t *pointer_;
-            vector<uint32_t> offset_;
-            vector<uint32_t> size_;
-            DataField view_;
-        public:
-            MemDataRowAccessor() = default;
-
-            virtual ~MemDataRowAccessor() = default;
-
-            void init(const vector<uint32_t> &offset);
-
-            DataField &operator[](uint64_t i) override;
-
-            DataRow &operator=(DataRow &row) override;
-
-            unique_ptr<DataRow> snapshot() override;
-
-            uint64_t *raw() override;
-
-            inline uint32_t size() override { return offset_.back(); }
-
-            inline uint32_t num_fields() override { return offset_.size() - 1; }
-
-            inline void raw(uint64_t *p) { pointer_ = p; }
-
-            inline const vector<uint32_t> &offset() const { return offset_; };
-
-        };
 // The buffer size actually affect running speed.
 #define VECTOR_SLAB_SIZE_ 131072
 
         class MemRowVector {
         protected:
-            MemDataRowAccessor accessor_;
+            MemDataRowPointer accessor_;
             vector<shared_ptr<vector<uint64_t>>> memory_;
             uint32_t stripe_offset_;
             uint32_t size_;
@@ -90,16 +59,18 @@ namespace lqf {
         struct MapAnchor {
             uint32_t index_;
             uint32_t offset_;
-            MemDataRowAccessor accessor_;
+            MemDataRowPointer accessor_;
         };
 
-        class ConcurrentMemRowMap {
+        template<typename KEY, typename MAP>
+        class CMemRowMap {
         protected:
             ThreadLocal<MapAnchor> anchor_;
 
-            container::PhaseConcurrentIntHashMap map_;
+            MAP map_;
             vector<shared_ptr<vector<uint64_t>>> memory_;
             vector<uint32_t> col_offset_;
+            uint32_t memory_watermark_;
             mutex memory_lock_;
 
             uint32_t row_size_;
@@ -109,18 +80,36 @@ namespace lqf {
             void init();
 
         public:
-            ConcurrentMemRowMap(uint32_t expect_size, const vector<uint32_t> &);
+            CMemRowMap(uint32_t expect_size, const vector<uint32_t> &);
 
-            DataRow &insert(int key);
+            DataRow &insert(KEY key);
 
-            DataRow &operator[](int key);
+            DataRow &operator[](KEY key);
 
-            DataRow *find(int key);
+            DataRow *find(KEY key);
+
+            DataRow *remove(KEY key);
 
             uint32_t size();
+
+            unique_ptr<Iterator<pair<KEY, DataRow &> &>> map_iterator();
         };
 
+        using namespace container;
+
+        template
+        class CMemRowMap<int32_t, PhaseConcurrentIntHashMap>;
+
+        template
+        class CMemRowMap<int64_t, PhaseConcurrentInt64HashMap>;
+
+        using CInt32MemRowMap =
+        class CMemRowMap<int32_t, PhaseConcurrentIntHashMap>;
+
+        using CInt64MemRowMap =
+        class CMemRowMap<int64_t, PhaseConcurrentInt64HashMap>;
     }
+
 }
 
 

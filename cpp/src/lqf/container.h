@@ -252,6 +252,58 @@ namespace lqf {
             return success;
         }
 
+        struct Pair64 {
+            int64_t key_;
+            int32_t value_;
+        };
+
+        union Entry64 {
+            Pair64 pair;
+            __uint128_t whole;
+        };
+
+        class PhaseConcurrentInt64HashMap {
+        protected:
+            std::atomic<uint32_t> size_;
+
+            Entry64 *content_;
+            uint32_t content_len_;
+
+            bool _insert(Entry64 *content, uint32_t content_len, Entry64 entry);
+
+            pair<uint32_t, Entry64> _findreplacement(uint32_t start_index);
+
+        public:
+
+            PhaseConcurrentInt64HashMap();
+
+            PhaseConcurrentInt64HashMap(uint32_t expect_size);
+
+            virtual ~PhaseConcurrentInt64HashMap();
+
+            PhaseConcurrentInt64HashMap(PhaseConcurrentInt64HashMap &) = delete;
+
+            PhaseConcurrentInt64HashMap(PhaseConcurrentInt64HashMap &&) = delete;
+
+            PhaseConcurrentInt64HashMap &operator=(PhaseConcurrentInt64HashMap &) = delete;
+
+            PhaseConcurrentInt64HashMap &operator=(PhaseConcurrentInt64HashMap &&) = delete;
+
+            void put(int64_t key, int32_t value);
+
+            int32_t get(int64_t key);
+
+            int32_t remove(int64_t key);
+
+            void resize(uint64_t expect);
+
+            unique_ptr<Iterator<pair<int64_t, int32_t>>> iterator();
+
+            inline uint32_t size() { return size_; }
+
+            inline uint32_t limit() { return content_len_; }
+        };
+
         template<typename KTYPE, typename VTYPEP>
         class PhaseConcurrentHashMap {
             using ktype = typename KTYPE::type;
