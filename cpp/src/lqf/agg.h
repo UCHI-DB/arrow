@@ -227,6 +227,24 @@ namespace lqf {
             inline uint32_t size() { return map_.size(); };
         };
 
+        class HashSmallCore {
+        protected:
+            unique_ptr<AggReducer> reducer_;
+            function<uint64_t(DataRow &)> &hasher_;
+            unordered_map<uint64_t, unique_ptr<MemDataRow>> map_;
+            bool need_dump_;
+        public:
+            HashSmallCore(const vector<uint32_t> &, unique_ptr<AggReducer>, function<uint64_t(DataRow &)> &, bool);
+
+            void reduce(DataRow &row);
+
+            void merge(HashSmallCore &another);
+
+            void dump(MemTable &table, function<bool(DataRow &)>);
+
+            inline uint32_t size() { return map_.size(); };
+        };
+
         class SimpleCore {
         protected:
             unique_ptr<AggReducer> reducer_;
@@ -386,7 +404,6 @@ namespace lqf {
         HashAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
                 function<vector<agg::AggField *>()>,
                 function<bool(DataRow &)> pred = nullptr, bool vertical = false);
-
     };
 
     class SimpleAgg : public Agg<agg::SimpleCore> {
