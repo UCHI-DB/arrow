@@ -204,6 +204,8 @@ namespace lqf {
 
             inline vector<unique_ptr<AggField>> &fields() { return fields_; }
 
+            inline DataRow *storage() { return storage_; }
+
             inline function<void(DataRow &, DataRow &)> *row_copier() {
                 return row_copier_;
             }
@@ -224,17 +226,19 @@ namespace lqf {
 
             void dump(MemTable &table, function<bool(DataRow &)>);
 
-            inline uint32_t size() { return map_.size(); };
         };
 
         class HashSmallCore {
         protected:
-            unique_ptr<AggReducer> reducer_;
+            function<unique_ptr<AggReducer>()> reducer_gen_;
             function<uint64_t(DataRow &)> &hasher_;
-            unordered_map<uint64_t, unique_ptr<MemDataRow>> map_;
+            const vector<uint32_t> &col_offset_;
+            unordered_map<uint64_t, unique_ptr<AggReducer>> map_;
+            MemRowVector rows_;
             bool need_dump_;
         public:
-            HashSmallCore(const vector<uint32_t> &, unique_ptr<AggReducer>, function<uint64_t(DataRow &)> &, bool);
+            HashSmallCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>, function<uint64_t(DataRow &)> &,
+                          bool);
 
             void reduce(DataRow &row);
 
@@ -242,7 +246,26 @@ namespace lqf {
 
             void dump(MemTable &table, function<bool(DataRow &)>);
 
-            inline uint32_t size() { return map_.size(); };
+        };
+
+        class TableCore {
+        protected:
+            function<unique_ptr<AggReducer>()> reducer_gen_;
+            function<uint32_t(DataRow &)> &indexer_;
+            const vector<uint32_t> &col_offset_;
+            vector<unique_ptr<AggReducer>> table_;
+            MemRowVector rows_;
+            bool need_dump_;
+        public:
+            TableCore(uint32_t, const vector<uint32_t> &, function<unique_ptr<AggReducer>()>,
+                      function<uint32_t(DataRow &)> &, bool);
+
+            void reduce(DataRow &row);
+
+            void merge(TableCore &another);
+
+            void dump(MemTable &table, function<bool(DataRow &)>);
+
         };
 
         class SimpleCore {
@@ -259,7 +282,6 @@ namespace lqf {
 
             void dump(MemTable &table, function<bool(DataRow &)>);
 
-            inline uint32_t size() { return 1; };
         };
 
         namespace recording {
@@ -361,22 +383,40 @@ namespace lqf {
     }
 
     using namespace parallel;
+    using namespace agg;
+    using namespace agg::recording;
 
     template<typename CORE>
     class Agg : public Node {
     protected:
         vector<uint32_t> col_offset_;
         vector<uint32_t> col_size_;
+        bool need_field_dump_;
+
+        unique_ptr<Snapshoter> header_copier_;
+        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
+
+        function<vector<AggField *>()> fields_gen_;
+        function<RecordingAggField *()> field_gen_;
+        vector<uint32_t> fields_start_;
+
         function<bool(DataRow &)> predicate_;
         bool vertical_;
-        bool need_field_dump_;
 
         virtual shared_ptr<CORE> processBlock(const shared_ptr<Block> &block);
 
         virtual shared_ptr<CORE> makeCore();
 
+        virtual unique_ptr<agg::AggReducer> createReducer();
+
+        virtual unique_ptr<agg::AggReducer> createRecordingReducer();
+
     public:
-        Agg(function<bool(DataRow &)> pred = nullptr, bool vertical = false);
+        Agg(unique_ptr<Snapshoter>, function<vector<AggField *>()>, function<bool(DataRow &)> pred = nullptr,
+            bool vertical = false);
+
+        Agg(unique_ptr<Snapshoter>, function<RecordingAggField *()>, function<bool(DataRow &)> pred = nullptr,
+            bool vertical = false);
 
         virtual ~Agg() = default;
 
@@ -390,13 +430,6 @@ namespace lqf {
     class HashAgg : public Agg<agg::HashCore> {
     protected:
         function<uint64_t(DataRow &)> hasher_;
-        unique_ptr<Snapshoter> header_copier_;
-        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
-
-        function<vector<agg::AggField *>()> fields_gen_;
-        vector<uint32_t> fields_start_;
-
-        unique_ptr<agg::AggReducer> createReducer();
 
         shared_ptr<agg::HashCore> makeCore() override;
 
@@ -406,14 +439,33 @@ namespace lqf {
                 function<bool(DataRow &)> pred = nullptr, bool vertical = false);
     };
 
+    class HashSmallAgg : public Agg<agg::HashSmallCore> {
+    protected:
+        function<uint64_t(DataRow &)> hasher_;
+
+        shared_ptr<agg::HashSmallCore> makeCore() override;
+
+    public:
+        HashSmallAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
+                     function<vector<agg::AggField *>()>,
+                     function<bool(DataRow &)> pred = nullptr, bool vertical = false);
+    };
+
+    class TableAgg : public Agg<agg::TableCore> {
+    protected:
+        uint32_t table_size_;
+        function<uint32_t(DataRow &)> indexer_;
+
+        shared_ptr<agg::TableCore> makeCore() override;
+
+    public:
+        TableAgg(uint32_t, function<uint32_t(DataRow &)>, unique_ptr<Snapshoter>,
+                 function<vector<agg::AggField *>()>, function<bool(DataRow &)>
+                 pred = nullptr, bool vertical = false);
+    };
+
     class SimpleAgg : public Agg<agg::SimpleCore> {
     protected:
-        unique_ptr<Snapshoter> header_copier_;
-        function<vector<agg::AggField *>()> fields_gen_;
-        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
-
-        unique_ptr<agg::AggReducer> createReducer();
-
         shared_ptr<agg::SimpleCore> makeCore() override;
 
     public:
@@ -428,13 +480,6 @@ namespace lqf {
     class RecordingHashAgg : public Agg<RecordingHashCore> {
     protected:
         function<uint64_t(DataRow &)> hasher_;
-        unique_ptr<Snapshoter> header_copier_;
-        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
-
-        function<RecordingAggField *()> field_gen_;
-        uint32_t field_start_;
-
-        unique_ptr<AggReducer> createReducer();
 
         shared_ptr<RecordingHashCore> makeCore() override;
 
@@ -447,12 +492,6 @@ namespace lqf {
 
     class RecordingSimpleAgg : public Agg<RecordingSimpleCore> {
     protected:
-        unique_ptr<Snapshoter> header_copier_;
-        unique_ptr<function<void(DataRow &, DataRow &)>> row_copier_;
-
-        function<RecordingAggField *()> field_gen_;
-
-        unique_ptr<AggReducer> createReducer();
 
         shared_ptr<RecordingSimpleCore> makeCore() override;
 

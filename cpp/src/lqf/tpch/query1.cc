@@ -75,7 +75,7 @@ namespace lqf {
                 };
             };
 
-            HashAgg agg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
+            HashSmallAgg agg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
                                 ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
                         aggFields);
             auto agged = agg.agg(*filtered);
@@ -134,7 +134,7 @@ namespace lqf {
                 };
             };
 
-            auto agg = graph.add(new HashAgg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
+            auto agg = graph.add(new HashSmallAgg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
                                                      ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
                                              aggFields), {colFilter});
 

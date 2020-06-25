@@ -10,17 +10,20 @@ namespace lqf {
     namespace datacontainer {
 
         MemRowVector::MemRowVector(const vector<uint32_t> &offset)
-                : accessor_(offset), stripe_offset_(0), size_(0) {
-            memory_.push_back(make_shared<vector<uint64_t>>(VECTOR_SLAB_SIZE_));
+                : MemRowVector(offset, VECTOR_SLAB_SIZE_) {}
+
+        MemRowVector::MemRowVector(const vector<uint32_t> &offset, uint32_t slab_size)
+                : accessor_(offset), slab_size_(slab_size), stripe_offset_(0), size_(0) {
+            memory_.push_back(make_shared<vector<uint64_t>>(slab_size_));
             row_size_ = offset.back();
-            stripe_size_ = VECTOR_SLAB_SIZE_ / row_size_;
+            stripe_size_ = slab_size_ / row_size_;
         }
 
         DataRow &MemRowVector::push_back() {
             auto current = stripe_offset_;
             stripe_offset_ += row_size_;
-            if (stripe_offset_ > VECTOR_SLAB_SIZE_) {
-                memory_.push_back(make_shared<vector<uint64_t>>(VECTOR_SLAB_SIZE_));
+            if (stripe_offset_ > slab_size_) {
+                memory_.push_back(make_shared<vector<uint64_t>>(slab_size_));
                 stripe_offset_ = row_size_;
                 current = 0;
             }
@@ -58,7 +61,7 @@ namespace lqf {
             DataRow &next() override {
                 accessor_.raw(memory_ref_[index_]->data() + pointer_);
                 pointer_ += row_size_;
-                if (pointer_ > VECTOR_SLAB_SIZE_) {
+                if (pointer_ > memory_ref_[index_]->size()) {
                     ++index_;
                     pointer_ = 0;
                     accessor_.raw(memory_ref_[index_]->data() + pointer_);
@@ -74,6 +77,9 @@ namespace lqf {
         }
 
         MemRowMap::MemRowMap(const vector<uint32_t> &offset) : MemRowVector(offset) {}
+
+        MemRowMap::MemRowMap(const vector<uint32_t> &offset, uint32_t slab_size)
+                : MemRowVector(offset, slab_size) {}
 
         DataRow &MemRowMap::insert(uint64_t key) {
             push_back();
@@ -141,10 +147,15 @@ namespace lqf {
 
         template<typename KEY, typename MAP>
         CMemRowMap<KEY, MAP>::CMemRowMap(uint32_t expect_size, const vector<uint32_t> &col_offset)
-                : anchor_([col_offset]() {
-            MapAnchor anchor{0, CMAP_SLAB_SIZE_, MemDataRowPointer(col_offset)};
+                : CMemRowMap(expect_size, col_offset, CMAP_SLAB_SIZE_) {}
+
+
+        template<typename KEY, typename MAP>
+        CMemRowMap<KEY, MAP>::CMemRowMap(uint32_t expect_size, const vector<uint32_t> &col_offset, uint32_t slab_size)
+                : anchor_([&col_offset, slab_size]() {
+            MapAnchor anchor{0, slab_size, MemDataRowPointer(col_offset)};
             return anchor;
-        }), map_(expect_size), memory_(1000), col_offset_(col_offset), memory_watermark_(0),
+        }), map_(expect_size), memory_(1000), slab_size_(slab_size), col_offset_(col_offset), memory_watermark_(0),
                   row_size_(col_offset.back()) {}
 
         template<typename KEY, typename MAP>
@@ -152,7 +163,7 @@ namespace lqf {
             auto anchor = anchor_.get();
             memory_lock_.lock();
             anchor->index_ = memory_watermark_;
-            memory_[memory_watermark_++] = make_shared<vector<uint64_t>>(CMAP_SLAB_SIZE_);
+            memory_[memory_watermark_++] = make_shared<vector<uint64_t>>(slab_size_);
             anchor->offset_ = 0;
             memory_lock_.unlock();
         }
@@ -160,7 +171,7 @@ namespace lqf {
         template<typename KEY, typename MAP>
         DataRow &CMemRowMap<KEY, MAP>::insert(KEY key) {
             auto anchor = anchor_.get();
-            if (anchor->offset_ + row_size_ > CMAP_SLAB_SIZE_) {
+            if (anchor->offset_ + row_size_ > slab_size_) {
                 new_slab();
             }
             anchor->accessor_.raw(memory_[anchor->index_]->data() + anchor->offset_);

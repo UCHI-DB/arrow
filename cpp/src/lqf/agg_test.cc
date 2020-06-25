@@ -268,7 +268,6 @@ TEST(HashCoreTest, Reduce) {
     input[2] = 100;
     core.reduce(input);
 
-    EXPECT_EQ(core.size(), 2);
 }
 
 TEST(HashCoreTest, Merge) {
@@ -318,7 +317,6 @@ TEST(HashCoreTest, Merge) {
     core2.reduce(input);
 
     core1.merge(core2);
-    EXPECT_EQ(3, core1.size());
 }
 
 TEST(HashCoreTest, Dump) {
@@ -605,6 +603,139 @@ TEST(HashAggTest, Agg) {
     }
 }
 
+TEST(HashSmallAggTest, Agg) {
+    function<uint64_t(DataRow &)> hasher =
+            [](DataRow &row) {
+                return row[0].asInt();
+            };
+
+    function<vector<AggField *>()> aggFields = []() {
+        return vector<AggField *>{new DoubleSum(1), new Count()};
+    };
+
+    HashSmallAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                     aggFields);
+
+    auto memTable = MemTable::Make(3);
+
+    auto block1 = memTable->allocate(100);
+    auto block2 = memTable->allocate(100);
+
+    auto row1 = block1->rows();
+    auto row2 = block2->rows();
+
+    srand(time(NULL));
+
+    vector<int> count(20, 0);
+    vector<double> sum(20, 0);
+
+    for (int i = 0; i < 100; i++) {
+        int r1idx = i % 10;
+        int r2idx = i % 20;
+        double v1 = (double) rand() / RAND_MAX;
+        double v2 = (double) rand() / RAND_MAX;
+        (*row1)[i][0] = r1idx;
+        (*row2)[i][0] = r2idx;
+        (*row1)[i][1] = v1;
+        (*row2)[i][1] = v2;
+        sum[r1idx] += v1;
+        sum[r2idx] += v2;
+        count[r1idx] += 1;
+        count[r2idx] += 1;
+    }
+
+    auto aggtable = agg.agg(*memTable);
+    auto agged = aggtable->blocks()->collect();
+
+    EXPECT_EQ(1, agged->size());
+    auto aggblock = (*agged)[0];
+    EXPECT_EQ(20, aggblock->size());
+    auto rows = aggblock->rows();
+    for (int i = 0; i < 20; ++i) {
+        auto i_idx = (*rows)[i][0].asInt();
+        auto i_sum = (*rows)[i][1].asDouble();
+        auto i_count = (*rows)[i][2].asInt();
+        EXPECT_EQ(i_count, count[i_idx]);
+        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
+    }
+    rows = aggblock->rows();
+    for (int i = 0; i < 20; ++i) {
+        DataRow &row = rows->next();
+        auto i_idx = row[0].asInt();
+        auto i_sum = row[1].asDouble();
+        auto i_count = row[2].asInt();
+        EXPECT_EQ(i_count, count[i_idx]);
+        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
+    }
+}
+
+TEST(TableAggTest, Agg) {
+    function<uint32_t(DataRow &)> hasher =
+            [](DataRow &row) {
+                return row[0].asInt();
+            };
+
+    function<vector<AggField *>()> aggFields = []() {
+        return vector<AggField *>{new DoubleSum(1), new Count()};
+    };
+
+    TableAgg agg(10, hasher, RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                 aggFields);
+
+    auto memTable = MemTable::Make(3);
+
+    auto block1 = memTable->allocate(100);
+    auto block2 = memTable->allocate(100);
+
+    auto row1 = block1->rows();
+    auto row2 = block2->rows();
+
+    srand(time(NULL));
+
+    vector<int> count(10, 0);
+    vector<double> sum(10, 0);
+
+    for (int i = 0; i < 100; i++) {
+        int r1idx = i % 5;
+        int r2idx = i % 10;
+        double v1 = (double) rand() / RAND_MAX;
+        double v2 = (double) rand() / RAND_MAX;
+        (*row1)[i][0] = r1idx;
+        (*row2)[i][0] = r2idx;
+        (*row1)[i][1] = v1;
+        (*row2)[i][1] = v2;
+        sum[r1idx] += v1;
+        sum[r2idx] += v2;
+        count[r1idx] += 1;
+        count[r2idx] += 1;
+    }
+
+    auto aggtable = agg.agg(*memTable);
+    auto agged = aggtable->blocks()->collect();
+
+    EXPECT_EQ(1, agged->size());
+    auto aggblock = (*agged)[0];
+    EXPECT_EQ(10, aggblock->size());
+    auto rows = aggblock->rows();
+    for (int i = 0; i < 10; ++i) {
+        auto i_idx = (*rows)[i][0].asInt();
+        auto i_sum = (*rows)[i][1].asDouble();
+        auto i_count = (*rows)[i][2].asInt();
+        EXPECT_EQ(i_count, count[i_idx]);
+        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
+    }
+    rows = aggblock->rows();
+    for (int i = 0; i < 10; ++i) {
+        DataRow &row = rows->next();
+        auto i_idx = row[0].asInt();
+        auto i_sum = row[1].asDouble();
+        auto i_count = row[2].asInt();
+        EXPECT_EQ(i_count, count[i_idx]);
+        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
+    }
+}
+
+
 using namespace lqf::agg::recording;
 
 TEST(RecordingHashAggTest, AggRecording) {
@@ -712,7 +843,7 @@ TEST(SimpleAggTest, Agg) {
     auto aggblock = (*agged)[0];
     EXPECT_EQ(1, aggblock->size());
     auto rows = aggblock->rows();
-    EXPECT_NEAR(sum, (*rows)[0][0].asDouble(),0.0000001);
+    EXPECT_NEAR(sum, (*rows)[0][0].asDouble(), 0.0000001);
     EXPECT_EQ(count, (*rows)[0][1].asInt());
     EXPECT_EQ(max, (*rows)[0][2].asInt());
 }

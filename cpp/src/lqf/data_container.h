@@ -19,12 +19,15 @@ namespace lqf {
         protected:
             MemDataRowPointer accessor_;
             vector<shared_ptr<vector<uint64_t>>> memory_;
+            uint32_t slab_size_;
             uint32_t stripe_offset_;
             uint32_t size_;
             uint32_t row_size_ = 0;
             uint32_t stripe_size_ = 0;
         public:
             MemRowVector(const vector<uint32_t> &offset);
+
+            MemRowVector(const vector<uint32_t> &offset, uint32_t slab_size);
 
             DataRow &push_back();
 
@@ -42,6 +45,8 @@ namespace lqf {
             unordered_map<uint64_t, uint64_t> map_;
         public:
             MemRowMap(const vector<uint32_t> &offset);
+
+            MemRowMap(const vector<uint32_t> &offset, uint32_t slab_size);
 
             DataRow &insert(uint64_t key);
 
@@ -69,6 +74,7 @@ namespace lqf {
 
             MAP map_;
             vector<shared_ptr<vector<uint64_t>>> memory_;
+            uint32_t slab_size_;
             vector<uint32_t> col_offset_;
             uint32_t memory_watermark_;
             mutex memory_lock_;
@@ -81,6 +87,8 @@ namespace lqf {
 
         public:
             CMemRowMap(uint32_t expect_size, const vector<uint32_t> &);
+
+            CMemRowMap(uint32_t expect_size, const vector<uint32_t> &, uint32_t);
 
             DataRow &insert(KEY key);
 
