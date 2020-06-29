@@ -8,6 +8,7 @@
 #include "data_model.h"
 #include "parallel.h"
 #include "rowcopy.h"
+#include "hash_container.h"
 
 namespace lqf {
 
@@ -30,8 +31,9 @@ namespace lqf {
     private:
         uint32_t key_index_;
         unique_ptr<Snapshoter> snapshoter_;
+        uint32_t expect_size_;
     public:
-        HashMat(uint32_t, unique_ptr<Snapshoter>);
+        HashMat(uint32_t, unique_ptr<Snapshoter>,uint32_t expect_size = CONTAINER_SIZE);
 
         virtual ~HashMat() = default;
 

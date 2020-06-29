@@ -3,6 +3,7 @@
 //
 
 #include "agg.h"
+#include <cstring>
 
 namespace lqf {
     using namespace rowcopy;
@@ -157,11 +158,10 @@ namespace lqf {
             value_ = std::min(ACC::get(value_), ACC::get(static_cast<Min<ACC> &>(another).value_));
         }
 
-        AggReducer::AggReducer(Snapshoter *header_copier,
-                               function<void(DataRow &, DataRow &)> *row_copier,
+        AggReducer::AggReducer(const vector<uint32_t> &offset, Snapshoter *header_copier,
                                vector<AggField *> fields,
                                const vector<uint32_t> &fields_offset)
-                : header_copier_(header_copier), row_copier_(row_copier) {
+                : storage_(offset), header_copier_(header_copier) {
             int i = 0;
             for (auto &field: fields) {
                 fields_.push_back(unique_ptr<AggField>(field));
@@ -169,25 +169,23 @@ namespace lqf {
             }
         }
 
-        AggReducer::AggReducer(Snapshoter *header_copier,
-                               function<void(DataRow &, DataRow &)> *row_copier,
-                               AggField *field,
-                               uint32_t field_offset)
-                : header_copier_(header_copier), row_copier_(row_copier) {
+        AggReducer::AggReducer(const vector<uint32_t> &offset, Snapshoter *header_copier,
+                               AggField *field, uint32_t field_offset)
+                : storage_(offset), header_copier_(header_copier) {
             fields_.push_back(unique_ptr<AggField>(field));
             field->write_at(field_offset);
         }
 
-        void AggReducer::attach(DataRow &target) {
-            storage_ = &target;
+        void AggReducer::attach(uint64_t *pointer) {
+            storage_.raw(pointer);
             // Attach each field
             for (auto &field: fields_) {
-                field->attach(target);
+                field->attach(storage_);
             }
         }
 
         void AggReducer::init(DataRow &input) {
-            (*header_copier_)(*storage_, input);
+            (*header_copier_)(storage_, input);
             // Init the storage content as 0
             for (auto &field:fields_) {
                 field->init();
@@ -214,86 +212,86 @@ namespace lqf {
             }
         }
 
-        void AggReducer::assign(AggReducer &another) {
-            (*row_copier_)(*storage_, *another.storage_);
-        }
+        CoreBase::CoreBase(function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : row_copier_(move(row_copier)), need_dump_(need_dump) {}
 
-        HashCore::HashCore(const vector<uint32_t> &col_offset, unique_ptr<AggReducer> reducer,
-                           function<uint64_t(DataRow &)> &hasher, bool need_dump)
-                : reducer_(move(reducer)), hasher_(hasher), map_(col_offset), need_dump_(need_dump) {}
+        HashLargeCore::HashLargeCore(const vector<uint32_t> &col_offset, unique_ptr<AggReducer> reducer,
+                                     function<uint64_t(DataRow &)> &hasher,
+                                     function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : CoreBase(move(row_copier), need_dump), reducer_(move(reducer)), hasher_(hasher), map_(col_offset) {}
 
-        void HashCore::reduce(DataRow &row) {
+        void HashLargeCore::reduce(DataRow &row) {
             auto key = hasher_(row);
             DataRow *exist = map_.find(key);
             if (exist) {
-                reducer_->attach(*exist);
+                reducer_->attach(exist->raw());
                 reducer_->reduce(row);
             } else {
-                reducer_->attach(map_.insert(key));
+                reducer_->attach(map_.insert(key).raw());
                 reducer_->init(row);
             }
         }
 
-        void HashCore::merge(HashCore &another) {
+        void HashLargeCore::merge(HashLargeCore &another) {
             auto ite = another.map_.map_iterator();
             while (ite->hasNext()) {
                 auto &next = ite->next();
-                another.reducer_->attach(next.second);
+                another.reducer_->attach(next.second.raw());
                 auto exist = map_.find(next.first);
                 if (exist) {
-                    reducer_->attach(*exist);
+                    reducer_->attach(exist->raw());
                     reducer_->merge(*another.reducer_);
                 } else {
                     DataRow &inserted = map_.insert(next.first);
-                    reducer_->attach(inserted);
-                    reducer_->assign(*another.reducer_);
+                    reducer_->attach(inserted.raw());
+                    (*row_copier_)(*reducer_->storage(), *another.reducer_->storage());
                 }
             }
         }
 
-        void HashCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
-            auto flexblock = table.allocateFlex();
-            if (!pred) {
+        void HashLargeCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+            assert(pred == nullptr);
+            if (!table.isVertical()) {
+                auto flexblock = table.allocateFlex();
+
                 if (need_dump_) {
                     auto iterator = map_.iterator();
                     while (iterator->hasNext()) {
                         DataRow &next = iterator->next();
-                        reducer_->attach(next);
+                        reducer_->attach(next.raw());
                         reducer_->dump();
                     }
                 }
-                flexblock->assign(map_.memory(), map_.size());
+                flexblock->assign(map_.memory(), map_.slab_size(), map_.size());
             } else {
-                auto ite = map_.iterator();
-                auto row_copier = reducer_->row_copier();
+                auto block = table.allocate(map_.size());
+                auto writer = block->rows();
                 if (need_dump_) {
-                    while (ite->hasNext()) {
-                        DataRow &next = ite->next();
-                        reducer_->attach(next);
+                    auto iterator = map_.iterator();
+                    while (iterator->hasNext()) {
+                        DataRow &next = iterator->next();
+                        reducer_->attach(next.raw());
                         reducer_->dump();
-                        if (pred(next)) {
-                            DataRow &write = flexblock->push_back();
-                            (*row_copier)(write, next);
-                        }
+                        (*row_copier_)(writer->next(), *reducer_->storage());
                     }
                 } else {
-                    while (ite->hasNext()) {
-                        DataRow &next = ite->next();
-                        if (pred(next)) {
-                            DataRow &write = flexblock->push_back();
-                            (*row_copier)(write, next);
-                        }
+                    auto iterator = map_.iterator();
+                    while (iterator->hasNext()) {
+                        DataRow &next = iterator->next();
+                        reducer_->attach(next.raw());
+                        (*row_copier_)(writer->next(), *reducer_->storage());
                     }
                 }
             }
         }
 
-        HashSmallCore::HashSmallCore(const vector<uint32_t> &col_offset, function<unique_ptr<AggReducer>()> reducer_gen,
-                                     function<uint64_t(DataRow &)> &hasher, bool need_dump)
-                : reducer_gen_(reducer_gen), hasher_(hasher), col_offset_(col_offset), rows_(col_offset, 16384),
-                  need_dump_(need_dump) {}
+        HashCore::HashCore(const vector<uint32_t> &col_offset, function<unique_ptr<AggReducer>()> reducer_gen,
+                           function<uint64_t(DataRow &)> &hasher,
+                           function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : CoreBase(move(row_copier), need_dump), reducer_gen_(reducer_gen), hasher_(hasher),
+                  col_offset_(col_offset), rows_(col_offset, 16384) {}
 
-        void HashSmallCore::reduce(DataRow &row) {
+        void HashCore::reduce(DataRow &row) {
             auto key = hasher_(row);
             auto found = map_.find(key);
             if (__builtin_expect(found != map_.cend(), 1)) {
@@ -301,46 +299,49 @@ namespace lqf {
             } else {
                 DataRow &newstorage = rows_.push_back();
                 auto reducer = reducer_gen_();
-                reducer->attach(newstorage);
+                reducer->attach(newstorage.raw());
                 reducer->init(row);
                 map_[key] = move(reducer);
             }
         }
 
-        void HashSmallCore::merge(HashSmallCore &another) {
+        void HashCore::merge(HashCore &another) {
             for (auto &ite: another.map_) {
                 auto exist = map_.find(ite.first);
                 if (exist != map_.cend()) {
                     exist->second->merge(*ite.second);
                 } else {
                     DataRow &storage = rows_.push_back();
-                    map_[ite.first] = move(ite.second);
-                    auto &reducer = map_[ite.first];
-                    (*reducer->row_copier())(storage, *reducer->storage());
-                    reducer->attach(storage);
+                    memcpy((void *) storage.raw(), (void *) ite.second->storage()->raw(),
+                           sizeof(uint64_t) * storage.size());
+                    auto &reducer = ite.second;
+                    reducer->attach(storage.raw());
+                    map_[ite.first] = move(reducer);
                 }
             }
         }
 
-        void HashSmallCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
-            auto block = table.allocateFlex();
+        void HashCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+            auto block = table.allocate(map_.size());
+            auto writerows = block->rows();
             for (auto &iterator:map_) {
                 if (need_dump_) {
                     iterator.second->dump();
                 }
                 DataRow &next = *(iterator.second->storage());
                 if (!pred || pred(next)) {
-                    DataRow &to = block->push_back();
-                    (*iterator.second->row_copier())(to, next);
+                    DataRow &to = writerows->next();
+                    (*row_copier_)(to, next);
                 }
             }
         }
 
         TableCore::TableCore(uint32_t table_size, const vector<uint32_t> &col_offset,
-                             function<unique_ptr<AggReducer>()> reducer_gen,
-                             function<uint32_t(DataRow &)> &indexer, bool need_dump)
-                : reducer_gen_(reducer_gen), indexer_(indexer), col_offset_(col_offset), table_(table_size),
-                  rows_(col_offset, 16384), need_dump_(need_dump) {}
+                             function<unique_ptr<AggReducer>()> reducer_gen, function<uint32_t(DataRow &)> &indexer,
+                             function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : CoreBase(move(row_copier), need_dump), reducer_gen_(reducer_gen), indexer_(indexer),
+                  col_offset_(col_offset), table_(table_size),
+                  rows_(col_offset, 16384) {}
 
         void TableCore::reduce(DataRow &row) {
             auto key = indexer_(row);
@@ -350,7 +351,7 @@ namespace lqf {
             } else {
                 DataRow &newstorage = rows_.push_back();
                 auto reducer = reducer_gen_();
-                reducer->attach(newstorage);
+                reducer->attach(newstorage.raw());
                 reducer->init(row);
                 table_[key] = move(reducer);
             }
@@ -366,11 +367,11 @@ namespace lqf {
                     if (exist != NULL) {
                         exist->merge(*target);
                     } else {
-                        table_[i] = move(target);
                         DataRow &storage = rows_.push_back();
-                        auto &reducer = table_[i];
-                        (*reducer->row_copier())(storage, *reducer->storage());
-                        reducer->attach(storage);
+                        memcpy((void *) storage.raw(), (void *) target->storage()->raw(),
+                               sizeof(uint64_t) * storage.size());
+                        target->attach(storage.raw());
+                        table_[i] = move(target);
                     }
                 }
             }
@@ -386,15 +387,16 @@ namespace lqf {
                     DataRow &next = *(iterator->storage());
                     if (!pred || pred(next)) {
                         DataRow &to = block->push_back();
-                        (*iterator->row_copier())(to, next);
+                        (*row_copier_)(to, next);
                     }
                 }
             }
         }
 
-        SimpleCore::SimpleCore(const vector<uint32_t> &col_offset, unique_ptr<AggReducer> reducer, bool need_dump)
-                : reducer_(move(reducer)), storage_(col_offset), need_dump_(need_dump) {
-            reducer_->attach(storage_);
+        SimpleCore::SimpleCore(const vector<uint32_t> &col_offset, unique_ptr<AggReducer> reducer,
+                               function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : CoreBase(move(row_copier), need_dump), reducer_(move(reducer)), storage_(col_offset) {
+            reducer_->attach(storage_.raw());
             for (auto &field:reducer_->fields()) {
                 field->init();
             }
@@ -415,7 +417,7 @@ namespace lqf {
             }
             auto block = table.allocate(1);
             auto row = block->rows();
-            (*reducer_->row_copier())(row->next(), storage_);
+            (*row_copier_)(row->next(), storage_);
         }
 
         namespace recording {
@@ -482,9 +484,7 @@ namespace lqf {
             }
 
             template<typename ACC>
-            RecordingMax<ACC>::RecordingMax(uint32_t
-                                            read_idx, uint32_t
-                                            key_idx)
+            RecordingMax<ACC>::RecordingMax(uint32_t read_idx, uint32_t key_idx)
                     : RecordingAggField(read_idx, key_idx) {}
 
             template<typename ACC>
@@ -522,91 +522,56 @@ namespace lqf {
                 RecordingAggField::merge(a);
             }
 
-//            RecordingAggReducer::RecordingAggReducer(Snapshoter *header_copier,
-//                                                     function<void(DataRow &, DataRow &)> *row_copier,
-//                                                     RecordingAggField *field, uint32_t field_start)
-//                    : AggReducer(header_copier, row_copier, vector<AggField *>{field}, vector<uint32_t>{field_start}) {
-//                field_ = static_cast<RecordingAggField *>(fields_[0].get());
-//            }
-//
-//            void RecordingAggReducer::init(DataRow &input) {
-//                (*header_copier_)(*storage_, input);
-//                auto keyholder = make_shared<vector<int32_t>>();
-//                keys_.emplace_back(move(keyholder));
-//                field_->init();
-//                field_->associate(keys_.back().get());
-//                reduce(input);
-//            }
-//
-//            void RecordingAggReducer::assign(RecordingAggReducer &another) {
-//                // Assign happens when the storage is not init
-//                keys_.push_back(make_shared<vector<int32_t>>());
-//                auto keys = keys_.back().get();
-//                auto tomove = another.field_->keys();
-//                AggReducer::assign(another);
-//                (*keys) = move(*tomove);
-//                field_->associate(keys);
-//            }
-
-            RecordingHashCore::RecordingHashCore(
-                    const vector<uint32_t> &col_offset,
-                    unique_ptr<AggReducer> reducer,
-                    function<uint64_t(DataRow &)> &hasher)
-                    : HashCore(col_offset, move(reducer), hasher, false),
+            RecordingHashCore::RecordingHashCore(const vector<uint32_t> &col_offset,
+                                                 function<unique_ptr<AggReducer>()> reducer_gen,
+                                                 function<uint64_t(DataRow &)> &hasher,
+                                                 function<void(DataRow &, DataRow &)> *row_copier)
+                    : HashCore(col_offset, reducer_gen, hasher, move(row_copier), false),
                       write_key_index_(col_offset.back() - 1) {}
 
             void RecordingHashCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
-                auto flex = table.allocateFlex();
-                auto copier = reducer_->row_copier();
-                auto field = static_cast<RecordingAggField *>(reducer_->fields()[0].get());
-                if (!pred) {
-                    auto iterator = map_.iterator();
-                    while (iterator->hasNext()) {
-                        DataRow &next = iterator->next();
-                        reducer_->attach(next);
-                        auto keys = field->keys();
-                        for (auto &key: *keys) {
-                            DataRow &writeto = flex->push_back();
-                            (*copier)(writeto, next);
-                            writeto[write_key_index_] = key;
+                assert(pred == nullptr);
+                auto block = table.allocate(map_.size());
+                auto writerows = block->rows();
+                auto block_size = block->size();
+                auto count = 0u;
+
+                for (auto &entry: map_) {
+                    auto &reducer = entry.second;
+                    auto next = reducer->storage();
+                    auto field = static_cast<RecordingAggField *>(reducer->fields()[0].get());
+                    auto keys = field->keys();
+                    count += keys->size();
+                    if (count > block_size) {
+                        while (count > block_size) {
+                            block_size = block_size * 1.5;
                         }
-                        delete keys;
+                        block->resize(block_size);
                     }
-                } else {
-                    MemDataRow buffer(table.colOffset());
-                    auto iterator = map_.iterator();
-                    while (iterator->hasNext()) {
-                        DataRow &next = iterator->next();
-                        reducer_->attach(next);
-                        auto keys = field->keys();
-                        for (auto &key: *keys) {
-                            (*copier)(buffer, next);
-                            buffer[write_key_index_] = key;
-                            if (pred(buffer)) {
-                                DataRow &writeto = flex->push_back();
-                                (*copier)(writeto, buffer);
-                            }
-                        }
-                        delete keys;
+
+                    for (auto &key: *keys) {
+                        DataRow &writeto = writerows->next();
+                        (*row_copier_)(writeto, *next);
+                        writeto[write_key_index_] = key;
                     }
+                    delete keys;
                 }
+                block->resize(count);
             }
 
-            RecordingSimpleCore::RecordingSimpleCore(
-                    const vector<uint32_t> &col_offset,
-                    unique_ptr<AggReducer> reducer)
-                    : SimpleCore(col_offset, move(reducer), false),
+            RecordingSimpleCore::RecordingSimpleCore(const vector<uint32_t> &col_offset, unique_ptr<AggReducer> reducer,
+                                                     function<void(DataRow &, DataRow &)> *row_copier)
+                    : SimpleCore(col_offset, move(reducer), move(row_copier), false),
                       write_key_index_(col_offset.back() - 1) {}
 
             void RecordingSimpleCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
                 auto flex = table.allocateFlex();
-                auto copier = reducer_->row_copier();
                 auto field = static_cast<RecordingAggField *>(reducer_->fields()[0].get());
                 if (!pred) {
                     auto keys = field->keys();
                     for (auto &key:*keys) {
                         DataRow &writeto = flex->push_back();
-                        (*copier)(writeto, storage_);
+                        (*row_copier_)(writeto, storage_);
                         writeto[write_key_index_] = key;
                     }
                     delete keys;
@@ -614,11 +579,11 @@ namespace lqf {
                     MemDataRow buffer(table.colOffset());
                     auto keys = field->keys();
                     for (auto &key:*keys) {
-                        (*copier)(buffer, storage_);
+                        (*row_copier_)(buffer, storage_);
                         buffer[write_key_index_] = key;
                         if (pred(buffer)) {
                             DataRow &writeto = flex->push_back();
-                            (*copier)(writeto, buffer);
+                            (*row_copier_)(writeto, buffer);
                         }
                     }
                     delete keys;
@@ -644,7 +609,7 @@ namespace lqf {
             delete field;
         }
         col_size_ = offset2size(col_offset_);
-        row_copier_ = RowCopyFactory().buildAssign(I_RAW, I_RAW, col_offset_);
+        row_copier_ = RowCopyFactory().buildAssign(I_RAW, vertical_ ? I_OTHER : I_RAW, col_offset_);
     }
 
     template<typename CORE>
@@ -662,19 +627,19 @@ namespace lqf {
         col_offset_.push_back(col_offset_.back() + 1);
 
         col_size_ = offset2size(col_offset_);
-        row_copier_ = RowCopyFactory().buildAssign(I_RAW, I_RAW, col_offset_);
+        row_copier_ = RowCopyFactory().buildAssign(I_RAW, vertical_ ? I_OTHER : I_RAW, col_offset_);
     }
 
     template<class CORE>
     unique_ptr<AggReducer> Agg<CORE>::createReducer() {
         return unique_ptr<AggReducer>(
-                new AggReducer(header_copier_.get(), row_copier_.get(), fields_gen_(), fields_start_));
+                new AggReducer(col_offset_, header_copier_.get(), fields_gen_(), fields_start_));
     }
 
     template<class CORE>
     unique_ptr<AggReducer> Agg<CORE>::createRecordingReducer() {
         return unique_ptr<AggReducer>(
-                new AggReducer(header_copier_.get(), row_copier_.get(), field_gen_(), fields_start_.front()));
+                new AggReducer(col_offset_, header_copier_.get(), field_gen_(), fields_start_.front()));
     }
 
     template<typename CORE>
@@ -720,23 +685,23 @@ namespace lqf {
     shared_ptr<CORE> Agg<CORE>::makeCore() { return nullptr; }
 
 
+    HashLargeAgg::HashLargeAgg(function<uint64_t(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
+                               function<vector<agg::AggField *>()> fields_gen,
+                               function<bool(DataRow &)> pred, bool vertical)
+            : Agg(move(header_copier), fields_gen, pred, vertical), hasher_(hasher) {}
+
+    shared_ptr<HashLargeCore> HashLargeAgg::makeCore() {
+        return make_shared<HashLargeCore>(col_offset_, createReducer(), hasher_, row_copier_.get(), need_field_dump_);
+    }
+
     HashAgg::HashAgg(function<uint64_t(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
                      function<vector<agg::AggField *>()> fields_gen,
                      function<bool(DataRow &)> pred, bool vertical)
             : Agg(move(header_copier), fields_gen, pred, vertical), hasher_(hasher) {}
 
     shared_ptr<HashCore> HashAgg::makeCore() {
-        return make_shared<HashCore>(col_offset_, createReducer(), hasher_, need_field_dump_);
-    }
-
-    HashSmallAgg::HashSmallAgg(function<uint64_t(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
-                               function<vector<agg::AggField *>()> fields_gen,
-                               function<bool(DataRow &)> pred, bool vertical)
-            : Agg(move(header_copier), fields_gen, pred, vertical), hasher_(hasher) {}
-
-    shared_ptr<HashSmallCore> HashSmallAgg::makeCore() {
-        function<unique_ptr<AggReducer>()> rc = bind(&HashSmallAgg::createReducer, this);
-        return make_shared<HashSmallCore>(col_offset_, rc, hasher_, need_field_dump_);
+        function<unique_ptr<AggReducer>()> rc = bind(&HashAgg::createReducer, this);
+        return make_shared<HashCore>(col_offset_, rc, hasher_, row_copier_.get(), need_field_dump_);
     }
 
     TableAgg::TableAgg(uint32_t table_size, function<uint32_t(DataRow &)> indexer, unique_ptr<Snapshoter> header_copier,
@@ -745,7 +710,7 @@ namespace lqf {
 
     shared_ptr<TableCore> TableAgg::makeCore() {
         function<unique_ptr<AggReducer>()> rc = bind(&TableAgg::createReducer, this);
-        return make_shared<TableCore>(table_size_, col_offset_, rc, indexer_, need_field_dump_);
+        return make_shared<TableCore>(table_size_, col_offset_, rc, indexer_, row_copier_.get(), need_field_dump_);
     }
 
     SimpleAgg::SimpleAgg(function<vector<agg::AggField *>()> fields_gen, function<bool(DataRow &)> pred,
@@ -753,7 +718,7 @@ namespace lqf {
             : Agg(RowCopyFactory().buildSnapshot(), fields_gen, pred, vertical) {}
 
     shared_ptr<SimpleCore> SimpleAgg::makeCore() {
-        return make_shared<SimpleCore>(col_offset_, createReducer(), need_field_dump_);
+        return make_shared<SimpleCore>(col_offset_, createReducer(), row_copier_.get(), need_field_dump_);
     }
 
     RecordingHashAgg::RecordingHashAgg(function<uint64_t(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
@@ -762,7 +727,8 @@ namespace lqf {
             : Agg(move(header_copier), field_gen, pred, vertical), hasher_(hasher) {}
 
     shared_ptr<RecordingHashCore> RecordingHashAgg::makeCore() {
-        return make_shared<RecordingHashCore>(col_offset_, createRecordingReducer(), hasher_);
+        function<unique_ptr<AggReducer>()> rc = bind(&RecordingHashAgg::createRecordingReducer, this);
+        return make_shared<RecordingHashCore>(col_offset_, rc, hasher_, row_copier_.get());
     }
 
     RecordingSimpleAgg::RecordingSimpleAgg(function<RecordingAggField *()> field_gen,
@@ -771,7 +737,7 @@ namespace lqf {
             : Agg(RowCopyFactory().buildSnapshot(), field_gen, pred, vertical) {}
 
     shared_ptr<RecordingSimpleCore> RecordingSimpleAgg::makeCore() {
-        return make_shared<RecordingSimpleCore>(col_offset_, createRecordingReducer());
+        return make_shared<RecordingSimpleCore>(col_offset_, createRecordingReducer(), row_copier_.get());
     }
 
     StripeHashAgg::StripeHashAgg(uint32_t num_stripe, function<uint64_t(DataRow &)> hasher,
@@ -805,7 +771,7 @@ namespace lqf {
     shared_ptr<Table> StripeHashAgg::agg(Table &input) {
         function<shared_ptr<vector<shared_ptr<MemRowVector>>>(const shared_ptr<Block> &)> stripeMaker =
                 bind(&StripeHashAgg::makeStripes, this, _1);
-        function<shared_ptr<vector<shared_ptr<HashCore>>>(
+        function<shared_ptr<vector<shared_ptr<HashLargeCore>>>(
                 const shared_ptr<vector<shared_ptr<MemRowVector>>> &)> stripeProcessor = bind(
                 &StripeHashAgg::aggStripes, this, _1);
 
@@ -838,9 +804,9 @@ namespace lqf {
         return stripes;
     }
 
-    shared_ptr<vector<shared_ptr<HashCore>>>
+    shared_ptr<vector<shared_ptr<HashLargeCore>>>
     StripeHashAgg::aggStripes(const shared_ptr<vector<shared_ptr<MemRowVector>>> &stripes) {
-        auto cores = make_shared<vector<shared_ptr<HashCore>>>(num_stripe_);
+        auto cores = make_shared<vector<shared_ptr<HashLargeCore>>>(num_stripe_);
         for (auto i = 0u; i < num_stripe_; ++i) {
             auto stripe = (*stripes)[i];
             auto core = makeCore();
@@ -853,9 +819,9 @@ namespace lqf {
         return cores;
     }
 
-    shared_ptr<vector<shared_ptr<HashCore>>>
-    StripeHashAgg::mergeCore(shared_ptr<vector<shared_ptr<HashCore>>> lefts,
-                             shared_ptr<vector<shared_ptr<HashCore>>> rights) {
+    shared_ptr<vector<shared_ptr<HashLargeCore>>>
+    StripeHashAgg::mergeCore(shared_ptr<vector<shared_ptr<HashLargeCore>>> lefts,
+                             shared_ptr<vector<shared_ptr<HashLargeCore>>> rights) {
         for (auto i = 0u; i < num_stripe_; ++i) {
             auto left = (*lefts)[i];
             auto right = (*rights)[i];
@@ -865,12 +831,12 @@ namespace lqf {
     }
 
     unique_ptr<AggReducer> StripeHashAgg::createReducer() {
-        return unique_ptr<AggReducer>(new AggReducer(header_copier_.get(),
-                                                     data_copier_.get(), fields_gen_(), fields_start_));
+        return unique_ptr<AggReducer>(new AggReducer(col_offset_, header_copier_.get(), fields_gen_(), fields_start_));
     }
 
-    shared_ptr<HashCore> StripeHashAgg::makeCore() {
-        return make_shared<HashCore>(col_offset_, createReducer(), stripe_hasher_, need_field_dump_);
+    shared_ptr<HashLargeCore> StripeHashAgg::makeCore() {
+        return make_shared<HashLargeCore>(col_offset_, createReducer(), stripe_hasher_, data_copier_.get(),
+                                          need_field_dump_);
     }
 
 }

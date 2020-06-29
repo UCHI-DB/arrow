@@ -80,6 +80,40 @@ TEST(RowBuilderTest, CreateWithString) {
     EXPECT_EQ(bytedata2, output[6].asByteArray());
 }
 
+TEST(RowBuilderTest, CreateRaw) {
+    RowBuilder rb({JL(0), JL(1), JR(0), JR(2), JLR(3), JRR(3)}, true);
+    rb.init();
+    EXPECT_EQ(vector<uint32_t>({1, 1, 1, 1, 1, 1, 1}), rb.outputColSize());
+    EXPECT_EQ(false, rb.useVertical());
+
+    const vector<uint32_t> offset{0, 1, 2, 3, 4};
+    const vector<uint32_t> offset2{0, 1, 2, 3};
+
+    MemDataRow left(offset);
+    MemDataRow right(offset2);
+
+    left[0] = 424;
+    left[1] = 3243;
+    left[2] = 87452;
+    left[3] = 3392;
+    right[0] = 33244;
+    right[1] = 34359543;
+    right[2] = 4242;
+
+    const vector<uint32_t> resoffset{0, 1, 2, 3, 4, 5, 6, 7};
+    MemDataRow output(resoffset);
+
+    rb.build(output, left, right, 123214);
+
+    EXPECT_EQ(123214, output[0].asInt());
+    EXPECT_EQ(424, output[1].asInt());
+    EXPECT_EQ(3243, output[2].asInt());
+    EXPECT_EQ(33244, output[3].asInt());
+    EXPECT_EQ(34359543, output[4].asInt());
+    EXPECT_EQ(3392, output[5].asInt());
+    EXPECT_EQ(4242, output[6].asInt());
+}
+
 TEST(ColumnBuilderTest, Create) {
     ColumnBuilder cb({JL(0), JL(1), JR(2), JR(0)});
     cb.init();

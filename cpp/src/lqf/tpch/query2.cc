@@ -24,7 +24,7 @@ namespace lqf {
         using namespace parallel;
         using namespace rowcopy;
 
-        void executeQ2() {
+        void executeQ2_Graph() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -80,7 +80,7 @@ namespace lqf {
                                                             []() {
                                                                 return new agg::recording::RecordingDoubleMin(
                                                                         PartSupp::SUPPLYCOST, PartSupp::SUPPKEY);
-                                                            }), {pssJoin});
+                                                            }, nullptr, true), {pssJoin});
             // PARTKEY SUPPLYCOST SUPPKEY
 
             auto ps2partJoin = graph.add(
@@ -108,7 +108,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ2Backup() {
+        void executeQ2() {
             auto partSuppTable = ParquetTable::Open(PartSupp::path,
                                                     {PartSupp::PARTKEY, PartSupp::SUPPKEY, PartSupp::SUPPLYCOST});
             auto supplierTable = ParquetTable::Open(Supplier::path,
@@ -164,7 +164,7 @@ namespace lqf {
                                    []() {
                                        return new agg::recording::RecordingDoubleMin(PartSupp::SUPPLYCOST,
                                                                                      PartSupp::SUPPKEY);
-                                   });
+                                   }, nullptr, true);
             // PARTKEY SUPPLYCOST SUPPKEY
             auto psMinCostTable = psAgg.agg(*filteredPss);
 

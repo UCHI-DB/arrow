@@ -372,7 +372,7 @@ namespace lqf {
 
         public:
 
-            PhaseConcurrentHashMap() : PhaseConcurrentHashMap(1048576) {}
+            PhaseConcurrentHashMap() : PhaseConcurrentHashMap(524288) {}
 
             PhaseConcurrentHashMap(uint32_t expect_size) : size_(0) {
                 content_len_ = ceil2(expect_size * SCALE);

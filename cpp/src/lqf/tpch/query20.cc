@@ -94,6 +94,7 @@ namespace lqf {
 //            auto agglineitem = lineitemQuanAgg.agg(*lineitemWithPs);
 
             auto psFilterItem2 = graph.add(new PowerHashJoin(key_ext, key_ext, new RowBuilder({JL(1), JR(2)}, false),
+                                                             CONTAINER_SIZE,
                                                              [](DataRow &left, DataRow &right) {
                                                                  return left[PartSupp::AVAILQTY].asInt() >
                                                                         right[0].asInt() * 0.5;
@@ -182,6 +183,7 @@ namespace lqf {
             auto agglineitem = lineitemQuanAgg.agg(*lineitemWithPs);
 
             PowerHashJoin psFilterItem2(key_ext, key_ext, new RowBuilder({JL(1), JR(2)}, false),
+                                        CONTAINER_SIZE,
                                         [](DataRow &left, DataRow &right) {
                                             return left[PartSupp::AVAILQTY].asInt() > right[0].asInt() * 0.5;
                                         });

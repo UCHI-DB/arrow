@@ -122,7 +122,7 @@ namespace lqf {
                                     RowCopyFactory().field(F_REGULAR, 0, 0)
                                             ->field(F_REGULAR, 1, 1)
                                             ->field(F_REGULAR, 2, 2)->buildSnapshot(),
-                                    []() { return vector<AggField *>({new DoubleSum(3)}); });
+                                    []() { return vector<AggField *>({new DoubleSum(3)}); }, nullptr, true);
             auto agg = graph.add(pagg, {itemWithOrderJoin});
 
             auto joinNation1 = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JRS(0), JL(1), JL(2), JL(3)})),
@@ -192,7 +192,8 @@ namespace lqf {
                                                                               dateTo))});
             auto filteredLineitem = lineitemFilter.filter(*lineitemTable);
 
-            HashJoin itemWithNationJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new Q7ItemWithNationBuilder());
+            HashJoin itemWithNationJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new Q7ItemWithNationBuilder(), nullptr,
+                                        true);
             // ORDERKEY, NATIONKEY, YEAR, PRICE
             auto itemWithNation = itemWithNationJoin.join(*filteredLineitem, *validSupplier);
 

@@ -69,6 +69,9 @@ namespace lqf {
         inline void operator=(DataField &df) {
             assert(size_ <= 2);
             assert(df.size_ <= 2);
+            if (df.size_ > size_) {
+                return;
+            }
             assert(df.size_ <= size_);
             // We allow the input size to be smaller than local size, allowing a larger field
             // to be used for smaller field
@@ -261,16 +264,15 @@ namespace lqf {
         void merge(MemvBlock &, const vector<pair<uint8_t, uint8_t>> &);
     };
 
-#define FLEX_SLAB_SIZE_  1048576
+#define FLEX_SLAB_SIZE_ 131072
 
     class MemDataRowPointer : public DataRow {
     private:
         uint64_t *pointer_;
-        const vector<uint32_t>& offset_;
-        vector<uint32_t> size_;
+        const vector<uint32_t> &offset_;
         DataField view_;
     public:
-        MemDataRowPointer(const vector<uint32_t>&);
+        MemDataRowPointer(const vector<uint32_t> &);
 
         virtual ~MemDataRowPointer() = default;
 
@@ -293,6 +295,7 @@ namespace lqf {
 
     class MemFlexBlock : public Block {
     private:
+        uint32_t slab_size_;
         vector<shared_ptr<vector<uint64_t>>> memory_;
         uint32_t size_;
         uint32_t row_size_;
@@ -301,7 +304,9 @@ namespace lqf {
         uint32_t pointer_;
         MemDataRowPointer accessor_;
     public:
-        MemFlexBlock(const vector<uint32_t> &col_offset);
+        MemFlexBlock(const vector<uint32_t> &);
+
+        MemFlexBlock(const vector<uint32_t> &, uint32_t);
 
         virtual ~MemFlexBlock() = default;
 
@@ -311,7 +316,7 @@ namespace lqf {
 
         DataRow &operator[](uint32_t index);
 
-        void assign(vector<shared_ptr<vector<uint64_t>>>& content, uint32_t size);
+        void assign(vector<shared_ptr<vector<uint64_t>>> &content, uint32_t slab_size, uint32_t size);
 
         unique_ptr<ColumnIterator> col(uint32_t col_index) override;
 

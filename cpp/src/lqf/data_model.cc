@@ -477,11 +477,11 @@ namespace lqf {
     }
 
     MemDataRowPointer::MemDataRowPointer(const vector<uint32_t> &col_offset)
-            : offset_(col_offset), size_(offset2size(col_offset)) {}
+            : offset_(col_offset) {}
 
     DataField &MemDataRowPointer::operator[](uint64_t i) {
         view_ = pointer_ + offset_[i];
-        view_.size_ = size_[i];
+        view_.size_ = offset_[i + 1] - offset_[i];
         return view_;
     }
 
@@ -507,10 +507,13 @@ namespace lqf {
     }
 
     MemFlexBlock::MemFlexBlock(const vector<uint32_t> &col_offset)
-            : size_(0), col_offset_(col_offset), pointer_(0), accessor_(col_offset_) {
-        memory_.push_back(make_shared<vector<uint64_t>>(FLEX_SLAB_SIZE_));
+            : MemFlexBlock(col_offset, FLEX_SLAB_SIZE_) {}
+
+    MemFlexBlock::MemFlexBlock(const vector<uint32_t> &col_offset, uint32_t slab_size)
+            : slab_size_(slab_size), size_(0), col_offset_(col_offset), pointer_(0), accessor_(col_offset_) {
+        memory_.push_back(make_shared<vector<uint64_t>>(slab_size_));
         row_size_ = col_offset.back();
-        stripe_size_ = FLEX_SLAB_SIZE_ / row_size_;
+        stripe_size_ = slab_size_ / row_size_;
     }
 
     uint64_t MemFlexBlock::size() {
@@ -520,8 +523,8 @@ namespace lqf {
     DataRow &MemFlexBlock::push_back() {
         auto current = pointer_;
         pointer_ += row_size_;
-        if (pointer_ > FLEX_SLAB_SIZE_) {
-            memory_.push_back(make_shared<vector<uint64_t>>(FLEX_SLAB_SIZE_));
+        if (pointer_ > slab_size_) {
+            memory_.push_back(make_shared<vector<uint64_t>>(slab_size_));
             pointer_ = row_size_;
             current = 0;
         }
@@ -537,8 +540,10 @@ namespace lqf {
         return accessor_;
     }
 
-    void MemFlexBlock::assign(vector<shared_ptr<vector<uint64_t>>> &content, uint32_t size) {
+    void MemFlexBlock::assign(vector<shared_ptr<vector<uint64_t>>> &content, uint32_t slab_size, uint32_t size) {
         size_ = size;
+        slab_size_ = slab_size;
+        stripe_size_ = slab_size_ / row_size_;
         memory_ = move(content);
     }
 
@@ -604,11 +609,11 @@ namespace lqf {
         uint64_t stripe_index_;
         uint64_t stripe_offset_;
     public:
-        FlexRowIterator(vector<shared_ptr<vector<uint64_t>>> &data, const vector<uint32_t> &col_offset)
-                : data_(data), reference_(col_offset), row_size_(col_offset.back()), row_index_(-1), stripe_index_(0),
-                  stripe_offset_(-1) {
-            stripe_size_ = FLEX_SLAB_SIZE_ / row_size_;
-        }
+        FlexRowIterator(vector<shared_ptr<vector<uint64_t>>> &data, const vector<uint32_t> &col_offset,
+                        uint32_t stripe_size)
+                : data_(data), reference_(col_offset), stripe_size_(stripe_size), row_size_(col_offset.back()),
+                  row_index_(-1), stripe_index_(0),
+                  stripe_offset_(-1) {}
 
         DataRow &operator[](uint64_t idx) override {
             row_index_ = idx;
@@ -635,7 +640,7 @@ namespace lqf {
     };
 
     unique_ptr<DataRowIterator> MemFlexBlock::rows() {
-        return unique_ptr<DataRowIterator>(new FlexRowIterator(memory_, col_offset_));
+        return unique_ptr<DataRowIterator>(new FlexRowIterator(memory_, col_offset_, stripe_size_));
     }
 
     MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)

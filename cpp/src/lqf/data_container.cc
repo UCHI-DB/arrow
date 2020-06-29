@@ -207,6 +207,11 @@ namespace lqf {
         }
 
         template<typename KEY, typename MAP>
+        bool CMemRowMap<KEY, MAP>::test(KEY key) {
+            return map_.get(key) != INT32_MIN;
+        }
+
+        template<typename KEY, typename MAP>
         DataRow *CMemRowMap<KEY, MAP>::remove(KEY key) {
             int pos = map_.remove(key);
             if (pos == INT32_MIN) {

@@ -232,7 +232,7 @@ namespace lqf {
      */
     class HashColumnJoin : public HashBasedJoin {
     public:
-        HashColumnJoin(uint32_t, uint32_t, ColumnBuilder *);
+        HashColumnJoin(uint32_t, uint32_t, ColumnBuilder *, uint32_t expect_size = CONTAINER_SIZE);
 
         virtual ~HashColumnJoin() = default;
 
@@ -251,10 +251,12 @@ namespace lqf {
             unique_ptr<JoinBuilder> builder_;
             shared_ptr<Hash64Container> container_;
             function<bool(DataRow &, DataRow &)> predicate_;
+            uint32_t expect_size_;
             bool outer_ = false;
         public:
             PowerHashBasedJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>,
-                               JoinBuilder *, function<bool(DataRow &, DataRow &)> pred = nullptr);
+                               JoinBuilder *, uint32_t expect_size = CONTAINER_SIZE,
+                               function<bool(DataRow &, DataRow &)> pred = nullptr);
 
             virtual ~PowerHashBasedJoin() = default;
 
@@ -269,7 +271,7 @@ namespace lqf {
         class PowerHashJoin : public PowerHashBasedJoin {
         public:
             PowerHashJoin(function<int64_t(DataRow &)>, function<int64_t(DataRow &)>, RowBuilder *,
-                          function<bool(DataRow &, DataRow &)> pred = nullptr);
+                          uint32_t expect_size = CONTAINER_SIZE, function<bool(DataRow &, DataRow &)> pred = nullptr);
 
             virtual ~PowerHashJoin() = default;
 

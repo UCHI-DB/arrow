@@ -35,6 +35,7 @@ namespace lqf {
 
             inline uint32_t size() { return size_; }
 
+            inline uint32_t slab_size() { return slab_size_; }
             inline vector<shared_ptr<vector<uint64_t>>> &memory() { return memory_; }
 
             unique_ptr<Iterator<DataRow &>> iterator();
@@ -59,7 +60,7 @@ namespace lqf {
             unique_ptr<Iterator<pair<uint64_t, DataRow &> &>> map_iterator();
         };
 
-#define CMAP_SLAB_SIZE_ 131072
+#define CMAP_SLAB_SIZE_ 65536
 
         struct MapAnchor {
             uint32_t index_;
@@ -86,15 +87,17 @@ namespace lqf {
             void init();
 
         public:
-            CMemRowMap(uint32_t expect_size, const vector<uint32_t> &);
+            CMemRowMap(uint32_t, const vector<uint32_t> &);
 
-            CMemRowMap(uint32_t expect_size, const vector<uint32_t> &, uint32_t);
+            CMemRowMap(uint32_t, const vector<uint32_t> &, uint32_t);
 
             DataRow &insert(KEY key);
 
             DataRow &operator[](KEY key);
 
             DataRow *find(KEY key);
+
+            bool test(KEY key);
 
             DataRow *remove(KEY key);
 

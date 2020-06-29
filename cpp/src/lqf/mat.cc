@@ -31,8 +31,8 @@ namespace lqf {
         return make_shared<MaskedTable>(owner, storage);
     }
 
-    HashMat::HashMat(uint32_t key_index, unique_ptr<Snapshoter> snapshoter)
-            : Node(1), key_index_(key_index), snapshoter_(move(snapshoter)) {}
+    HashMat::HashMat(uint32_t key_index, unique_ptr<Snapshoter> snapshoter, uint32_t expect_size)
+            : Node(1), key_index_(key_index), snapshoter_(move(snapshoter)), expect_size_(expect_size) {}
 
     unique_ptr<NodeOutput> HashMat::execute(const vector<NodeOutput *> &inputs) {
         auto input0 = static_cast<TableOutput *>(inputs[0]);
@@ -44,13 +44,13 @@ namespace lqf {
         if (snapshoter_) {
             // Make Container
             auto table = MemTable::Make(offset2size(snapshoter_->colOffset()));
-            auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_.get());
+            auto container = HashBuilder::buildContainer(input, key_index_, snapshoter_.get(), expect_size_);
             auto block = make_shared<HashMemBlock<Hash32Container>>(move(container));
             table->append(block);
             return table;
         } else {
             auto table = MemTable::Make(colSize(0));
-            auto predicate = HashBuilder::buildHashPredicate(input, key_index_);
+            auto predicate = HashBuilder::buildHashPredicate(input, key_index_, expect_size_);
             auto block = make_shared<HashMemBlock<IntPredicate<Int32>>>(move(predicate));
             table->append(block);
             return table;

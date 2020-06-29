@@ -75,9 +75,9 @@ namespace lqf {
                 };
             };
 
-            HashSmallAgg agg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
-                                ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
-                        aggFields);
+            TableAgg agg(8, indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
+                                 ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
+                         aggFields);
             auto agged = agg.agg(*filtered);
 //
             SmallSort sort(SORTER2(0, 1));
@@ -118,8 +118,8 @@ namespace lqf {
                     new SboostPredicate<ByteArrayType>(LineItem::SHIPDATE, bind(ByteArrayDictLess::build, dateFrom))),
                                        {lineitemTable});
 
-            function<uint64_t(DataRow &row)> indexer = [](DataRow &row) {
-                return (row(LineItem::RETURNFLAG).asInt() << 1) + row(LineItem::LINESTATUS).asInt();
+            function<uint32_t(DataRow &row)> indexer = [](DataRow &row) {
+                return (row(LineItem::RETURNFLAG).asInt() << 1) | row(LineItem::LINESTATUS).asInt();
             };
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{
@@ -134,9 +134,9 @@ namespace lqf {
                 };
             };
 
-            auto agg = graph.add(new HashSmallAgg(indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
-                                                     ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
-                                             aggFields), {colFilter});
+            auto agg = graph.add(new TableAgg(8, indexer, RowCopyFactory().field(F_RAW, LineItem::RETURNFLAG, 0)
+                                                      ->field(F_RAW, LineItem::LINESTATUS, 1)->buildSnapshot(),
+                                              aggFields), {colFilter});
 
             auto sort = graph.add(new SmallSort(SORTER2(0, 1)), {agg});
 

@@ -50,15 +50,15 @@ namespace lqf {
         }
 
         template<typename DTYPE, typename MAP>
-        HashContainer<DTYPE, MAP>::HashContainer(const vector<uint32_t> &offset)
-                :HashContainer(offset, 1048576) {}
+        HashDenseContainer<DTYPE, MAP>::HashDenseContainer(const vector<uint32_t> &offset)
+                :HashDenseContainer(offset, 1048576) {}
 
         template<typename DTYPE, typename MAP>
-        HashContainer<DTYPE, MAP>::HashContainer(const vector<uint32_t> &offset, uint32_t size)
+        HashDenseContainer<DTYPE, MAP>::HashDenseContainer(const vector<uint32_t> &offset, uint32_t size)
                 : map_(size, offset), min_(DTYPE::max), max_(DTYPE::min) {}
 
         template<typename DTYPE, typename MAP>
-        DataRow &HashContainer<DTYPE, MAP>::add(ktype key) {
+        DataRow &HashDenseContainer<DTYPE, MAP>::add(ktype key) {
             ktype current;
 
             current = min_.load();
@@ -70,34 +70,109 @@ namespace lqf {
         }
 
         template<typename DTYPE, typename MAP>
-        DataRow *HashContainer<DTYPE, MAP>::get(ktype key) {
+        DataRow *HashDenseContainer<DTYPE, MAP>::get(ktype key) {
             if (key > max_ || key < min_)
                 return nullptr;
             return map_.find(key);
         }
 
         template<typename DTYPE, typename MAP>
-        DataRow *HashContainer<DTYPE, MAP>::remove(ktype key) {
+        DataRow *HashDenseContainer<DTYPE, MAP>::remove(ktype key) {
             if (key > max_ || key < min_)
                 return nullptr;
             return map_.remove(key);
         }
 
         template<typename DTYPE, typename MAP>
-        bool HashContainer<DTYPE, MAP>::test(ktype key) {
-            return map_.find(key) != nullptr;
+        bool HashDenseContainer<DTYPE, MAP>::test(ktype key) {
+            if (key > max_ || key < min_)
+                return false;
+            return map_.test(key);
         }
 
         template<typename DTYPE, typename MAP>
-        unique_ptr<Iterator<pair<typename DTYPE::type, DataRow &> &>> HashContainer<DTYPE, MAP>::iterator() {
+        unique_ptr<Iterator<pair<typename DTYPE::type, DataRow &> &>> HashDenseContainer<DTYPE, MAP>::iterator() {
             return map_.map_iterator();
         }
 
         template
-        class HashContainer<Int32, CInt32MemRowMap>;
+        class HashDenseContainer<Int32, CInt32MemRowMap>;
 
         template
-        class HashContainer<Int64, CInt64MemRowMap>;
+        class HashDenseContainer<Int64, CInt64MemRowMap>;
+
+        template<typename DTYPE>
+        HashSparseContainer<DTYPE>::HashSparseContainer(const vector<uint32_t> &offset)
+                :HashSparseContainer(offset, 1048576) {}
+
+        template<typename DTYPE>
+        HashSparseContainer<DTYPE>::HashSparseContainer(const vector<uint32_t> &offset, uint32_t expect_size)
+                : col_offset_(offset), map_(expect_size), min_(DTYPE::max), max_(DTYPE::min) {}
+
+        template<typename DTYPE>
+        DataRow &HashSparseContainer<DTYPE>::add(ktype key) {
+            ktype current;
+            current = min_.load();
+            while (key < current && !min_.compare_exchange_strong(current, key));
+            current = max_.load();
+            while (key > current && !max_.compare_exchange_strong(current, key));
+
+            auto row = new MemDataRow(col_offset_);
+            map_.put(key, row);
+            return *row;
+        }
+
+        template<typename DTYPE>
+        bool HashSparseContainer<DTYPE>::test(ktype key) {
+            return map_.get(key) != nullptr;
+        }
+
+        template<typename DTYPE>
+        DataRow *HashSparseContainer<DTYPE>::get(ktype key) {
+            if (key > max_ || key < min_)
+                return nullptr;
+            return map_.get(key);
+        }
+
+        template<typename DTYPE>
+        unique_ptr<DataRow> HashSparseContainer<DTYPE>::remove(ktype key) {
+            if (key > max_ || key < min_)
+                return nullptr;
+            return unique_ptr<DataRow>(map_.remove(key));
+        }
+
+        template<typename DTYPE>
+        class HSCIteratorWrapper : public Iterator<pair<typename DTYPE::type, DataRow &> &> {
+            using ktype = typename DTYPE::type;
+        protected:
+            unique_ptr<Iterator<pair<ktype, MemDataRow *>>> iterator_;
+            MemDataRowPointer accessor_;
+            pair<ktype, DataRow &> pair_;
+        public:
+            HSCIteratorWrapper(const vector<uint32_t> &col_offset, unique_ptr<Iterator<pair<ktype, MemDataRow *>>> ite)
+                    : iterator_(move(ite)), accessor_(col_offset), pair_{0, accessor_} {}
+
+            bool hasNext() { return iterator_->hasNext(); }
+
+            pair<ktype, DataRow &> &next() {
+                auto next = iterator_->next();
+                pair_.first = next.first;
+                accessor_.raw(next.second->raw());
+                return pair_;
+            }
+        };
+
+        template<typename DTYPE>
+        unique_ptr<lqf::Iterator<std::pair<typename DTYPE::type, DataRow &> &>> HashSparseContainer<DTYPE>::iterator() {
+            return unique_ptr<Iterator<std::pair<typename DTYPE::type, DataRow &> &>>(
+                    new HSCIteratorWrapper<DTYPE>(col_offset_, map_.iterator()));
+        }
+
+        template
+        class HashSparseContainer<Int32>;
+
+        template
+        class HashSparseContainer<Int64>;
 
         template<typename CONTENT>
         HashMemBlock<CONTENT>::HashMemBlock(shared_ptr<CONTENT> predicate) : MemBlock(0, 0) {
@@ -122,10 +197,16 @@ namespace lqf {
         class HashMemBlock<Hash64Predicate>;
 
         template
-        class HashMemBlock<Hash32Container>;
+        class HashMemBlock<Hash32SparseContainer>;
 
         template
-        class HashMemBlock<Hash64Container>;
+        class HashMemBlock<Hash64SparseContainer>;
+
+        template
+        class HashMemBlock<Hash32DenseContainer>;
+
+        template
+        class HashMemBlock<Hash64DenseContainer>;
 
         shared_ptr<Int32Predicate>
         HashBuilder::buildHashPredicate(Table &input, uint32_t keyIndex, uint32_t expect_size) {
@@ -247,6 +328,5 @@ namespace lqf {
             input.blocks()->foreach(processor);
             return retval;
         }
-
     }
 }

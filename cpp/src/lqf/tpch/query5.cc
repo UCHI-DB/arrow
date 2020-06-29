@@ -62,7 +62,7 @@ namespace lqf {
 
             auto matNation = graph.add(new HashMat(Nation::NATIONKEY, RowCopyFactory()
                     .from(I_EXTERNAL)->to(I_RAW)
-                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()), {nationFilterJoin});
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot(), 50), {nationFilterJoin});
 
             auto custNationFilter = graph.add(new FilterJoin(Customer::NATIONKEY, Nation::NATIONKEY),
                                               {customer, matNation});
@@ -82,7 +82,7 @@ namespace lqf {
             // ORDERKEY, NATIONKEY
 
             auto itemOnSupplierJoin = graph.add(
-                    new HashJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new q5::ItemPriceRowBuilder()),
+                    new HashJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new q5::ItemPriceRowBuilder(), nullptr, 45000),
                     {lineitem, suppNationFilter});
             // ORDERKEY NATIONKEY PRICE
 
@@ -95,12 +95,12 @@ namespace lqf {
 
             auto pagg = new HashAgg(COL_HASHER(1),
                                     RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
-                                    []() { return vector<AggField *>{new agg::DoubleSum(2)}; });
+                                    []() { return vector<AggField *>{new agg::DoubleSum(2)}; }, nullptr, true);
 
             auto agg = graph.add(pagg, {orderItemJoin});
             // NATIONKEY PRICE
 
-            auto addNationNameJoin = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JL(1), JRS(0)})),
+            auto addNationNameJoin = graph.add(new HashColumnJoin(0, 0, new ColumnBuilder({JL(1), JRS(0)}), 10),
                                                {agg, matNation});
             // PRICE NATIONNAME
 
@@ -133,9 +133,10 @@ namespace lqf {
             FilterJoin nationFilterJoin(Nation::REGIONKEY, Region::REGIONKEY);
             auto validNation = nationFilterJoin.join(*nationTable, *validRegion);
 
-            auto matNation = HashMat(Nation::NATIONKEY, RowCopyFactory()
+            auto mat = HashMat(Nation::NATIONKEY, RowCopyFactory()
                     .from(I_EXTERNAL)->to(I_RAW)
-                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()).mat(*validNation);
+                    ->field(F_STRING, Nation::NAME, 0)->buildSnapshot(), 50);
+            auto matNation = mat.mat(*validNation);
 
             FilterJoin custNationFilter(Customer::NATIONKEY, Nation::NATIONKEY);
             auto validCustomer = custNationFilter.join(*customerTable, *matNation);
@@ -148,16 +149,18 @@ namespace lqf {
                                                                            dateTo))});
             auto validOrder = orderFilter.filter(*orderTable);
 
+//            cout << validCustomer->size() << endl;
             HashJoin orderOnCustomerJoin(Orders::CUSTKEY, Customer::CUSTKEY,
                                          new RowBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)}, false, true));
             // ORDERKEY, NATIONKEY
             validOrder = orderOnCustomerJoin.join(*validOrder, *validCustomer);
 
-
-            HashJoin itemOnSupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new ItemPriceRowBuilder());
+            HashJoin itemOnSupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY, new ItemPriceRowBuilder(), nullptr,
+                                        45000);
             // ORDERKEY NATIONKEY PRICE
             auto validLineitem = itemOnSupplierJoin.join(*lineitemTable, *validSupplier);
 
+//            cout << validLineitem->size() << endl;
             function<uint64_t(DataRow &)> key_maker = [](DataRow &dr) {
                 return (static_cast<uint64_t>(dr[0].asInt()) << 32) + dr[1].asInt();
             };
@@ -166,7 +169,7 @@ namespace lqf {
             auto joined = orderItemJoin.join(*validLineitem, *validOrder);
 
             HashAgg agg(COL_HASHER(1), RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
-                                         []() { return vector<AggField *>{new agg::DoubleSum(2)}; });
+                        []() { return vector<AggField *>{new agg::DoubleSum(2)}; }, nullptr, true);
             // NATIONKEY PRICE
             auto agged = agg.agg(*joined);
 

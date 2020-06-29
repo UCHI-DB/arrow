@@ -74,8 +74,41 @@ namespace lqf {
 
         using namespace datacontainer;
 
+        template<typename DTYPE>
+        class HashSparseContainer : public IntPredicate<DTYPE> {
+            using ktype = typename DTYPE::type;
+        protected:
+            vector<uint32_t> col_offset_;
+            PhaseConcurrentHashMap<DTYPE, MemDataRow *> map_;
+            atomic<ktype> min_;
+            atomic<ktype> max_;
+
+        public:
+            HashSparseContainer(const vector<uint32_t> &);
+
+            HashSparseContainer(const vector<uint32_t> &, uint32_t size);
+
+            virtual ~HashSparseContainer() = default;
+
+            DataRow &add(ktype key);
+
+            bool test(ktype) override;
+
+            DataRow *get(ktype key);
+
+            unique_ptr<DataRow> remove(ktype key);
+
+            unique_ptr<lqf::Iterator<std::pair<ktype, DataRow &> &>> iterator();
+
+            inline uint32_t size() { return map_.size(); }
+
+            inline ktype min() { return min_.load(); }
+
+            inline ktype max() { return max_.load(); }
+        };
+
         template<typename DTYPE, typename MAP>
-        class HashContainer : public IntPredicate<DTYPE> {
+        class HashDenseContainer : public IntPredicate<DTYPE> {
             using ktype = typename DTYPE::type;
         protected:
             MAP map_;
@@ -83,11 +116,11 @@ namespace lqf {
             atomic<ktype> max_;
 
         public:
-            HashContainer(const vector<uint32_t> &);
+            HashDenseContainer(const vector<uint32_t> &);
 
-            HashContainer(const vector<uint32_t> &, uint32_t size);
+            HashDenseContainer(const vector<uint32_t> &, uint32_t size);
 
-            virtual ~HashContainer() = default;
+            virtual ~HashDenseContainer() = default;
 
             DataRow &add(ktype key);
 
@@ -106,8 +139,13 @@ namespace lqf {
             inline ktype max() { return max_.load(); }
         };
 
-        using Hash32Container = HashContainer<Int32, CInt32MemRowMap>;
-        using Hash64Container = HashContainer<Int64, CInt64MemRowMap>;
+        using Hash32SparseContainer = HashSparseContainer<Int32>;
+        using Hash64SparseContainer = HashSparseContainer<Int64>;
+        using Hash32DenseContainer = HashDenseContainer<Int32, CInt32MemRowMap>;
+        using Hash64DenseContainer = HashDenseContainer<Int64, CInt64MemRowMap>;
+
+        using Hash32Container = Hash32DenseContainer;
+        using Hash64Container = Hash64DenseContainer;
 
         using namespace datacontainer;
 
@@ -131,6 +169,13 @@ namespace lqf {
             static shared_ptr<Int64Predicate> buildHashPredicate(Table &input, function<int64_t(DataRow &)>);
 
             static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t, uint32_t);
+
+//            static shared_ptr<Hash32NewContainer>
+//            buildNewContainer(Table &input, uint32_t, Snapshoter *, uint32_t expect_size = CONTAINER_SIZE);
+//
+//            static shared_ptr<Hash64NewContainer>
+//            buildNewContainer(Table &input, function<int64_t(DataRow &)>, Snapshoter *,
+//                           uint32_t expect_size = CONTAINER_SIZE);
 
             static shared_ptr<Hash32Container>
             buildContainer(Table &input, uint32_t, Snapshoter *, uint32_t expect_size = CONTAINER_SIZE);

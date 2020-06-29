@@ -107,6 +107,7 @@ set(LQF_TEST_SRC
         rowcopy_test.cc
         dict_test.cc
         data_container_test.cc
+        hash_container_test.cc
         )
 
 add_test_case(all-test
@@ -133,5 +134,6 @@ add_lqf_benchmark(bitmap_benchmark)
 add_lqf_benchmark(stream_benchmark)
 add_lqf_benchmark(rowcopy_benchmark)
 add_lqf_benchmark(data_container_benchmark)
+add_lqf_benchmark(hash_container_benchmark)
 
 add_subdirectory(tpch)

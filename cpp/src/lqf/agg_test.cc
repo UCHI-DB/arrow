@@ -142,7 +142,7 @@ TEST(AggReducerTest, Init) {
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
-    AggReducer reducer(header_copier.get(), row_copier.get(),
+    AggReducer reducer(colOffset(4), header_copier.get(),
                        {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
     MemDataRow storage(colOffset(4));
     MemDataRow input(colOffset(4));
@@ -150,7 +150,7 @@ TEST(AggReducerTest, Init) {
     input[0] = 5;
     input[1] = 100;
     input[2] = 33;
-    reducer.attach(storage);
+    reducer.attach(storage.raw());
     reducer.init(input);
     EXPECT_EQ(storage[0].asInt(), 5);
     EXPECT_EQ(storage[1].asInt(), 100);
@@ -163,7 +163,7 @@ TEST(AggReducerTest, Reduce) {
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
-    AggReducer reducer(header_copier.get(), row_copier.get(),
+    AggReducer reducer(colOffset(4), header_copier.get(),
                        {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
     MemDataRow storage(colOffset(4));
     MemDataRow input(colOffset(4));
@@ -171,7 +171,7 @@ TEST(AggReducerTest, Reduce) {
     input[0] = 5;
     input[1] = 100;
     input[2] = 33;
-    reducer.attach(storage);
+    reducer.attach(storage.raw());
     reducer.init(input);
     EXPECT_EQ(storage[0].asInt(), 5);
     EXPECT_EQ(storage[1].asInt(), 100);
@@ -186,48 +186,20 @@ TEST(AggReducerTest, Reduce) {
     EXPECT_EQ(storage[3].asInt(), 2);
 }
 
-TEST(AggReducerTest, Assign) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
-            ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
-            ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
-    AggReducer reducer1(header_copier.get(), row_copier.get(),
-                        {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
-    AggReducer reducer2(header_copier.get(), row_copier.get(),
-                        {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
-    MemDataRow storage1(colOffset(4));
-    MemDataRow storage2(colOffset(4));
-
-    reducer1.attach(storage1);
-    reducer2.attach(storage2);
-
-    storage2[0] = 120;
-    storage2[1] = 337;
-    storage2[2] = 1341;
-    storage2[3] = 2242;
-
-    reducer1.assign(reducer2);
-
-    EXPECT_EQ(120, storage1[0].asInt());
-    EXPECT_EQ(337, storage1[1].asInt());
-    EXPECT_EQ(1341, storage1[2].asInt());
-    EXPECT_EQ(2242, storage1[3].asInt());
-}
-
 TEST(AggReducerTest, Merge) {
     auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
-    AggReducer reducer1(header_copier.get(), row_copier.get(),
+    AggReducer reducer1(colOffset(4), header_copier.get(),
                         {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
-    AggReducer reducer2(header_copier.get(), row_copier.get(),
+    AggReducer reducer2(colOffset(4), header_copier.get(),
                         {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
     MemDataRow storage1(colOffset(4));
     MemDataRow storage2(colOffset(4));
 
-    reducer1.attach(storage1);
-    reducer2.attach(storage2);
+    reducer1.attach(storage1.raw());
+    reducer2.attach(storage2.raw());
 
     storage1[2] = 120;
     storage1[3] = 337;
@@ -240,16 +212,16 @@ TEST(AggReducerTest, Merge) {
     EXPECT_EQ(2579, storage1[3].asInt());
 }
 
-TEST(HashCoreTest, Reduce) {
+TEST(HashLargeCoreTest, Reduce) {
     auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
             ->field(F_REGULAR, 0, 0)
             ->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 3);
     auto reducer = unique_ptr<AggReducer>(
-            new AggReducer(header_copier.get(), row_copier.get(),
+            new AggReducer(colOffset(3), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{2, 3}));
     function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
-    HashCore core(colOffset(3), move(reducer), hasher, false);
+    HashLargeCore core(colOffset(3), move(reducer), hasher, row_copier.get(), false);
 
 
     MemDataRow input(colOffset(3));
@@ -270,20 +242,20 @@ TEST(HashCoreTest, Reduce) {
 
 }
 
-TEST(HashCoreTest, Merge) {
+TEST(HashLargeCoreTest, Merge) {
     auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
     auto reducer1 = unique_ptr<AggReducer>(
-            new AggReducer(header_copier.get(), row_copier.get(),
+            new AggReducer(colOffset(4), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{2, 3}));
     function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
-    HashCore core1(colOffset(4), move(reducer1), hasher, false);
+    HashLargeCore core1(colOffset(4), move(reducer1), hasher, row_copier.get(), false);
     auto reducer2 = unique_ptr<AggReducer>(
-            new AggReducer(header_copier.get(), row_copier.get(),
+            new AggReducer(colOffset(4), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{2, 3}));
-    HashCore core2(colOffset(4), move(reducer2), hasher, false);
+    HashLargeCore core2(colOffset(4), move(reducer2), hasher, row_copier.get(), false);
 
     MemDataRow input(colOffset(3));
     input[0] = 5;
@@ -319,15 +291,15 @@ TEST(HashCoreTest, Merge) {
     core1.merge(core2);
 }
 
-TEST(HashCoreTest, Dump) {
+TEST(HashLargeCoreTest, Dump) {
     auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
             ->field(F_REGULAR, 0, 0)->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 3);
     auto reducer = unique_ptr<AggReducer>(
-            new AggReducer(header_copier.get(), row_copier.get(),
+            new AggReducer(colOffset(3), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{1, 2}));
     function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
-    HashCore core(colOffset(3), move(reducer), hasher, false);
+    HashLargeCore core(colOffset(3), move(reducer), hasher, row_copier.get(), false);
 
     MemDataRow input(colOffset(3));
     input[0] = 5;
@@ -478,6 +450,8 @@ TEST(RecordingMinTest, Merge) {
     EXPECT_EQ(*(ite++), 33);
     EXPECT_EQ(*(ite++), 102);
     EXPECT_EQ(*(ite++), 32);
+
+    delete rim1.keys();
 }
 
 TEST(RecordingHashCoreTest, Dump) {
@@ -485,10 +459,12 @@ TEST(RecordingHashCoreTest, Dump) {
             ->field(F_REGULAR, 0, 0)
             ->layout_snapshot()->buildSnapshot();
     auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 3);
-    auto reducer = unique_ptr<AggReducer>(new AggReducer(header_copier.get(), row_copier.get(),
-                                                         new RecordingIntMin(1, 2), 1));
     function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
-    RecordingHashCore core(colOffset(3), move(reducer), hasher);
+    function<unique_ptr<AggReducer>()> rcgen = [&header_copier]() {
+        return unique_ptr<AggReducer>(new AggReducer(colOffset(3), header_copier.get(),
+                                                     new RecordingIntMin(1, 2), 1));
+    };
+    RecordingHashCore core(colOffset(3), rcgen, hasher, row_copier.get());
 
 
     MemDataRow input(colOffset(3));
@@ -528,13 +504,141 @@ TEST(RecordingHashCoreTest, Dump) {
     EXPECT_EQ(20, row[1].asInt());
     EXPECT_EQ(120, row[2].asInt());
     row = rows->next();
+    EXPECT_EQ(9, row[0].asInt());
+    EXPECT_EQ(20, row[1].asInt());
+    EXPECT_EQ(221, row[2].asInt());
+    row = rows->next();
     EXPECT_EQ(2, row[0].asInt());
     EXPECT_EQ(34, row[1].asInt());
     EXPECT_EQ(227, row[2].asInt());
+}
+
+TEST(RecordingHashCoreTest, DumpVertical) {
+    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+            ->field(F_REGULAR, 0, 0)
+            ->layout_snapshot()->buildSnapshot();
+    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_OTHER, 3);
+    function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
+    function<unique_ptr<AggReducer>()> rcgen = [&header_copier]() {
+        return unique_ptr<AggReducer>(new AggReducer(colOffset(3), header_copier.get(),
+                                                     new RecordingIntMin(1, 2), 1));
+    };
+    RecordingHashCore core(colOffset(3), rcgen, hasher, row_copier.get());
+
+
+    MemDataRow input(colOffset(3));
+    input[0] = 5;
+    input[1] = 33;
+    input[2] = 127;
+    core.reduce(input);
+    input[0] = 2;
+    input[1] = 34;
+    input[2] = 227;
+    core.reduce(input);
+    input[0] = 5;
+    input[1] = 20;
+    input[2] = 120;
+    core.reduce(input);
+    input[0] = 5;
+    input[1] = 20;
+    input[2] = 122;
+    core.reduce(input);
+    input[0] = 9;
+    input[1] = 20;
+    input[2] = 221;
+    core.reduce(input);
+
+    auto mtable = MemTable::Make(3, true);
+    core.dump(*mtable, nullptr);
+
+    auto block = (*mtable->blocks()->collect())[0];
+    auto vblock = dynamic_pointer_cast<MemvBlock>(block);
+    EXPECT_TRUE(vblock != nullptr);
+
+    EXPECT_EQ(block->size(), 4);
+    auto rows = block->rows();
+    DataRow &row = rows->next();
+    EXPECT_EQ(5, row[0].asInt());
+    EXPECT_EQ(20, row[1].asInt());
+    EXPECT_EQ(122, row[2].asInt());
+    row = rows->next();
+    EXPECT_EQ(5, row[0].asInt());
+    EXPECT_EQ(20, row[1].asInt());
+    EXPECT_EQ(120, row[2].asInt());
     row = rows->next();
     EXPECT_EQ(9, row[0].asInt());
     EXPECT_EQ(20, row[1].asInt());
     EXPECT_EQ(221, row[2].asInt());
+    row = rows->next();
+    EXPECT_EQ(2, row[0].asInt());
+    EXPECT_EQ(34, row[1].asInt());
+    EXPECT_EQ(227, row[2].asInt());
+}
+
+TEST(HashLargeAggTest, Agg) {
+    function<uint64_t(DataRow &)> hasher =
+            [](DataRow &row) {
+                return row[0].asInt();
+            };
+
+    function<vector<AggField *>()> aggFields = []() {
+        return vector<AggField *>{new DoubleSum(1), new Count()};
+    };
+
+    HashLargeAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                     aggFields);
+
+    auto memTable = MemTable::Make(3);
+
+    auto block1 = memTable->allocate(100);
+    auto block2 = memTable->allocate(100);
+
+    auto row1 = block1->rows();
+    auto row2 = block2->rows();
+
+    srand(time(NULL));
+
+    vector<int> count(20, 0);
+    vector<double> sum(20, 0);
+
+    for (int i = 0; i < 100; i++) {
+        int r1idx = i % 10;
+        int r2idx = i % 20;
+        double v1 = (double) rand() / RAND_MAX;
+        double v2 = (double) rand() / RAND_MAX;
+        (*row1)[i][0] = r1idx;
+        (*row2)[i][0] = r2idx;
+        (*row1)[i][1] = v1;
+        (*row2)[i][1] = v2;
+        sum[r1idx] += v1;
+        sum[r2idx] += v2;
+        count[r1idx] += 1;
+        count[r2idx] += 1;
+    }
+
+    auto aggtable = agg.agg(*memTable);
+    auto agged = aggtable->blocks()->collect();
+
+    EXPECT_EQ(1, agged->size());
+    auto aggblock = (*agged)[0];
+    EXPECT_EQ(20, aggblock->size());
+    auto rows = aggblock->rows();
+    for (int i = 0; i < 20; ++i) {
+        auto i_idx = (*rows)[i][0].asInt();
+        auto i_sum = (*rows)[i][1].asDouble();
+        auto i_count = (*rows)[i][2].asInt();
+        EXPECT_EQ(i_count, count[i_idx]);
+        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
+    }
+    rows = aggblock->rows();
+    for (int i = 0; i < 20; ++i) {
+        DataRow &row = rows->next();
+        auto i_idx = row[0].asInt();
+        auto i_sum = row[1].asDouble();
+        auto i_count = row[2].asInt();
+        EXPECT_EQ(i_count, count[i_idx]);
+        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
+    }
 }
 
 TEST(HashAggTest, Agg) {
@@ -593,80 +697,17 @@ TEST(HashAggTest, Agg) {
         EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
     }
     rows = aggblock->rows();
+    set<int32_t> key_count;
     for (int i = 0; i < 20; ++i) {
         DataRow &row = rows->next();
         auto i_idx = row[0].asInt();
+        key_count.insert(i_idx);
         auto i_sum = row[1].asDouble();
         auto i_count = row[2].asInt();
         EXPECT_EQ(i_count, count[i_idx]);
         EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
     }
-}
-
-TEST(HashSmallAggTest, Agg) {
-    function<uint64_t(DataRow &)> hasher =
-            [](DataRow &row) {
-                return row[0].asInt();
-            };
-
-    function<vector<AggField *>()> aggFields = []() {
-        return vector<AggField *>{new DoubleSum(1), new Count()};
-    };
-
-    HashSmallAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
-                     aggFields);
-
-    auto memTable = MemTable::Make(3);
-
-    auto block1 = memTable->allocate(100);
-    auto block2 = memTable->allocate(100);
-
-    auto row1 = block1->rows();
-    auto row2 = block2->rows();
-
-    srand(time(NULL));
-
-    vector<int> count(20, 0);
-    vector<double> sum(20, 0);
-
-    for (int i = 0; i < 100; i++) {
-        int r1idx = i % 10;
-        int r2idx = i % 20;
-        double v1 = (double) rand() / RAND_MAX;
-        double v2 = (double) rand() / RAND_MAX;
-        (*row1)[i][0] = r1idx;
-        (*row2)[i][0] = r2idx;
-        (*row1)[i][1] = v1;
-        (*row2)[i][1] = v2;
-        sum[r1idx] += v1;
-        sum[r2idx] += v2;
-        count[r1idx] += 1;
-        count[r2idx] += 1;
-    }
-
-    auto aggtable = agg.agg(*memTable);
-    auto agged = aggtable->blocks()->collect();
-
-    EXPECT_EQ(1, agged->size());
-    auto aggblock = (*agged)[0];
-    EXPECT_EQ(20, aggblock->size());
-    auto rows = aggblock->rows();
-    for (int i = 0; i < 20; ++i) {
-        auto i_idx = (*rows)[i][0].asInt();
-        auto i_sum = (*rows)[i][1].asDouble();
-        auto i_count = (*rows)[i][2].asInt();
-        EXPECT_EQ(i_count, count[i_idx]);
-        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
-    }
-    rows = aggblock->rows();
-    for (int i = 0; i < 20; ++i) {
-        DataRow &row = rows->next();
-        auto i_idx = row[0].asInt();
-        auto i_sum = row[1].asDouble();
-        auto i_count = row[2].asInt();
-        EXPECT_EQ(i_count, count[i_idx]);
-        EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
-    }
+    EXPECT_EQ(20, key_count.size());
 }
 
 TEST(TableAggTest, Agg) {
@@ -725,14 +766,17 @@ TEST(TableAggTest, Agg) {
         EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
     }
     rows = aggblock->rows();
+    set<int32_t> key_count;
     for (int i = 0; i < 10; ++i) {
         DataRow &row = rows->next();
         auto i_idx = row[0].asInt();
+        key_count.insert(i_idx);
         auto i_sum = row[1].asDouble();
         auto i_count = row[2].asInt();
         EXPECT_EQ(i_count, count[i_idx]);
         EXPECT_DOUBLE_EQ(i_sum, sum[i_idx]);
     }
+    EXPECT_EQ(key_count.size(), 10);
 }
 
 
@@ -774,6 +818,18 @@ TEST(RecordingHashAggTest, AggRecording) {
     auto rows = aggblock->rows();
 
     DataRow &row = rows->next();
+    EXPECT_EQ(row[0].asInt(), 1);
+    EXPECT_EQ(row[1].asInt(), 5);
+    EXPECT_EQ(row[2].asInt(), 80);
+    row = rows->next();
+    EXPECT_EQ(row[0].asInt(), 1);
+    EXPECT_EQ(row[1].asInt(), 5);
+    EXPECT_EQ(row[2].asInt(), 0);
+    row = rows->next();
+    EXPECT_EQ(row[0].asInt(), 1);
+    EXPECT_EQ(row[1].asInt(), 5);
+    EXPECT_EQ(row[2].asInt(), 40);
+    row = rows->next();
     EXPECT_EQ(row[0].asInt(), 0);
     EXPECT_EQ(row[1].asInt(), 0);
     EXPECT_EQ(row[2].asInt(), 90);
@@ -789,18 +845,6 @@ TEST(RecordingHashAggTest, AggRecording) {
     EXPECT_EQ(row[0].asInt(), 0);
     EXPECT_EQ(row[1].asInt(), 0);
     EXPECT_EQ(row[2].asInt(), 30);
-    row = rows->next();
-    EXPECT_EQ(row[0].asInt(), 1);
-    EXPECT_EQ(row[1].asInt(), 5);
-    EXPECT_EQ(row[2].asInt(), 80);
-    row = rows->next();
-    EXPECT_EQ(row[0].asInt(), 1);
-    EXPECT_EQ(row[1].asInt(), 5);
-    EXPECT_EQ(row[2].asInt(), 0);
-    row = rows->next();
-    EXPECT_EQ(row[0].asInt(), 1);
-    EXPECT_EQ(row[1].asInt(), 5);
-    EXPECT_EQ(row[2].asInt(), 40);
 }
 
 TEST(SimpleAggTest, Agg) {

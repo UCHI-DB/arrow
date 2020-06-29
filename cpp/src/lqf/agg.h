@@ -180,17 +180,14 @@ namespace lqf {
         class AggReducer {
         protected:
             vector<unique_ptr<AggField>> fields_;
-            DataRow *storage_;
+            MemDataRowPointer storage_;
             Snapshoter *header_copier_;
-            function<void(DataRow &, DataRow &)> *row_copier_;
         public:
-            AggReducer(Snapshoter *, function<void(DataRow &, DataRow &)> *, vector<AggField *>,
-                       const vector<uint32_t> &);
+            AggReducer(const vector<uint32_t> &, Snapshoter *, vector<AggField *>, const vector<uint32_t> &);
 
-            AggReducer(Snapshoter *, function<void(DataRow &, DataRow &)> *, AggField *,
-                       uint32_t);
+            AggReducer(const vector<uint32_t> &, Snapshoter *, AggField *, uint32_t);
 
-            void attach(DataRow &);
+            void attach(uint64_t *);
 
             void init(DataRow &);
 
@@ -200,65 +197,64 @@ namespace lqf {
 
             void merge(AggReducer &);
 
-            void assign(AggReducer &);
-
             inline vector<unique_ptr<AggField>> &fields() { return fields_; }
 
-            inline DataRow *storage() { return storage_; }
-
-            inline function<void(DataRow &, DataRow &)> *row_copier() {
-                return row_copier_;
-            }
+            inline DataRow *storage() { return &storage_; }
         };
 
-        class HashCore {
+        class CoreBase {
+        protected:
+            function<void(DataRow &, DataRow &)> *row_copier_;
+            bool need_dump_;
+        public:
+            CoreBase(function<void(DataRow &, DataRow &)> *, bool);
+        };
+
+        class HashLargeCore : public CoreBase {
         protected:
             unique_ptr<AggReducer> reducer_;
             function<uint64_t(DataRow &)> &hasher_;
             MemRowMap map_;
-            bool need_dump_;
         public:
-            HashCore(const vector<uint32_t> &, unique_ptr<AggReducer>, function<uint64_t(DataRow &)> &, bool);
+            HashLargeCore(const vector<uint32_t> &, unique_ptr<AggReducer>, function<uint64_t(DataRow &)> &,
+                          function<void(DataRow &, DataRow &)> *, bool);
 
             void reduce(DataRow &row);
 
-            void merge(HashCore &another);
+            void merge(HashLargeCore &another);
 
             void dump(MemTable &table, function<bool(DataRow &)>);
 
         };
 
-        class HashSmallCore {
+        class HashCore : public CoreBase {
         protected:
             function<unique_ptr<AggReducer>()> reducer_gen_;
             function<uint64_t(DataRow &)> &hasher_;
             const vector<uint32_t> &col_offset_;
             unordered_map<uint64_t, unique_ptr<AggReducer>> map_;
             MemRowVector rows_;
-            bool need_dump_;
         public:
-            HashSmallCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>, function<uint64_t(DataRow &)> &,
-                          bool);
+            HashCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>, function<uint64_t(DataRow &)> &,
+                     function<void(DataRow &, DataRow &)> *, bool);
 
             void reduce(DataRow &row);
 
-            void merge(HashSmallCore &another);
+            void merge(HashCore &another);
 
             void dump(MemTable &table, function<bool(DataRow &)>);
-
         };
 
-        class TableCore {
+        class TableCore : public CoreBase {
         protected:
             function<unique_ptr<AggReducer>()> reducer_gen_;
             function<uint32_t(DataRow &)> &indexer_;
             const vector<uint32_t> &col_offset_;
             vector<unique_ptr<AggReducer>> table_;
             MemRowVector rows_;
-            bool need_dump_;
         public:
             TableCore(uint32_t, const vector<uint32_t> &, function<unique_ptr<AggReducer>()>,
-                      function<uint32_t(DataRow &)> &, bool);
+                      function<uint32_t(DataRow &)> &, function<void(DataRow &, DataRow &)> *, bool);
 
             void reduce(DataRow &row);
 
@@ -268,13 +264,13 @@ namespace lqf {
 
         };
 
-        class SimpleCore {
+        class SimpleCore : public CoreBase {
         protected:
             unique_ptr<AggReducer> reducer_;
             MemDataRow storage_;
-            bool need_dump_;
         public:
-            SimpleCore(const vector<uint32_t> &, unique_ptr<AggReducer>, bool);
+            SimpleCore(const vector<uint32_t> &, unique_ptr<AggReducer>,
+                       function<void(DataRow &, DataRow &)> *, bool);
 
             void reduce(DataRow &row);
 
@@ -346,27 +342,12 @@ namespace lqf {
 
             using RecordingDoubleMax = RecordingMax<AsDouble>;
 
-//            class RecordingAggReducer : public AggReducer {
-//            protected:
-//                RecordingAggField *field_;
-//                vector<shared_ptr<vector<int32_t>>> keys_;
-//            public:
-//                RecordingAggReducer(Snapshoter *, function<void(DataRow &, DataRow &)> *,
-//                                    RecordingAggField *, uint32_t);
-//
-//                void init(DataRow &);
-//
-//                void assign(RecordingAggReducer &);
-//
-//                inline RecordingAggField *field() { return field_; }
-//            };
-
             class RecordingHashCore : public HashCore {
             protected:
                 uint32_t write_key_index_;
             public:
-                RecordingHashCore(const vector<uint32_t> &, unique_ptr<AggReducer>,
-                                  function<uint64_t(DataRow &)> &);
+                RecordingHashCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>,
+                                  function<uint64_t(DataRow &)> &, function<void(DataRow &, DataRow &)> *);
 
                 void dump(MemTable &table, function<bool(DataRow &)>);
             };
@@ -375,7 +356,8 @@ namespace lqf {
             protected:
                 uint32_t write_key_index_;
             public:
-                RecordingSimpleCore(const vector<uint32_t> &, unique_ptr<AggReducer>);
+                RecordingSimpleCore(const vector<uint32_t> &, unique_ptr<AggReducer>,
+                                    function<void(DataRow &, DataRow &)> *);
 
                 void dump(MemTable &table, function<bool(DataRow &)>);
             };
@@ -427,6 +409,18 @@ namespace lqf {
         inline void setPredicate(function<bool(DataRow &)> p) { predicate_ = p; }
     };
 
+    class HashLargeAgg : public Agg<agg::HashLargeCore> {
+    protected:
+        function<uint64_t(DataRow &)> hasher_;
+
+        shared_ptr<agg::HashLargeCore> makeCore() override;
+
+    public:
+        HashLargeAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
+                     function<vector<agg::AggField *>()>,
+                     function<bool(DataRow &)> pred = nullptr, bool vertical = false);
+    };
+
     class HashAgg : public Agg<agg::HashCore> {
     protected:
         function<uint64_t(DataRow &)> hasher_;
@@ -437,18 +431,6 @@ namespace lqf {
         HashAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
                 function<vector<agg::AggField *>()>,
                 function<bool(DataRow &)> pred = nullptr, bool vertical = false);
-    };
-
-    class HashSmallAgg : public Agg<agg::HashSmallCore> {
-    protected:
-        function<uint64_t(DataRow &)> hasher_;
-
-        shared_ptr<agg::HashSmallCore> makeCore() override;
-
-    public:
-        HashSmallAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
-                     function<vector<agg::AggField *>()>,
-                     function<bool(DataRow &)> pred = nullptr, bool vertical = false);
     };
 
     class TableAgg : public Agg<agg::TableCore> {
@@ -517,14 +499,14 @@ namespace lqf {
 
         shared_ptr<vector<shared_ptr<MemRowVector>>> makeStripes(const shared_ptr<Block> &);
 
-        shared_ptr<vector<shared_ptr<HashCore>>> aggStripes(const shared_ptr<vector<shared_ptr<MemRowVector>>> &);
+        shared_ptr<vector<shared_ptr<HashLargeCore>>> aggStripes(const shared_ptr<vector<shared_ptr<MemRowVector>>> &);
 
-        shared_ptr<vector<shared_ptr<HashCore>>>
-        mergeCore(shared_ptr<vector<shared_ptr<HashCore>>>, shared_ptr<vector<shared_ptr<HashCore>>>);
+        shared_ptr<vector<shared_ptr<HashLargeCore>>>
+        mergeCore(shared_ptr<vector<shared_ptr<HashLargeCore>>>, shared_ptr<vector<shared_ptr<HashLargeCore>>>);
 
         unique_ptr<AggReducer> createReducer();
 
-        shared_ptr<HashCore> makeCore();
+        shared_ptr<HashLargeCore> makeCore();
 
     public:
         StripeHashAgg(uint32_t num_stripe, function<uint64_t(DataRow &)>, function<uint64_t(DataRow &)>,

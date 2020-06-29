@@ -42,8 +42,8 @@ namespace lqf {
 
             for (auto &inst: field_list_) {
                 auto index = inst & 0xffff;
-                bool is_string = inst >> 17;
-                bool is_raw = inst >> 18;
+                bool is_string = (inst >> 17) & 1;
+                bool is_raw = (inst >> 18) & 1;
                 bool is_right = inst & 0x10000;
 
                 output_col_size_.push_back(is_string ? 2 : 1);
@@ -179,8 +179,7 @@ namespace lqf {
     HashBasedJoin::HashBasedJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, JoinBuilder *builder,
                                  uint32_t expect_size)
             : leftKeyIndex_(leftKeyIndex), rightKeyIndex_(rightKeyIndex),
-              builder_(unique_ptr<JoinBuilder>(builder)),
-              container_(), expect_size_(expect_size) {}
+              builder_(unique_ptr<JoinBuilder>(builder)), expect_size_(expect_size) {}
 
 
     shared_ptr<Table> HashBasedJoin::join(Table &left, Table &right) {
@@ -439,11 +438,12 @@ namespace lqf {
         }
     }
 
-    HashColumnJoin::HashColumnJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::ColumnBuilder *builder)
-            : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder), columnBuilder_(builder) {}
+    HashColumnJoin::HashColumnJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::ColumnBuilder *builder,
+                                   uint32_t expect_size) : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder,
+                                                                         expect_size), columnBuilder_(builder) {}
 
     void HashColumnJoin::probe(lqf::MemTable *owner, const shared_ptr<Block> &leftBlock) {
-        shared_ptr<MemvBlock> leftvBlock = static_pointer_cast<MemvBlock>(leftBlock);
+        shared_ptr<MemvBlock> leftvBlock = dynamic_pointer_cast<MemvBlock>(leftBlock);
         /// Make sure the cast is valid
         assert(leftvBlock.get() != nullptr);
 
@@ -468,7 +468,7 @@ namespace lqf {
                 DataField &key = leftkeys->next();
                 auto leftval = key.asInt();
 
-                auto result = container_->get(leftval);
+                auto result = move(container_->get(leftval));
                 (*writer)[i] = *result;
             }
         }
@@ -486,15 +486,15 @@ namespace lqf {
 
         PowerHashBasedJoin::PowerHashBasedJoin(function<int64_t(DataRow &)> left_key_maker,
                                                function<int64_t(DataRow &)> right_key_maker,
-                                               lqf::JoinBuilder *builder,
+                                               lqf::JoinBuilder *builder, uint32_t expect_size,
                                                function<bool(DataRow &, DataRow &)> predicate) :
                 left_key_maker_(left_key_maker), right_key_maker_(right_key_maker),
-                builder_(unique_ptr<JoinBuilder>(builder)), predicate_(predicate) {}
+                builder_(unique_ptr<JoinBuilder>(builder)), predicate_(predicate), expect_size_(expect_size) {}
 
         shared_ptr<Table> PowerHashBasedJoin::join(Table &left, Table &right) {
             builder_->on(left, right);
             builder_->init();
-            container_ = HashBuilder::buildContainer(right, right_key_maker_, builder_->snapshoter());
+            container_ = HashBuilder::buildContainer(right, right_key_maker_, builder_->snapshoter(), expect_size_);
             auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
             function<void(const shared_ptr<Block> &)> prober = bind(&PowerHashBasedJoin::probe, this,
                                                                     memTable.get(),
@@ -504,8 +504,9 @@ namespace lqf {
         }
 
         PowerHashJoin::PowerHashJoin(function<int64_t(DataRow &)> lkm, function<int64_t(DataRow &)> rkm,
-                                     lqf::RowBuilder *rowBuilder, function<bool(DataRow &, DataRow &)> pred)
-                : PowerHashBasedJoin(lkm, rkm, rowBuilder, pred),
+                                     lqf::RowBuilder *rowBuilder, uint32_t expect_size,
+                                     function<bool(DataRow &, DataRow &)> pred)
+                : PowerHashBasedJoin(lkm, rkm, rowBuilder, expect_size, pred),
                   rowBuilder_(rowBuilder) {}
 
         void PowerHashJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
