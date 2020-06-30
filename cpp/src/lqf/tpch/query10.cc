@@ -72,6 +72,12 @@ namespace lqf {
                                                  RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
                                                  []() { return vector<AggField *>({new DoubleSum(1)}); }),
                                      {orderItemFilter});
+//            auto itemAgg = graph.add(new StripeHashAgg(30, COL_HASHER(0), COL_HASHER(0),
+//                                                       RowCopyFactory().field(F_REGULAR, 0, 0)
+//                                                               ->field(F_REGULAR, 1, 1)->buildSnapshot(),
+//                                                       RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+//                                                       []() { return vector<AggField *>({new DoubleSum(1)}); }),
+//                                     {orderItemFilter});
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SDGE(1);

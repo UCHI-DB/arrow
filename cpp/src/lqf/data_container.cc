@@ -174,6 +174,9 @@ namespace lqf {
             if (anchor->offset_ + row_size_ > slab_size_) {
                 new_slab();
             }
+            if(memory_[anchor->index_]== NULL) {
+                return anchor->accessor_;
+            }
             anchor->accessor_.raw(memory_[anchor->index_]->data() + anchor->offset_);
             map_.put(key, (anchor->index_ << 20) | anchor->offset_);
             anchor->offset_ += row_size_;

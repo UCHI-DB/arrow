@@ -72,10 +72,10 @@ namespace lqf {
             auto psSupplierFilter = graph.add(psSupplierFilter_obj, {partsupp, supplierFilter});
 
             auto pswithsJoin = graph.add(
-                    new HashJoin(PartSupp::PARTKEY, Part::PARTKEY, new RowBuilder({JR(PartSupp::SUPPKEY),
-                                                                                   JLR(Part::BRAND), JLR(Part::TYPE),
-                                                                                   JLR(Part::SIZE)})),
-                    {partFilter, psSupplierFilter});
+                    new HashJoin(PartSupp::PARTKEY, Part::PARTKEY, new RowBuilder({JL(PartSupp::SUPPKEY),
+                                                                                   JRR(Part::BRAND), JRR(Part::TYPE),
+                                                                                   JRR(Part::SIZE)})),
+                    {psSupplierFilter, partFilter});
             // TODO Which is on the right ?
             // SUPPKEY, BRAND, TYPE, SIZE
 
@@ -83,7 +83,7 @@ namespace lqf {
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 return (input[1].asInt() << 20) + (input[2].asInt() << 10) + input[3].asInt();
             };
-            auto psagg = graph.add(new HashAgg(hasher,
+            auto psagg = graph.add(new HashLargeAgg(hasher,
                                                RowCopyFactory().field(F_REGULAR, 1, 0)->field(F_REGULAR, 2, 1)
                                                        ->field(F_REGULAR, 3, 2)->from(I_RAW)
                                                        ->to(I_RAW)->from_layout(colOffset(4))->to_layout(
@@ -135,18 +135,20 @@ namespace lqf {
             })});
             auto validSupplier = supplierFilter.filter(*supplier);
 
-            FilterJoin psSupplierFilter(PartSupp::SUPPKEY, Supplier::SUPPKEY);
+            FilterJoin psSupplierFilter(PartSupp::SUPPKEY, Supplier::SUPPKEY, 50);
             psSupplierFilter.useAnti();
             auto validps = psSupplierFilter.join(*partsupp, *validSupplier);
 
-            HashJoin pswithsJoin(PartSupp::PARTKEY, Part::PARTKEY, new RowBuilder({JR(PartSupp::SUPPKEY),
-                                                                                   JLR(Part::BRAND), JLR(Part::TYPE),
-                                                                                   JLR(Part::SIZE)}));
-            // TODO Which is on the right ?
-            // SUPPKEY, BRAND, TYPE, SIZE
-            auto partWithSupplier = pswithsJoin.join(*validPart, *validps);
-
-
+//            cout << validps->size() << endl;
+//            cout << validPart->size() << endl;
+            HashJoin pswithsJoin(PartSupp::PARTKEY, Part::PARTKEY, new RowBuilder({JL(PartSupp::SUPPKEY),
+                                                                                   JRR(Part::BRAND), JRR(Part::TYPE),
+                                                                                   JRR(Part::SIZE)}));
+//            // TODO Which is on the right ?
+//            // SUPPKEY, BRAND, TYPE, SIZE
+            auto partWithSupplier = pswithsJoin.join(*validps, *validPart);
+//            cout << partWithSupplier->size();
+//
             function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
                 return (input[1].asInt() << 20) + (input[2].asInt() << 10) + input[3].asInt();
             };

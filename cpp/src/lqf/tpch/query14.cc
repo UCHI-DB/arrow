@@ -24,19 +24,15 @@ namespace lqf {
             ByteArray dateTo("1995-10-01");
             const char *prefix = "PROMO";
 
-            class ItemBuilder : public RowBuilder {
-            public:
-                ItemBuilder() : RowBuilder({JL(LineItem::EXTENDEDPRICE), JL(LineItem::EXTENDEDPRICE)}, false) {}
+            void compute_match(DataRow &target, DataRow &source) {
+                target[0] = source[LineItem::EXTENDEDPRICE].asDouble() * (1 - source[LineItem::DISCOUNT].asDouble());
+                target[1] = target[0].asDouble();
+            }
 
-                void build(DataRow &target, DataRow &left, DataRow &right, int key) {
-                    target[0] = left[LineItem::EXTENDEDPRICE].asDouble() * (1 - left[LineItem::DISCOUNT].asDouble());
-                    if (&right == &MemDataRow::EMPTY) {
-                        target[1] = 0;
-                    } else {
-                        target[1] = target[0].asDouble();
-                    }
-                }
-            };
+            void compute_unmatch(DataRow &target, DataRow &source) {
+                target[0] = source[LineItem::EXTENDEDPRICE].asDouble() * (1 - source[LineItem::DISCOUNT].asDouble());
+                target[1] = 0;
+            }
         }
 
         using namespace q14;
@@ -62,8 +58,13 @@ namespace lqf {
                             LineItem::SHIPDATE, bind(&ByteArrayDictRangele::build, dateFrom, dateTo))),
                     {lineitem});
 
-            auto join_obj = new HashJoin(LineItem::PARTKEY, Part::PARTKEY, new ItemBuilder());
-            join_obj->useOuter();
+            auto join_obj = new FilterTransformJoin(
+                    LineItem::PARTKEY, Part::PARTKEY,
+                    RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->to_layout(colOffset(2))
+                            ->process(compute_match)->buildSnapshot(),
+                    RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->to_layout(colOffset(2))
+                            ->process(compute_unmatch)->buildSnapshot()
+            );
             auto join = graph.add(join_obj, {lineitemShipdateFilter, partFilter});
 
             auto simpleAgg = graph.add(new SimpleAgg(

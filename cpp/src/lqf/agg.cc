@@ -250,38 +250,66 @@ namespace lqf {
         }
 
         void HashLargeCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
-            assert(pred == nullptr);
-            if (!table.isVertical()) {
-                auto flexblock = table.allocateFlex();
+            if (pred == nullptr) {
+                if (!table.isVertical()) {
+                    auto flexblock = table.allocateFlex();
 
-                if (need_dump_) {
-                    auto iterator = map_.iterator();
-                    while (iterator->hasNext()) {
-                        DataRow &next = iterator->next();
-                        reducer_->attach(next.raw());
-                        reducer_->dump();
+                    if (need_dump_) {
+                        auto iterator = map_.iterator();
+                        while (iterator->hasNext()) {
+                            DataRow &next = iterator->next();
+                            reducer_->attach(next.raw());
+                            reducer_->dump();
+                        }
+                    }
+                    flexblock->assign(map_.memory(), map_.slab_size(), map_.size());
+                } else {
+                    auto block = table.allocate(map_.size());
+                    auto writer = block->rows();
+                    if (need_dump_) {
+                        auto iterator = map_.iterator();
+                        while (iterator->hasNext()) {
+                            DataRow &next = iterator->next();
+                            reducer_->attach(next.raw());
+                            reducer_->dump();
+                            (*row_copier_)(writer->next(), *reducer_->storage());
+                        }
+                    } else {
+                        auto iterator = map_.iterator();
+                        while (iterator->hasNext()) {
+                            DataRow &next = iterator->next();
+                            reducer_->attach(next.raw());
+                            (*row_copier_)(writer->next(), *reducer_->storage());
+                        }
                     }
                 }
-                flexblock->assign(map_.memory(), map_.slab_size(), map_.size());
             } else {
                 auto block = table.allocate(map_.size());
                 auto writer = block->rows();
+                int counter = 0;
                 if (need_dump_) {
                     auto iterator = map_.iterator();
                     while (iterator->hasNext()) {
                         DataRow &next = iterator->next();
                         reducer_->attach(next.raw());
                         reducer_->dump();
-                        (*row_copier_)(writer->next(), *reducer_->storage());
+                        if (pred(*reducer_->storage())) {
+                            (*row_copier_)(writer->next(), *reducer_->storage());
+                            ++counter;
+                        }
                     }
                 } else {
                     auto iterator = map_.iterator();
                     while (iterator->hasNext()) {
                         DataRow &next = iterator->next();
                         reducer_->attach(next.raw());
-                        (*row_copier_)(writer->next(), *reducer_->storage());
+                        if (pred(*reducer_->storage())) {
+                            (*row_copier_)(writer->next(), *reducer_->storage());
+                            ++counter;
+                        }
                     }
                 }
+                block->resize(counter);
             }
         }
 
@@ -324,15 +352,44 @@ namespace lqf {
         void HashCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
             auto block = table.allocate(map_.size());
             auto writerows = block->rows();
-            for (auto &iterator:map_) {
+            if (!pred) {
                 if (need_dump_) {
-                    iterator.second->dump();
+                    for (auto &iterator:map_) {
+                        iterator.second->dump();
+                        DataRow &next = *(iterator.second->storage());
+                        DataRow &to = writerows->next();
+                        (*row_copier_)(to, next);
+                    }
+                } else {
+                    for (auto &iterator:map_) {
+                        DataRow &next = *(iterator.second->storage());
+                        DataRow &to = writerows->next();
+                        (*row_copier_)(to, next);
+                    }
                 }
-                DataRow &next = *(iterator.second->storage());
-                if (!pred || pred(next)) {
-                    DataRow &to = writerows->next();
-                    (*row_copier_)(to, next);
+            } else {
+                int counter = 0;
+                if (need_dump_) {
+                    for (auto &iterator:map_) {
+                        iterator.second->dump();
+                        DataRow &next = *(iterator.second->storage());
+                        if (pred(next)) {
+                            DataRow &to = writerows->next();
+                            (*row_copier_)(to, next);
+                            ++counter;
+                        }
+                    }
+                } else {
+                    for (auto &iterator:map_) {
+                        DataRow &next = *(iterator.second->storage());
+                        if (pred(next)) {
+                            DataRow &to = writerows->next();
+                            (*row_copier_)(to, next);
+                            ++counter;
+                        }
+                    }
                 }
+                block->resize(counter);
             }
         }
 
@@ -742,12 +799,11 @@ namespace lqf {
 
     StripeHashAgg::StripeHashAgg(uint32_t num_stripe, function<uint64_t(DataRow &)> hasher,
                                  function<uint64_t(DataRow &)> stripe_hasher, unique_ptr<Snapshoter> stripe_copier,
-                                 unique_ptr<Snapshoter> header_copier,
-                                 function<vector<agg::AggField *>()> fields_gen)
+                                 unique_ptr<Snapshoter> header_copier, function<vector<agg::AggField *>()> fields_gen,
+                                 function<bool(DataRow &)> pred)
             : Node(1), num_stripe_(num_stripe), hasher_(hasher), stripe_hasher_(stripe_hasher),
               stripe_copier_(move(stripe_copier)), header_copier_(move(header_copier)),
-              fields_gen_(fields_gen) {
-
+              fields_gen_(fields_gen), predicate_(pred) {
         auto &header_offset = header_copier_->colOffset();
         col_offset_.insert(col_offset_.end(), header_offset.begin(), header_offset.end());
         auto fields = fields_gen_();
@@ -780,7 +836,7 @@ namespace lqf {
 
         auto outputTable = MemTable::Make(col_size_);
         for (auto &core: *cores) {
-            core->dump(*outputTable, nullptr);
+            core->dump(*outputTable, predicate_);
         }
         return outputTable;
     }

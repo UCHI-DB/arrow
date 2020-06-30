@@ -51,7 +51,7 @@ namespace lqf {
                                                                      bind(&ByteArrayDictRangele::build, dateFrom,
                                                                           dateTo))), {lineitem});
 
-            auto suppkeyAgg = graph.add(new HashAgg(
+            auto suppkeyAgg = graph.add(new HashLargeAgg(
                     COL_HASHER(LineItem::SUPPKEY),
                     RowCopyFactory().field(F_REGULAR, LineItem::SUPPKEY, 0)->buildSnapshot(),
                     []() { return vector<AggField *>{new PriceField()}; }),
@@ -89,7 +89,7 @@ namespace lqf {
             auto filteredLineitem = lineitemDateFilter.filter(*lineitem);
 
 
-            HashAgg suppkeyAgg(COL_HASHER(LineItem::SUPPKEY),
+            HashLargeAgg suppkeyAgg(COL_HASHER(LineItem::SUPPKEY),
                                RowCopyFactory().field(F_REGULAR, LineItem::SUPPKEY, 0)->buildSnapshot(),
                                []() { return vector<AggField *>{new PriceField()}; });
             // SUPPKEY, REVENUE

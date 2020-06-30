@@ -788,6 +788,45 @@ TEST(HashFilterJoinTest, Join) {
     EXPECT_EQ(22, rblock->size());
 }
 
+TEST(FilterTransformJoinTest, Join) {
+    auto left = ParquetTable::Open("testres/lineitem");
+    left->updateColumns((1 << 14) - 1);
+    auto right = MemTable::Make(2);
+    auto block = right->allocate(100);
+
+    auto rows = block->rows();
+    (*rows)[0][0] = 35; // 6
+    (*rows)[1][0] = 99; // 4
+    (*rows)[2][0] = 1154; // 6
+    (*rows)[3][0] = 4452; // 2
+    (*rows)[4][0] = 5987; // 4
+    (*rows)[0][1] = 0;
+    (*rows)[1][1] = 1;
+    (*rows)[2][1] = 2;
+    (*rows)[3][1] = 3;
+    (*rows)[4][1] = 4;
+
+    auto snapshot = RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->to_layout(colOffset(3))
+            ->process([](DataRow &output, DataRow &input) {
+                output[0] = input[4].asInt() * input[5].asDouble();
+                output[1] = input[4];
+                output[2] = input[5];
+            })->buildSnapshot();
+
+    FilterTransformJoin join(0, 0, move(snapshot), nullptr);
+
+    auto joined = join.join(*left, *right);
+    auto blocks = joined->blocks()->collect();
+    auto rblock = (*blocks)[0];
+    EXPECT_EQ(22, rblock->size());
+
+    auto read_rows = rblock->rows();
+    for (int i = 0; i < 22; ++i) {
+        DataRow &row = (*read_rows)[i];
+        EXPECT_EQ(row[0].asDouble(), row[1].asInt() * row[2].asDouble());
+    }
+}
+
 TEST(HashExistJoinTest, Join) {
     auto left = ParquetTable::Open("testres/lineitem");
     left->updateColumns((1 << 14) - 1);
@@ -1054,11 +1093,11 @@ TEST(HashColumnJoinTest, Join) {
     EXPECT_EQ(results->size(), 2);
 
     auto block1 = (*results)[0];
-    auto asmvblock = static_pointer_cast<MemvBlock>(block1);
+    auto asmvblock = dynamic_pointer_cast<MemvBlock>(block1);
     EXPECT_TRUE(asmvblock.get() != nullptr);
 
     auto block2 = (*results)[1];
-    asmvblock = static_pointer_cast<MemvBlock>(block2);
+    asmvblock = dynamic_pointer_cast<MemvBlock>(block2);
     EXPECT_TRUE(asmvblock.get() != nullptr);
 
     EXPECT_EQ(100, block1->size());
@@ -1072,4 +1111,110 @@ TEST(HashColumnJoinTest, Join) {
     for (int i = 0; i < 150; ++i) {
         EXPECT_EQ(data[(*res_rows)[i][0].asInt()], (*res_rows)[i][2].asInt());
     }
+}
+
+TEST(HashMultiJoinTest, Join) {
+    auto left = MemTable::Make(2, true);
+    auto lblock1 = left->allocate(100);
+    auto lblock2 = left->allocate(150);
+
+    auto lrow1 = lblock1->rows();
+    for (int i = 0; i < 100; i++) {
+        (*lrow1)[i][0] = i;
+        (*lrow1)[i][1] = i * 2;
+    }
+    auto lrow2 = lblock2->rows();
+    for (int i = 0; i < 150; i++) {
+        (*lrow2)[i][0] = i + 100;
+        (*lrow2)[i][1] = (i + 100) * 2;
+    }
+
+    auto right = MemTable::Make(2);
+    auto block = right->allocate(10);
+    auto rows = block->rows();
+
+
+    (*rows)[0][0] = 20;
+    (*rows)[1][0] = 20;
+    (*rows)[2][0] = 30;
+    (*rows)[3][0] = 30;
+    (*rows)[4][0] = 30;
+    (*rows)[5][0] = 120;
+    (*rows)[6][0] = 120;
+    (*rows)[7][0] = 140;
+    (*rows)[8][0] = 140;
+    (*rows)[9][0] = 140;
+    (*rows)[0][1] = 0;
+    (*rows)[1][1] = 1;
+    (*rows)[2][1] = 2;
+    (*rows)[3][1] = 3;
+    (*rows)[4][1] = 4;
+    (*rows)[5][1] = 5;
+    (*rows)[6][1] = 6;
+    (*rows)[7][1] = 7;
+    (*rows)[8][1] = 8;
+    (*rows)[9][1] = 9;
+
+    HashMultiJoin join(0, 0, new RowBuilder({JL(1), JR(1)}, true));
+
+    auto joined = join.join(*left, *right);
+    EXPECT_EQ(vector<uint32_t>({1, 1, 1}), joined->colSize());
+
+    auto results = joined->blocks()->collect();
+    EXPECT_EQ(results->size(), 2);
+
+    auto block1 = (*results)[0];
+    auto asmblock = dynamic_pointer_cast<MemFlexBlock>(block1);
+    EXPECT_TRUE(asmblock.get() != nullptr);
+
+    auto block2 = (*results)[1];
+    asmblock = dynamic_pointer_cast<MemFlexBlock>(block2);
+    EXPECT_TRUE(asmblock.get() != nullptr);
+
+    EXPECT_EQ(5, block1->size());
+    auto res_rows = block1->rows();
+    DataRow &row = res_rows->next();
+    EXPECT_EQ(20, row[0].asInt());
+    EXPECT_EQ(40, row[1].asInt());
+    EXPECT_EQ(0, row[2].asInt());
+    row = res_rows->next();
+    EXPECT_EQ(20, row[0].asInt());
+    EXPECT_EQ(40, row[1].asInt());
+    EXPECT_EQ(1, row[2].asInt());
+    row = res_rows->next();
+    EXPECT_EQ(30, row[0].asInt());
+    EXPECT_EQ(60, row[1].asInt());
+    EXPECT_EQ(2, row[2].asInt());
+    row = res_rows->next();
+    EXPECT_EQ(30, row[0].asInt());
+    EXPECT_EQ(60, row[1].asInt());
+    EXPECT_EQ(3, row[2].asInt());
+    row = res_rows->next();
+    EXPECT_EQ(30, row[0].asInt());
+    EXPECT_EQ(60, row[1].asInt());
+    EXPECT_EQ(4, row[2].asInt());
+
+
+    EXPECT_EQ(5, block2->size());
+    auto res_rows2 = block2->rows();
+    row = res_rows2->next();
+    EXPECT_EQ(120, row[0].asInt());
+    EXPECT_EQ(240, row[1].asInt());
+    EXPECT_EQ(5, row[2].asInt());
+    row = res_rows2->next();
+    EXPECT_EQ(120, row[0].asInt());
+    EXPECT_EQ(240, row[1].asInt());
+    EXPECT_EQ(6, row[2].asInt());
+    row = res_rows2->next();
+    EXPECT_EQ(140, row[0].asInt());
+    EXPECT_EQ(280, row[1].asInt());
+    EXPECT_EQ(7, row[2].asInt());
+    row = res_rows2->next();
+    EXPECT_EQ(140, row[0].asInt());
+    EXPECT_EQ(280, row[1].asInt());
+    EXPECT_EQ(8, row[2].asInt());
+    row = res_rows2->next();
+    EXPECT_EQ(140, row[0].asInt());
+    EXPECT_EQ(280, row[1].asInt());
+    EXPECT_EQ(9, row[2].asInt());
 }

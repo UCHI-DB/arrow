@@ -24,7 +24,7 @@ namespace lqf {
 
         using namespace q18;
 
-        void executeQ18() {
+        void executeQ18_Graph() {
             ExecutionGraph graph;
 
             auto order = graph.add(new TableNode(ParquetTable::Open(Orders::path,
@@ -35,15 +35,18 @@ namespace lqf {
             auto customer = graph.add(
                     new TableNode(ParquetTable::Open(Customer::path, {Customer::NAME, Customer::CUSTKEY})), {});
 
-            auto hashAgg_obj = new HashAgg(COL_HASHER(LineItem::ORDERKEY),
-                                           RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)->buildSnapshot(),
-                                           []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; });
-            hashAgg_obj->setPredicate([=](DataRow &row) { return row[1].asInt() > quantity; });
-            auto hashAgg = graph.add(hashAgg_obj, {lineitem});
+            auto hashAgg = graph.add(
+                    new StripeHashAgg(32, COL_HASHER(LineItem::ORDERKEY), COL_HASHER(0),
+                                      RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
+                                              ->field(F_REGULAR, LineItem::QUANTITY, 1)->buildSnapshot(),
+                                      RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                                      []() { return vector<AggField *>{new IntSum(1)}; },
+                                      [=](DataRow &row) { return row[1].asInt() > quantity; }),
+                    {lineitem});
             // ORDERKEY, SUM_QUANTITY
 
             auto withOrderJoin = graph.add(new HashJoin(Orders::ORDERKEY, 0, new RowBuilder(
-                    {JL(Orders::CUSTKEY), JLS(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)}, true, true)),
+                    {JL(Orders::CUSTKEY), JLS(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)}, true)),
                                            {order, hashAgg});
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY
 
@@ -62,41 +65,43 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ18Backup() {
+        void executeQ18() {
 
             auto order = ParquetTable::Open(Orders::path,
                                             {Orders::ORDERKEY, Orders::ORDERDATE, Orders::TOTALPRICE, Orders::CUSTKEY});
             auto lineitem = ParquetTable::Open(LineItem::path, {LineItem::ORDERKEY, LineItem::QUANTITY});
             auto customer = ParquetTable::Open(Customer::path, {Customer::NAME, Customer::CUSTKEY});
 
-            HashAgg hashAgg(COL_HASHER(LineItem::ORDERKEY),
-                            RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)->buildSnapshot(),
-                            []() { return vector<AggField *>{new IntSum(LineItem::QUANTITY)}; });
-            hashAgg.setPredicate([=](DataRow &row) { return row[1].asInt() > quantity; });
+            StripeHashAgg hashAgg(32, COL_HASHER(LineItem::ORDERKEY), COL_HASHER(0),
+                                  RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
+                                          ->field(F_REGULAR, LineItem::QUANTITY, 1)->buildSnapshot(),
+                                  RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
+                                  []() { return vector<AggField *>{new IntSum(1)}; },
+                                  [=](DataRow &row) { return row[1].asInt() > quantity; });
             // ORDERKEY, SUM_QUANTITY
             auto validLineitem = hashAgg.agg(*lineitem);
 
             HashJoin withOrderJoin(Orders::ORDERKEY, 0,
                                    new RowBuilder(
-                                           {JL(Orders::CUSTKEY), JLS(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)},
-                                           true, true));
+                                           {JL(Orders::CUSTKEY), JLR(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)},
+                                           true));
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY
             auto withOrder = withOrderJoin.join(*order, *validLineitem);
 
-            HashColumnJoin withCustomerJoin(1, Customer::CUSTKEY,
-                                            new ColumnBuilder(
-                                                    {JL(0), JL(1), JLS(2), JL(3), JL(4), JRS(Customer::NAME)}));
-            // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY,CUSTNAME
-            auto withCustomer = withCustomerJoin.join(*withOrder, *customer);
-
-            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SDGE(3) || (SDE(3) && SBLE(2));
-            };
-            TopN topn(100, comparator);
-            auto sorted = topn.sort(*withCustomer);
-
-            Printer printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND);
-            printer.print(*sorted);
+//            HashColumnJoin withCustomerJoin(1, Customer::CUSTKEY,
+//                                            new ColumnBuilder(
+//                                                    {JL(0), JL(1), JLS(2), JL(3), JL(4), JRS(Customer::NAME)}));
+//            // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY,CUSTNAME
+//            auto withCustomer = withCustomerJoin.join(*withOrder, *customer);
+//
+//            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+//                return SDGE(3) || (SDE(3) && SBLE(2));
+//            };
+//            TopN topn(100, comparator);
+//            auto sorted = topn.sort(*withCustomer);
+//
+//            Printer printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND);
+//            printer.print(*sorted);
         }
     }
 }

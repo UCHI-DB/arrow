@@ -64,6 +64,8 @@ namespace lqf {
 
             inline vector<uint32_t> &outputColSize() { return output_col_size_; }
 
+            inline vector<uint32_t>&outputColOffset() { return output_col_offset_; }
+
             inline Snapshoter *snapshoter() { return snapshoter_.get(); }
         };
 
@@ -170,7 +172,22 @@ namespace lqf {
         void useAnti() { anti_ = true; }
 
     protected:
-        shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
+        virtual shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
+    };
+
+    class FilterTransformJoin : public FilterJoin {
+    protected:
+        unique_ptr<Snapshoter> match_writer_;
+        unique_ptr<Snapshoter> unmatch_writer_;
+
+        shared_ptr<Block> probe(const shared_ptr<Block> &) override;
+
+    public:
+        FilterTransformJoin(uint32_t, uint32_t, unique_ptr<Snapshoter>, unique_ptr<Snapshoter>,
+                            uint32_t expect_size = CONTAINER_SIZE,
+                            bool use_bitmap = false);
+
+        virtual ~FilterTransformJoin() = default;
     };
 
     /*
@@ -240,6 +257,27 @@ namespace lqf {
         ColumnBuilder *columnBuilder_;
 
         void probe(MemTable *, const shared_ptr<Block> &) override;
+    };
+
+    /**
+     * Build a hash table on multiple entries with same key
+     */
+    class HashMultiJoin : public Join {
+    protected:
+        uint32_t left_key_index_;
+        uint32_t right_key_index_;
+        unique_ptr<RowBuilder> builder_;
+        unordered_map<int32_t, unique_ptr<vector<unique_ptr<MemDataRow>>>> container_;
+
+        void buildmap(const shared_ptr<Block>&);
+
+        shared_ptr<Block> probe(const shared_ptr<Block> &);
+
+    public:
+
+        HashMultiJoin(uint32_t, uint32_t, RowBuilder*);
+
+        shared_ptr<Table> join(Table &, Table &) override;
     };
 
     namespace powerjoin {

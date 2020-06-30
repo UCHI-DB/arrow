@@ -187,6 +187,7 @@ namespace lqf {
         builder_->init();
 
         container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter(), expect_size_);
+
         auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
         function<void(const shared_ptr<Block> &)> prober = bind(&HashBasedJoin::probe, this, memTable.get(), _1);
         left.blocks()->foreach(prober);
@@ -301,6 +302,41 @@ namespace lqf {
         }
         return leftBlock->mask(bitmap);
     }
+
+    FilterTransformJoin::FilterTransformJoin(uint32_t lk_idx, uint32_t rk_idx, unique_ptr<Snapshoter> matchw,
+                                             unique_ptr<Snapshoter> unmatchw,
+                                             uint32_t expect_size, bool use_bitmap)
+            : FilterJoin(lk_idx, rk_idx, expect_size, use_bitmap), match_writer_(move(matchw)),
+              unmatch_writer_(move(unmatchw)) {}
+
+    shared_ptr<Block> FilterTransformJoin::probe(const shared_ptr<Block> &left_block) {
+        auto memblock = make_shared<MemFlexBlock>(match_writer_->colOffset());
+        auto col = left_block->col(leftKeyIndex_);
+        auto rows = left_block->rows();
+        uint32_t size = left_block->size();
+        if (unmatch_writer_) {
+            for (uint32_t i = 0; i < size; ++i) {
+                auto key = col->next().asInt();
+                DataRow &row = (*rows)[col->pos()];
+                DataRow &target = memblock->push_back();
+                if (predicate_->test(key)) {
+                    (*match_writer_)(target, row);
+                } else {
+                    (*unmatch_writer_)(target, row);
+                }
+            }
+        } else {
+            for (uint32_t i = 0; i < size; ++i) {
+                auto key = col->next().asInt();
+                if (predicate_->test(key)) {
+                    DataRow &row = (*rows)[col->pos()];
+                    (*match_writer_)(memblock->push_back(), row);
+                }
+            }
+        }
+        return memblock;
+    }
+
 
     HashExistJoin::HashExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
                                  JoinBuilder *builder, function<bool(DataRow &, DataRow &)> pred)
@@ -478,8 +514,61 @@ namespace lqf {
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
         columnBuilder_->build(*newvblock, *leftvBlock, vblock);
-//        newvblock->merge(*leftvBlock, columnBuilder_->leftInst());
-//        newvblock->merge(vblock, columnBuilder_->rightInst());
+    }
+
+    HashMultiJoin::HashMultiJoin(uint32_t lk, uint32_t rk, RowBuilder* rbuilder)
+            : left_key_index_(lk), right_key_index_(rk), builder_(unique_ptr<RowBuilder>(rbuilder)) {}
+
+    void HashMultiJoin::buildmap(const shared_ptr<Block> &block) {
+        auto block_size = block->size();
+        auto rows = block->rows();
+        for (uint32_t i = 0; i < block_size; ++i) {
+            DataRow &row = rows->next();
+            auto key = row[right_key_index_].asInt();
+            auto snapshot = (*builder_->snapshoter())(row);
+            auto found = container_.find(key);
+            if (found != container_.cend()) {
+                found->second->emplace_back(move(snapshot));
+            } else {
+                auto newentry = unique_ptr<vector<unique_ptr<MemDataRow>>>(new vector<unique_ptr<MemDataRow>>());
+                newentry->emplace_back(move(snapshot));
+                container_[key] = move(newentry);
+            }
+        }
+    }
+
+    shared_ptr<Table> HashMultiJoin::join(Table &left, Table &right) {
+        builder_->on(left, right);
+        builder_->init();
+
+        function<void(const shared_ptr<Block> &)> build_map = bind(&HashMultiJoin::buildmap, this, _1);
+        right.blocks()->sequential()->foreach(build_map);
+
+        function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashMultiJoin::probe, this, _1);
+
+        return make_shared<TableView>(&left, builder_->outputColSize(), left.blocks()->map(prober));
+    }
+
+    shared_ptr<Block> HashMultiJoin::probe(const shared_ptr<Block> &left_block) {
+        auto leftkeys = left_block->col(left_key_index_);
+        auto leftrows = left_block->rows();
+        auto block_size = left_block->size();
+
+        auto output_block = make_shared<MemFlexBlock>(builder_->outputColOffset());
+
+        for (uint32_t i = 0; i < block_size; ++i) {
+            auto key = leftkeys->next().asInt();
+            auto found = container_.find(key);
+            if (found != container_.cend()) {
+                DataRow &left_row = (*leftrows)[leftkeys->pos()];
+                auto &exists = found->second;
+                for (auto &right_row: *exists) {
+                    builder_->build(output_block->push_back(), left_row, *right_row, key);
+                }
+            }
+        }
+
+        return output_block;
     }
 
     namespace powerjoin {

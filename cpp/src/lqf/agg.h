@@ -497,6 +497,8 @@ namespace lqf {
         vector<uint32_t> fields_start_;
         bool need_field_dump_;
 
+        function<bool(DataRow &)> predicate_;
+
         shared_ptr<vector<shared_ptr<MemRowVector>>> makeStripes(const shared_ptr<Block> &);
 
         shared_ptr<vector<shared_ptr<HashLargeCore>>> aggStripes(const shared_ptr<vector<shared_ptr<MemRowVector>>> &);
@@ -510,7 +512,8 @@ namespace lqf {
 
     public:
         StripeHashAgg(uint32_t num_stripe, function<uint64_t(DataRow &)>, function<uint64_t(DataRow &)>,
-                      unique_ptr<Snapshoter>, unique_ptr<Snapshoter>, function<vector<agg::AggField *>()>);
+                      unique_ptr<Snapshoter>, unique_ptr<Snapshoter>, function<vector<agg::AggField *>()>,
+                      function<bool(DataRow &)> pred = nullptr);
 
         virtual ~StripeHashAgg() = default;
 

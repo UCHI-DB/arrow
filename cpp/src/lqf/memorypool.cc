@@ -13,7 +13,7 @@ namespace lqf {
 
         ByteArrayBuffer ByteArrayBuffer::instance;
 
-        ByteArrayBuffer::ByteArrayBuffer() : buffer_(100), buffer_watermark_(0) {}
+        ByteArrayBuffer::ByteArrayBuffer() : buffer_(500), buffer_watermark_(0) {}
 
         ByteArrayBuffer::~ByteArrayBuffer() {
             for (auto &slab:buffer_) {

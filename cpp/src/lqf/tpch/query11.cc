@@ -61,7 +61,7 @@ namespace lqf {
         }
         using namespace q11;
 
-        void executeQ11() {
+        void executeQ11_Graph() {
 
             ExecutionGraph graph;
 
@@ -103,7 +103,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ11Backup() {
+        void executeQ11() {
 
             auto nation = ParquetTable::Open(Nation::path, {Nation::NATIONKEY, Nation::NAME});
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::NATIONKEY, Supplier::SUPPKEY});
@@ -130,10 +130,9 @@ namespace lqf {
 
             HashAgg bypartAgg(COL_HASHER(PartSupp::PARTKEY),
                               RowCopyFactory().field(F_REGULAR, PartSupp::PARTKEY, 0)->buildSnapshot(),
-                              agg_fields);
-            bypartAgg.setPredicate([=](DataRow &input) {
-                return input[1].asDouble() >= threshold;
-            });
+                              agg_fields, [=](DataRow &input) {
+                        return input[1].asDouble() >= threshold;
+                    });
             auto byParts = bypartAgg.agg(*validps);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) { return SDGE(1); };

@@ -53,7 +53,7 @@ namespace lqf {
         }
         using namespace q12;
 
-        void executeQ12_Graph() {
+        void executeQ12() {
             ExecutionGraph graph;
 
             auto lineitem = graph.add(new TableNode(ParquetTable::Open(LineItem::path,
@@ -89,7 +89,7 @@ namespace lqf {
                     hasher,
                     RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
                             ->field(F_RAW, LineItem::SHIPMODE, 1)->buildSnapshot(),
-                    []() { return vector<AggField *>({new agg::Count()}); });
+                    []() { return vector<AggField *>({new agg::Count()}); }, nullptr, true);
             auto lineitemAgg = graph.add(lineitemAgg_obj, {lineItemAgainFilter});
             // ORDER_KEY, SHIPMODE, COUNT
 
@@ -115,7 +115,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ12() {
+        void executeQ12_Backup() {
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::RECEIPTDATE, LineItem::SHIPMODE, LineItem::COMMITDATE,
                                                 LineItem::SHIPDATE, LineItem::ORDERKEY});
@@ -152,7 +152,7 @@ namespace lqf {
             HashAgg lineitemAgg(hasher,
                                 RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
                                         ->field(F_RAW, LineItem::SHIPMODE, 1)->buildSnapshot(),
-                                []() { return vector<AggField *>({new agg::Count()}); });
+                                []() { return vector<AggField *>({new agg::Count()}); }, nullptr, true);
             // ORDER_KEY, SHIPMODE, COUNT
             auto agglineitem = lineitemAgg.agg(*validDateLineitem);
 
