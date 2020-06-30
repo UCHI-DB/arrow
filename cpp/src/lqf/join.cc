@@ -435,16 +435,17 @@ namespace lqf {
                 return (*a) | (*b);
             };
             auto exist = left.blocks()->map(prober)->reduce(reducer);
+
             auto memblock = memTable->allocate(container_->size() - exist->cardinality());
 
             auto writerows = memblock->rows();
-            auto writecount = 0;
 
             auto ite = container_->iterator();
             while (ite->hasNext()) {
                 auto entry = ite->next();
                 if (!exist->check(entry.first)) {
-                    (*writerows)[writecount++] = entry.second;
+                    DataRow &writenext = writerows->next();
+                    writenext = entry.second;
                 }
             }
         } else {
@@ -455,7 +456,12 @@ namespace lqf {
             auto resultBlock = memTable->allocate(container_->size());
             auto writeRows = resultBlock->rows();
             auto iterator = container_->iterator();
+            uint32_t counter = 0;
             while (iterator->hasNext()) {
+                ++counter;
+                if(counter > container_->size()) {
+                    break;
+                }
                 auto entry = iterator->next();
                 writeRows->next() = entry.second;
             }
@@ -516,7 +522,7 @@ namespace lqf {
         columnBuilder_->build(*newvblock, *leftvBlock, vblock);
     }
 
-    HashMultiJoin::HashMultiJoin(uint32_t lk, uint32_t rk, RowBuilder* rbuilder)
+    HashMultiJoin::HashMultiJoin(uint32_t lk, uint32_t rk, RowBuilder *rbuilder)
             : left_key_index_(lk), right_key_index_(rk), builder_(unique_ptr<RowBuilder>(rbuilder)) {}
 
     void HashMultiJoin::buildmap(const shared_ptr<Block> &block) {

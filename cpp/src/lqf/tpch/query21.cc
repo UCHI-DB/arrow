@@ -91,7 +91,7 @@ namespace lqf {
         }
         using namespace q21;
 
-        void executeQ21() {
+        void executeQ21_Graph() {
             ExecutionGraph graph;
             auto order = graph.add(new TableNode(
                     ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS})), {});
@@ -180,7 +180,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ21Backup() {
+        void executeQ21_Backup() {
             auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS});
             auto lineitem = ParquetTable::Open(LineItem::path,
                                                {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::RECEIPTDATE,
@@ -197,9 +197,6 @@ namespace lqf {
             FilterJoin lineWithOrderJoin(LineItem::ORDERKEY, Orders::ORDERKEY, 3600000);
             auto linewithorder = mat.mat(*lineWithOrderJoin.join(*lineitem, *validorder));
 
-//            RowFilter linedateFilter([](DataRow &row) {
-//                return row[LineItem::RECEIPTDATE].asByteArray() > row[LineItem::COMMITDATE].asByteArray();
-//            });
             SboostRowFilter linedateFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE);
             auto l1withdate = mat.mat(*linedateFilter.filter(*linewithorder));
 
@@ -214,6 +211,85 @@ namespace lqf {
                           RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
                                   ->field(F_REGULAR, LineItem::SUPPKEY, 1)->buildSnapshot(),
                           []() { return vector<AggField *>{new Count()}; });
+            // ORDERKEY, SUPPKEY, COUNT
+            auto l1agged = l1agg.agg(*l1withsupplier);
+
+            // Exist Query
+            HashExistJoin existJoin(LineItem::ORDERKEY, 0,
+                                    new RowBuilder({JR(0), JR(1), JR(2)}),
+                                    [](DataRow &left, DataRow &right) {
+                                        return left[LineItem::SUPPKEY].asInt() != right[1].asInt();
+                                    });
+            auto l1exist = existJoin.join(*linewithorder, *l1agged);
+
+            // Non-Exist Query
+            HashNotExistJoin notExistJoin(LineItem::ORDERKEY, 0,
+                                          new RowBuilder({JR(0), JR(1), JR(2)}),
+                                          [](DataRow &left, DataRow &right) {
+                                              return left[LineItem::SUPPKEY].asInt() != right[1].asInt();
+                                          });
+            // ORDERKEY, SUPPKEY, COUNT
+            auto l1valid = notExistJoin.join(*l1withdate, *l1exist);
+
+            HashAgg countagg(COL_HASHER(1),
+                             RowCopyFactory().field(F_REGULAR, 1, 0)->buildSnapshot(),
+                             []() { return vector<AggField *>{new IntSum(2)}; });
+            // SUPPKEY, COUNT
+            auto suppsum = countagg.agg(*l1valid);
+
+            HashJoin lineitemSupplierFilter(Supplier::SUPPKEY, 0, new RowBuilder({JLS(Supplier::NAME), JR(1)}));
+            // SUPPNAME, COUNT
+            auto supplierWithCount = lineitemSupplierFilter.join(*validSupplier, *suppsum);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SIGE(1) || (SIE(1) && SBLE(0));
+            };
+            TopN topn(100, comparator);
+            auto sorted = topn.sort(*supplierWithCount);
+
+            Printer printer(PBEGIN PI(1) PB(0) PEND);
+            printer.print(*sorted);
+        }
+
+        void executeQ21() {
+            auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::ORDERSTATUS});
+            auto lineitem = ParquetTable::Open(LineItem::path,
+                                               {LineItem::SUPPKEY, LineItem::ORDERKEY, LineItem::RECEIPTDATE,
+                                                LineItem::COMMITDATE});
+            auto supplier = ParquetTable::Open(Supplier::path,
+                                               {Supplier::SUPPKEY, Supplier::NATIONKEY, Supplier::NAME});
+
+            FilterMat mat;
+
+            ColFilter orderFilter(new SboostPredicate<ByteArrayType>(Orders::ORDERSTATUS,
+                                                                     bind(&ByteArrayDictEq::build, status)));
+            auto validorder = orderFilter.filter(*order);
+
+            SboostRowFilter linedateFilter(LineItem::COMMITDATE, LineItem::RECEIPTDATE);
+            auto validitems = mat.mat(*linedateFilter.filter(*lineitem));
+
+            HashMat hashMat(Orders::ORDERKEY, nullptr);
+
+            FilterJoin filter(Orders::ORDERKEY, LineItem::ORDERKEY, 5000000);
+            auto ordersWithItem = hashMat.mat(*filter.join(*validorder, *validitems));
+
+            FilterJoin filter2(LineItem::ORDERKEY, Orders::ORDERKEY);
+            auto l1withdate = mat.mat(*filter2.join(*validitems, *ordersWithItem));
+
+            FilterJoin filter3(LineItem::ORDERKEY, Orders::ORDERKEY);
+            auto linewithorder = filter3.join(*lineitem, *ordersWithItem);
+
+            ColFilter supplierNationFilter(new SboostPredicate<Int32Type>(Supplier::NATIONKEY,
+                                                                          bind(&Int32DictEq::build, 3)));
+            auto validSupplier = mat.mat(*supplierNationFilter.filter(*supplier));
+
+            FilterJoin l1withsupplierJoin(LineItem::SUPPKEY, Supplier::SUPPKEY);
+            auto l1withsupplier = l1withsupplierJoin.join(*l1withdate, *validSupplier);
+
+            HashLargeAgg l1agg(COL_HASHER2(LineItem::ORDERKEY, LineItem::SUPPKEY),
+                               RowCopyFactory().field(F_REGULAR, LineItem::ORDERKEY, 0)
+                                       ->field(F_REGULAR, LineItem::SUPPKEY, 1)->buildSnapshot(),
+                               []() { return vector<AggField *>{new Count()}; });
             // ORDERKEY, SUPPKEY, COUNT
             auto l1agged = l1agg.agg(*l1withsupplier);
 

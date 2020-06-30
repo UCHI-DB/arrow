@@ -46,14 +46,15 @@ namespace lqf {
             // ORDERKEY, SUM_QUANTITY
 
             auto withOrderJoin = graph.add(new HashJoin(Orders::ORDERKEY, 0, new RowBuilder(
-                    {JL(Orders::CUSTKEY), JLS(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)}, true)),
+                    {JL(Orders::CUSTKEY), JLR(Orders::ORDERDATE), JL(Orders::TOTALPRICE), JR(1)}, true)),
                                            {order, hashAgg});
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY
 
             auto withCustomerJoin = graph.add(
-                    new HashColumnJoin(1, Customer::CUSTKEY,
-                                       new ColumnBuilder({JL(0), JL(1), JLS(2), JL(3), JL(4), JRS(Customer::NAME)})),
-                    {withOrderJoin, customer});
+                    new HashMultiJoin(Customer::CUSTKEY, 1,
+                                      new RowBuilder(
+                                              {JR(0), JR(1), JR(2), JR(3), JR(4), JLS(Customer::NAME)})),
+                    {customer, withOrderJoin});
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY,CUSTNAME
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -61,7 +62,7 @@ namespace lqf {
             };
             auto topn = graph.add(new TopN(100, comparator), {withCustomerJoin});
 
-            graph.add(new Printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND), {topn});
+            graph.add(new Printer(PBEGIN PB(5) PI(1) PI(0) PI(2) PD(3) PI(4) PEND), {topn});
             graph.execute();
         }
 
@@ -88,20 +89,22 @@ namespace lqf {
             // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY
             auto withOrder = withOrderJoin.join(*order, *validLineitem);
 
-//            HashColumnJoin withCustomerJoin(1, Customer::CUSTKEY,
-//                                            new ColumnBuilder(
-//                                                    {JL(0), JL(1), JLS(2), JL(3), JL(4), JRS(Customer::NAME)}));
-//            // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY,CUSTNAME
-//            auto withCustomer = withCustomerJoin.join(*withOrder, *customer);
-//
-//            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-//                return SDGE(3) || (SDE(3) && SBLE(2));
-//            };
-//            TopN topn(100, comparator);
-//            auto sorted = topn.sort(*withCustomer);
-//
-//            Printer printer(PBEGIN PB(5) PI(1) PI(0) PB(2) PD(3) PI(4) PEND);
-//            printer.print(*sorted);
+            HashMultiJoin withCustomerJoin(Customer::CUSTKEY, 1,
+                                           new RowBuilder(
+                                                   {JR(0), JR(1), JR(2), JR(3), JR(4), JLS(Customer::NAME)}));
+            // ORDERKEY, CUSTKEY, ORDERDATE, TOTALPRICE, SUM_QUANTITY,CUSTNAME
+            auto withCustomer = withCustomerJoin.join(*customer, *withOrder);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SDGE(3) || (SDE(3) && SBLE(2));
+            };
+            TopN topn(100, comparator);
+            auto sorted = topn.sort(*withCustomer);
+
+            auto dict = order->LoadDictionary<ByteArrayType>(Orders::ORDERDATE);
+            auto pdict = dict.get();
+            Printer printer(PBEGIN PB(5) PI(1) PI(0) PDICT(pdict, 2) PD(3) PI(4) PEND);
+            printer.print(*sorted);
         }
     }
 }

@@ -39,7 +39,7 @@ namespace lqf {
 
             class PhoneBuilder : public RowBuilder {
             public:
-                PhoneBuilder() : RowBuilder({JRS(Customer::PHONE), JR(Customer::ACCTBAL)}, false, false) {}
+                PhoneBuilder() : RowBuilder({JR(Customer::ACCTBAL), JR(Customer::ACCTBAL)}, false, false) {}
 
                 void init() override {
                     RowBuilder::init();
@@ -133,12 +133,8 @@ namespace lqf {
             // PHONE, ACCTBAL
 //            auto noorderCust = notExistJoin.join(*order, *filteredCust);
 
-            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
-                ByteArray &val = input[0].asByteArray();
-                return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
-            };
             auto agg = graph.add(new HashAgg(
-                    hasher,
+                    COL_HASHER(0),
                     RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
                     []() { return vector<AggField *>{new DoubleSum(1), new Count()}; }), {notExistJoin});
 //            auto result = agg.agg(*noorderCust);
@@ -154,7 +150,7 @@ namespace lqf {
             graph.execute();
         }
 
-        void executeQ22Backup() {
+        void executeQ22_Backup() {
             auto customer = ParquetTable::Open(Customer::path, {Customer::PHONE, Customer::ACCTBAL, Customer::CUSTKEY});
             auto order = ParquetTable::Open(Orders::path, {Orders::ORDERKEY, Orders::CUSTKEY});
 
@@ -178,11 +174,7 @@ namespace lqf {
             // PHONE_PREFIX, ACCTBAL
             auto noorderCust = notExistJoin.join(*order, *filteredCust);
 
-            function<uint64_t(DataRow &)> hasher = [](DataRow &input) {
-                ByteArray &val = input[0].asByteArray();
-                return (static_cast<int64_t>(val.ptr[0]) << 8) + val.ptr[1];
-            };
-            HashAgg agg(hasher,
+            HashAgg agg(COL_HASHER(0),
                         RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
                         []() { return vector<AggField *>{new DoubleSum(1), new Count()}; });
             auto result = agg.agg(*noorderCust);
