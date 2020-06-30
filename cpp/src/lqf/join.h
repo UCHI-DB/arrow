@@ -64,7 +64,7 @@ namespace lqf {
 
             inline vector<uint32_t> &outputColSize() { return output_col_size_; }
 
-            inline vector<uint32_t>&outputColOffset() { return output_col_offset_; }
+            inline vector<uint32_t> &outputColOffset() { return output_col_offset_; }
 
             inline Snapshoter *snapshoter() { return snapshoter_.get(); }
         };
@@ -136,7 +136,11 @@ namespace lqf {
 
         inline void useOuter() { outer_ = true; };
     protected:
-        virtual void probe(MemTable *, const shared_ptr<Block> &leftBlock) = 0;
+        virtual shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock) = 0;
+
+        shared_ptr<Block> makeBlock(uint32_t);
+
+        shared_ptr<TableView> makeTable(unique_ptr<Stream<shared_ptr<Block>>>);
     };
 
     class HashJoin : public HashBasedJoin {
@@ -150,7 +154,7 @@ namespace lqf {
         RowBuilder *rowBuilder_;
         function<bool(DataRow &, DataRow &)> predicate_;
 
-        void probe(MemTable *, const shared_ptr<Block> &) override;
+        virtual shared_ptr<Block> probe(const shared_ptr<Block> &) override;
     };
 
     class FilterJoin : public Join {
@@ -172,7 +176,7 @@ namespace lqf {
         void useAnti() { anti_ = true; }
 
     protected:
-        virtual shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock);
+        virtual shared_ptr<Block> probe(const shared_ptr<Block> &);
     };
 
     class FilterTransformJoin : public FilterJoin {
@@ -221,7 +225,7 @@ namespace lqf {
     protected:
         function<bool(DataRow &, DataRow &)> predicate_;
 
-        void probe(MemTable *, const shared_ptr<Block> &leftBlock) override;
+        shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock) override;
 
         shared_ptr<SimpleBitmap> probeWithPredicate(const shared_ptr<Block> &leftBlock);
     };
@@ -237,7 +241,7 @@ namespace lqf {
 
     protected:
 
-        void probe(MemTable *, const shared_ptr<Block> &) override;
+        void scan(const shared_ptr<Block> &);
 
     };
 
@@ -256,7 +260,7 @@ namespace lqf {
     protected:
         ColumnBuilder *columnBuilder_;
 
-        void probe(MemTable *, const shared_ptr<Block> &) override;
+        shared_ptr<Block> probe(const shared_ptr<Block> &) override;
     };
 
     /**
@@ -269,13 +273,13 @@ namespace lqf {
         unique_ptr<RowBuilder> builder_;
         unordered_map<int32_t, unique_ptr<vector<unique_ptr<MemDataRow>>>> container_;
 
-        void buildmap(const shared_ptr<Block>&);
+        void buildmap(const shared_ptr<Block> &);
 
         shared_ptr<Block> probe(const shared_ptr<Block> &);
 
     public:
 
-        HashMultiJoin(uint32_t, uint32_t, RowBuilder*);
+        HashMultiJoin(uint32_t, uint32_t, RowBuilder *);
 
         shared_ptr<Table> join(Table &, Table &) override;
     };

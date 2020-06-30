@@ -187,12 +187,12 @@ namespace lqf {
         return data_.data();
     }
 
-    MemBlock::MemBlock(uint32_t size, uint32_t row_size, const vector<uint32_t> &col_offset)
-            : size_(size), row_size_(row_size), col_offset_(col_offset) {
+    MemBlock::MemBlock(uint32_t size, const vector<uint32_t> &col_offset)
+            : size_(size), row_size_(col_offset.back()), col_offset_(col_offset) {
         content_ = vector<uint64_t>(size * row_size_);
     }
 
-    MemBlock::MemBlock(uint32_t size, uint32_t row_size) : MemBlock(size, row_size, OFFSETS[row_size]) {}
+    MemBlock::MemBlock(uint32_t size, uint32_t row_size) : MemBlock(size, OFFSETS[row_size]) {}
 
     uint64_t MemBlock::size() {
         return size_;
@@ -1017,7 +1017,7 @@ namespace lqf {
         if (vertical_)
             block = make_shared<MemvBlock>(num_rows, col_size_);
         else
-            block = make_shared<MemBlock>(num_rows, row_size_, col_offset_);
+            block = make_shared<MemBlock>(num_rows, col_offset_);
 
         std::unique_lock lock(write_lock_);
         blocks_.push_back(block);

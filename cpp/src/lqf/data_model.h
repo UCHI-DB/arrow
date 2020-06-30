@@ -217,7 +217,7 @@ namespace lqf {
 
         vector<uint64_t> content_;
     public:
-        MemBlock(uint32_t size, uint32_t row_size, const vector<uint32_t> &col_offset);
+        MemBlock(uint32_t size, const vector<uint32_t> &col_offset);
 
         MemBlock(uint32_t size, uint32_t row_size);
 

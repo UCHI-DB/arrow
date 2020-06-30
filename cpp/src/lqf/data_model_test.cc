@@ -42,7 +42,7 @@ TEST(MemBlockTest, Column) {
 
 TEST(MemBlockTest, ColumnString) {
     vector<uint32_t> col_offsets({0, 1, 2, 4});
-    MemBlock mb(100, 5, col_offsets);
+    MemBlock mb(100, col_offsets);
 
     char buffer[3000];
     for (int i = 0; i < 3000; ++i) {
@@ -92,7 +92,7 @@ TEST(MemBlockTest, ColumnString) {
 
 TEST(MemBlockTest, Row) {
     vector<uint32_t> col_offsets({0, 1, 2, 4});
-    MemBlock mb(100, 5, col_offsets);
+    MemBlock mb(100, col_offsets);
 
     char buffer[3000];
     for (int i = 0; i < 3000; ++i) {
@@ -139,7 +139,7 @@ TEST(MemBlockTest, Row) {
 
 TEST(MemBlockTest, RowCopy) {
     vector<uint32_t> col_offsets({0, 1, 2, 4, 5});
-    MemBlock mb(100, 5, col_offsets);
+    MemBlock mb(100, col_offsets);
 
     char buffer[3000];
     for (int i = 0; i < 3000; ++i) {

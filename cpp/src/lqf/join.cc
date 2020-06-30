@@ -188,20 +188,29 @@ namespace lqf {
 
         container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter(), expect_size_);
 
-        auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
-        function<void(const shared_ptr<Block> &)> prober = bind(&HashBasedJoin::probe, this, memTable.get(), _1);
-        left.blocks()->foreach(prober);
-        return memTable;
+        function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashBasedJoin::probe, this, _1);
+        return makeTable(left.blocks()->map(prober));
+    }
+
+    shared_ptr<Block> HashBasedJoin::makeBlock(uint32_t size) {
+        if (builder_->useVertical())
+            return make_shared<MemvBlock>(size, builder_->outputColSize());
+        else
+            return make_shared<MemBlock>(size, builder_->outputColOffset());
+    }
+
+    shared_ptr<TableView> HashBasedJoin::makeTable(unique_ptr<Stream<shared_ptr<Block>>> stream) {
+        return make_shared<TableView>(builder_->useVertical() ? OTHER : RAW, builder_->outputColSize(), move(stream));
     }
 
     HashJoin::HashJoin(uint32_t lk, uint32_t rk, lqf::RowBuilder *builder,
                        function<bool(DataRow &, DataRow &)> pred, uint32_t expect_size)
             : HashBasedJoin(lk, rk, builder, expect_size), rowBuilder_(builder), predicate_(pred) {}
 
-    void HashJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
+    shared_ptr<Block> HashJoin::probe(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         auto leftrows = leftBlock->rows();
-        auto resultblock = output->allocate(leftBlock->size());
+        auto resultblock = makeBlock(leftBlock->size());
         uint32_t counter = 0;
         auto writer = resultblock->rows();
 
@@ -254,6 +263,8 @@ namespace lqf {
             }
         }
         resultblock->resize(counter);
+
+        return resultblock;
     }
 
     FilterJoin::FilterJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, uint32_t expect_size, bool useBitmap)
@@ -348,9 +359,9 @@ namespace lqf {
 
         container_ = HashBuilder::buildContainer(right, rightKeyIndex_, builder_->snapshoter());
 
-        auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
-
         if (predicate_) {
+            auto memTable = MemTable::Make(builder_->outputColSize(), builder_->useVertical());
+
             function<shared_ptr<Bitmap>(const shared_ptr<Block> &)> prober = bind(
                     &HashExistJoin::probeWithPredicate, this, _1);
             auto reducer = [](const shared_ptr<Bitmap> &a, const shared_ptr<Bitmap> &b) {
@@ -366,13 +377,11 @@ namespace lqf {
             while (bitmapite->hasNext()) {
                 (*writerows)[writecount++] = *container_->get(static_cast<int32_t>(bitmapite->next()));
             }
+            return memTable;
         } else {
-            function<void(const shared_ptr<Block> &)> prober = bind(&HashExistJoin::probe, this, memTable.get(),
-                                                                    _1);
-            left.blocks()->foreach(prober);
+            function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashExistJoin::probe, this, _1);
+            return makeTable(left.blocks()->map(prober));
         }
-
-        return memTable;
     }
 
     shared_ptr<SimpleBitmap> HashExistJoin::probeWithPredicate(const shared_ptr<Block> &leftBlock) {
@@ -399,8 +408,8 @@ namespace lqf {
         return local_mask;
     }
 
-    void HashExistJoin::probe(MemTable *output, const shared_ptr<Block> &leftBlock) {
-        auto resultblock = output->allocate(container_->size());
+    shared_ptr<Block> HashExistJoin::probe(const shared_ptr<Block> &leftBlock) {
+        auto resultblock = makeBlock(container_->size());
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         uint32_t counter = 0;
         auto writer = resultblock->rows();
@@ -414,6 +423,7 @@ namespace lqf {
             }
         }
         resultblock->resize(counter);
+        return resultblock;
     }
 
     HashNotExistJoin::HashNotExistJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::JoinBuilder *rowBuilder,
@@ -449,9 +459,9 @@ namespace lqf {
                 }
             }
         } else {
-            function<void(const shared_ptr<Block> &)> prober =
-                    bind(&HashNotExistJoin::probe, this, memTable.get(), _1);
-            left.blocks()->foreach(prober);
+            function<void(const shared_ptr<Block> &)> scanner =
+                    bind(&HashNotExistJoin::scan, this, _1);
+            left.blocks()->foreach(scanner);
 
             auto resultBlock = memTable->allocate(container_->size());
             auto writeRows = resultBlock->rows();
@@ -469,7 +479,7 @@ namespace lqf {
         return memTable;
     }
 
-    void HashNotExistJoin::probe(lqf::MemTable *output, const shared_ptr<Block> &leftBlock) {
+    void HashNotExistJoin::scan(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(leftKeyIndex_);
         auto leftrows = leftBlock->rows();
 
@@ -484,7 +494,7 @@ namespace lqf {
                                    uint32_t expect_size) : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder,
                                                                          expect_size), columnBuilder_(builder) {}
 
-    void HashColumnJoin::probe(lqf::MemTable *owner, const shared_ptr<Block> &leftBlock) {
+    shared_ptr<Block> HashColumnJoin::probe(const shared_ptr<Block> &leftBlock) {
         shared_ptr<MemvBlock> leftvBlock = dynamic_pointer_cast<MemvBlock>(leftBlock);
         /// Make sure the cast is valid
         assert(leftvBlock.get() != nullptr);
@@ -515,11 +525,12 @@ namespace lqf {
             }
         }
 
-        auto newblock = owner->allocate(0);
+        auto newblock = makeBlock(0);
         // Merge result block with original block
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
         columnBuilder_->build(*newvblock, *leftvBlock, vblock);
+        return newvblock;
     }
 
     HashMultiJoin::HashMultiJoin(uint32_t lk, uint32_t rk, RowBuilder *rbuilder)
