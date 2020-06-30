@@ -35,23 +35,12 @@ namespace lqf {
             FunctorBase::operator()(to, from);
         }
 
-        INPUT_TYPE table_type(Table &table) {
-            if (table.isExternal()) {
-                return I_EXTERNAL;
-            }
-            auto mtable = dynamic_cast<MemTable *>(&table);
-            if (mtable && !mtable->isVertical()) {
-                return I_RAW;
-            }
-            return I_OTHER;
-        }
-
-        RowCopyFactory *RowCopyFactory::from(INPUT_TYPE from) {
+        RowCopyFactory *RowCopyFactory::from(TABLE_TYPE from) {
             from_type_ = from;
             return this;
         }
 
-        RowCopyFactory *RowCopyFactory::to(INPUT_TYPE to) {
+        RowCopyFactory *RowCopyFactory::to(TABLE_TYPE to) {
             to_type_ = to;
             return this;
         }
@@ -81,7 +70,7 @@ namespace lqf {
 
         void RowCopyFactory::buildInternal(FunctorBase &base) {
             if (!fields_.empty()) {
-                if (from_type_ == I_RAW && to_type_ == I_RAW
+                if (from_type_ == RAW && to_type_ == RAW
                     && from_offset_.size() > 1 && to_offset_.size() > 1) {
                     // Compute consecutive sections
                     std::sort(fields_.begin(), fields_.end(),
@@ -119,7 +108,7 @@ namespace lqf {
                                               field.to_, field.from_));
                                 break;
                             case F_STRING:
-                                base.add(bind(from_type_ == I_EXTERNAL ? elements::rc_extfield : elements::rc_field,
+                                base.add(bind(from_type_ == EXTERNAL ? elements::rc_extfield : elements::rc_field,
                                               placeholders::_1, placeholders::_2,
                                               field.to_, field.from_));
                                 break;
@@ -166,7 +155,7 @@ namespace lqf {
         }
 
         unique_ptr<function<void(DataRow &, DataRow &)> >
-        RowCopyFactory::buildAssign(INPUT_TYPE from, INPUT_TYPE to, uint32_t num_fields) {
+        RowCopyFactory::buildAssign(TABLE_TYPE from, TABLE_TYPE to, uint32_t num_fields) {
             this->from(from);
             this->to(to);
             auto offset = colOffset(num_fields);
@@ -179,7 +168,7 @@ namespace lqf {
         }
 
         unique_ptr<function<void(DataRow &, DataRow &)> >
-        RowCopyFactory::buildAssign(INPUT_TYPE from, INPUT_TYPE to, vector<uint32_t> &col_offset) {
+        RowCopyFactory::buildAssign(TABLE_TYPE from, TABLE_TYPE to, vector<uint32_t> &col_offset) {
             this->from(from);
             this->to(to);
             this->from_layout(col_offset);

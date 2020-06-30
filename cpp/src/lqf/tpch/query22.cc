@@ -43,7 +43,7 @@ namespace lqf {
 
                 void init() override {
                     RowBuilder::init();
-                    snapshoter_ = RowCopyFactory().from(right_type_)->to(I_RAW)
+                    snapshoter_ = RowCopyFactory().from(right_type_)->to(RAW)
                             ->to_layout(colOffset(2))
                             ->process(phone_snapshot)
                             ->buildSnapshot();

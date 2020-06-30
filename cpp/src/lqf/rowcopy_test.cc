@@ -12,7 +12,7 @@ using namespace lqf::rowcopy;
 TEST(RowCopyTest, Raw) {
     vector<uint32_t> col_offset{0, 1, 2, 3, 4, 5, 6, 7, 8};
     RowCopyFactory f;
-    auto copier = f.from(I_RAW)->to(I_RAW)
+    auto copier = f.from(RAW)->to(RAW)
             ->from_layout(col_offset)
             ->to_layout(col_offset)
             ->field(F_REGULAR, 0, 0)
@@ -37,7 +37,7 @@ TEST(RowCopyTest, Raw) {
     }
 
     RowCopyFactory f2;
-    copier = f2.from(I_RAW)->to(I_RAW)
+    copier = f2.from(RAW)->to(RAW)
             ->from_layout(col_offset)->to_layout(col_offset)
             ->field(F_REGULAR, 0, 3)
             ->field(F_REGULAR, 1, 4)
@@ -64,7 +64,7 @@ TEST(RowCopyTest, Raw) {
 TEST(RowCopyTest, FieldCopy) {
     vector<uint32_t> col_offset{0, 1, 2, 3, 4, 5, 6, 7, 8};
     RowCopyFactory f;
-    auto copier = f.from(I_OTHER)->to(I_OTHER)
+    auto copier = f.from(OTHER)->to(OTHER)
             ->field(F_REGULAR, 0, 0)
             ->field(F_REGULAR, 1, 1)
             ->field(F_REGULAR, 2, 2)
@@ -90,7 +90,7 @@ TEST(RowCopyTest, FieldCopy) {
     }
 
     RowCopyFactory f2;
-    copier = f2.from(I_RAW)->to(I_RAW)
+    copier = f2.from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 2)
             ->field(F_REGULAR, 1, 0)
             ->field(F_REGULAR, 2, 3)
@@ -115,7 +115,7 @@ TEST(RowCopyTest, FieldCopy) {
 TEST(RowCopyTest, FieldCopyWithProcessor) {
     vector<uint32_t> col_offset{0, 1, 2, 3, 4, 5, 6, 7, 8};
     RowCopyFactory f;
-    auto copier = f.from(I_OTHER)->to(I_OTHER)
+    auto copier = f.from(OTHER)->to(OTHER)
             ->process([](DataRow &to, DataRow &from) {
                 for (auto i = 0u; i < 5; ++i) {
                     to[i] = from[i];
@@ -141,7 +141,7 @@ TEST(RowCopyTest, FieldCopyWithProcessor) {
 TEST(RowCopyTest, SnapshotTest) {
     vector<uint32_t> col_offset{0, 1, 2, 3, 4, 5, 6, 7, 8};
     RowCopyFactory f;
-    auto snapshoter = f.from(I_RAW)->to(I_RAW)
+    auto snapshoter = f.from(RAW)->to(RAW)
             ->from_layout(col_offset)
             ->field(F_REGULAR, 3, 0)
             ->field(F_REGULAR, 4, 1)
@@ -173,7 +173,7 @@ TEST(RowCopyTest, SnapshotTest) {
 TEST(RowCopyTest, SnapshotTestWithString) {
     vector<uint32_t> col_offset{0, 1, 2, 3, 5, 6};
     RowCopyFactory f;
-    auto snapshoter = f.from(I_RAW)->to(I_RAW)
+    auto snapshoter = f.from(RAW)->to(RAW)
             ->from_layout(col_offset)
             ->field(F_STRING, 3, 0)
             ->field(F_REGULAR, 4, 1)
@@ -202,7 +202,7 @@ TEST(RowCopyTest, SnapshotTestWithString) {
 TEST(RowCopyTest, SnapshotTestWithProcessor) {
     vector<uint32_t> col_offset{0, 1, 2, 3, 5, 6};
     RowCopyFactory f;
-    auto snapshoter = f.from(I_RAW)->to(I_RAW)
+    auto snapshoter = f.from(RAW)->to(RAW)
             ->from_layout(vector<uint32_t>({0, 1, 2, 3, 5, 6}))
             ->to_layout(vector<uint32_t>({0, 2, 3, 4, 5}))
             ->process([](DataRow &to, DataRow &from) {

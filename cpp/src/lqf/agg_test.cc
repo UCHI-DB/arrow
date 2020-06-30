@@ -138,10 +138,10 @@ TEST(AggFieldTest, IntDistinct) {
 }
 
 TEST(AggReducerTest, Init) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 4);
     AggReducer reducer(colOffset(4), header_copier.get(),
                        {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
     MemDataRow storage(colOffset(4));
@@ -159,10 +159,10 @@ TEST(AggReducerTest, Init) {
 }
 
 TEST(AggReducerTest, Reduce) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 4);
     AggReducer reducer(colOffset(4), header_copier.get(),
                        {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
     MemDataRow storage(colOffset(4));
@@ -187,10 +187,10 @@ TEST(AggReducerTest, Reduce) {
 }
 
 TEST(AggReducerTest, Merge) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 4);
     AggReducer reducer1(colOffset(4), header_copier.get(),
                         {new IntMax(2), new Count()}, vector<uint32_t>{2, 3});
     AggReducer reducer2(colOffset(4), header_copier.get(),
@@ -213,10 +213,10 @@ TEST(AggReducerTest, Merge) {
 }
 
 TEST(HashLargeCoreTest, Reduce) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 3);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 3);
     auto reducer = unique_ptr<AggReducer>(
             new AggReducer(colOffset(3), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{2, 3}));
@@ -243,10 +243,10 @@ TEST(HashLargeCoreTest, Reduce) {
 }
 
 TEST(HashLargeCoreTest, Merge) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)->field(F_REGULAR, 1, 1)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 4);
     auto reducer1 = unique_ptr<AggReducer>(
             new AggReducer(colOffset(4), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{2, 3}));
@@ -292,9 +292,9 @@ TEST(HashLargeCoreTest, Merge) {
 }
 
 TEST(HashLargeCoreTest, Dump) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 3);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 3);
     auto reducer = unique_ptr<AggReducer>(
             new AggReducer(colOffset(3), header_copier.get(),
                            {new IntMax(2), new Count()}, vector<uint32_t>{1, 2}));
@@ -455,10 +455,10 @@ TEST(RecordingMinTest, Merge) {
 }
 
 TEST(RecordingHashCoreTest, Dump) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 3);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, RAW, 3);
     function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
     function<unique_ptr<AggReducer>()> rcgen = [&header_copier]() {
         return unique_ptr<AggReducer>(new AggReducer(colOffset(3), header_copier.get(),
@@ -514,10 +514,10 @@ TEST(RecordingHashCoreTest, Dump) {
 }
 
 TEST(RecordingHashCoreTest, DumpVertical) {
-    auto header_copier = RowCopyFactory().from(I_RAW)->to(I_RAW)
+    auto header_copier = RowCopyFactory().from(RAW)->to(RAW)
             ->field(F_REGULAR, 0, 0)
             ->layout_snapshot()->buildSnapshot();
-    auto row_copier = RowCopyFactory().buildAssign(I_RAW, I_OTHER, 3);
+    auto row_copier = RowCopyFactory().buildAssign(RAW, OTHER, 3);
     function<uint64_t(DataRow &)> hasher = [](DataRow &row) { return row[0].asInt(); };
     function<unique_ptr<AggReducer>()> rcgen = [&header_copier]() {
         return unique_ptr<AggReducer>(new AggReducer(colOffset(3), header_copier.get(),

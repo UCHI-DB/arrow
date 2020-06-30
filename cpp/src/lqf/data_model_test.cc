@@ -649,7 +649,7 @@ TEST(MemTableTest, Create) {
 TEST(TableViewTest, Create) {
     auto parquetTable = ParquetTable::Open("testres/lineitem");
     auto blocks = parquetTable->blocks();
-    TableView tableView(parquetTable.get(), parquetTable->colSize(), move(blocks));
+    TableView tableView(parquetTable->type(), parquetTable->colSize(), move(blocks));
 
     tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
 //    tableView.blocks()->foreach([](const shared_ptr<Block> &block) { cout << block->size() << endl; });
@@ -669,7 +669,7 @@ TEST(DataRowTest, Copy) {
     srand(time(NULL));
 
     using namespace rowcopy;
-    auto copier = RowCopyFactory().buildAssign(I_RAW, I_RAW, 4);
+    auto copier = RowCopyFactory().buildAssign(RAW, RAW, 4);
 
     for (int i = 0; i < 100; ++i) {
         (*rows1)[i][0] = rand();

@@ -13,12 +13,12 @@ namespace lqf {
     namespace join {
 
         JoinBuilder::JoinBuilder(initializer_list<int32_t> initList, bool needkey, bool vertical) :
-                needkey_(needkey), vertical_(vertical), field_list_(initList), left_type_(I_OTHER),
-                right_type_(I_OTHER) {}
+                needkey_(needkey), vertical_(vertical), field_list_(initList), left_type_(OTHER),
+                right_type_(OTHER) {}
 
         void JoinBuilder::on(Table &left, Table &right) {
-            left_type_ = table_type(left);
-            right_type_ = table_type(right);
+            left_type_ = left.type();
+            right_type_ = right.type();
 
             left_col_offset_ = size2offset(left.colSize());
             right_col_offset_ = size2offset(right.colSize());
@@ -31,7 +31,7 @@ namespace lqf {
             RowCopyFactory snapshot_factory;
 
             snapshot_factory.from(right_type_);
-            snapshot_factory.to(I_RAW);
+            snapshot_factory.to(RAW);
 
             output_col_offset_.push_back(0);
             if (needkey_) {
@@ -81,10 +81,10 @@ namespace lqf {
             RowCopyFactory left_factory;
             RowCopyFactory right_factory;
 
-            auto dest_type = vertical_ ? I_OTHER : I_RAW;
+            auto dest_type = vertical_ ? OTHER : RAW;
             left_factory.from(left_type_);
             left_factory.to(dest_type);
-            right_factory.from(I_RAW);
+            right_factory.from(RAW);
             right_factory.to(dest_type);
 
             for (auto &inst: field_list_) {
@@ -277,7 +277,7 @@ namespace lqf {
         auto duration = duration_cast<microseconds>(stop - start);
         cout << "Filter Join " << name_ << " Time taken: " << duration.count() << " microseconds" << endl;
 #endif
-        return make_shared<TableView>(&left, left.colSize(), left.blocks()->map(prober));
+        return make_shared<TableView>(left.type(), left.colSize(), left.blocks()->map(prober));
     }
 
 
@@ -459,7 +459,7 @@ namespace lqf {
             uint32_t counter = 0;
             while (iterator->hasNext()) {
                 ++counter;
-                if(counter > container_->size()) {
+                if (counter > container_->size()) {
                     break;
                 }
                 auto entry = iterator->next();
@@ -552,7 +552,7 @@ namespace lqf {
 
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashMultiJoin::probe, this, _1);
 
-        return make_shared<TableView>(&left, builder_->outputColSize(), left.blocks()->map(prober));
+        return make_shared<TableView>(RAW, builder_->outputColSize(), left.blocks()->map(prober));
     }
 
     shared_ptr<Block> HashMultiJoin::probe(const shared_ptr<Block> &left_block) {
@@ -716,7 +716,7 @@ namespace lqf {
 
             function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&PowerHashFilterJoin::probe, this,
                                                                                  _1);
-            return make_shared<TableView>(&left, left.colSize(), left.blocks()->map(prober));
+            return make_shared<TableView>(left.type(), left.colSize(), left.blocks()->map(prober));
         }
 
     }

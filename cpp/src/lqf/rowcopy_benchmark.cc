@@ -31,7 +31,7 @@ public:
         mem_source_ = make_shared<MemBlock>(300000, 8);
 
         rowcopy::RowCopyFactory f;
-        copier1_ = f.from(I_RAW)->to(I_RAW)
+        copier1_ = f.from(RAW)->to(RAW)
                 ->from_layout(vector<uint32_t>{0, 1, 2, 3, 4, 5, 6, 7, 8})
                 ->to_layout(vector<uint32_t>{0, 1, 2, 3, 4, 5, 6, 7, 8})
                 ->field(F_REGULAR, 0, 0)
@@ -44,7 +44,7 @@ public:
                 ->field(F_REGULAR, 7, 7)
                 ->build();
         rowcopy::RowCopyFactory f2;
-        copier2_ = f2.from(I_EXTERNAL)->to(I_RAW)
+        copier2_ = f2.from(EXTERNAL)->to(RAW)
                 ->field(F_REGULAR, 0, 0)
                 ->field(F_REGULAR, 1, 1)
                 ->field(F_REGULAR, 2, 2)

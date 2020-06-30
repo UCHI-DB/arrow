@@ -666,7 +666,7 @@ namespace lqf {
             delete field;
         }
         col_size_ = offset2size(col_offset_);
-        row_copier_ = RowCopyFactory().buildAssign(I_RAW, vertical_ ? I_OTHER : I_RAW, col_offset_);
+        row_copier_ = RowCopyFactory().buildAssign(RAW, vertical_ ? OTHER : RAW, col_offset_);
     }
 
     template<typename CORE>
@@ -684,7 +684,7 @@ namespace lqf {
         col_offset_.push_back(col_offset_.back() + 1);
 
         col_size_ = offset2size(col_offset_);
-        row_copier_ = RowCopyFactory().buildAssign(I_RAW, vertical_ ? I_OTHER : I_RAW, col_offset_);
+        row_copier_ = RowCopyFactory().buildAssign(RAW, vertical_ ? OTHER : RAW, col_offset_);
     }
 
     template<class CORE>
@@ -815,7 +815,7 @@ namespace lqf {
             delete field;
         }
         col_size_ = offset2size(col_offset_);
-        data_copier_ = RowCopyFactory().buildAssign(I_RAW, I_RAW, col_offset_);
+        data_copier_ = RowCopyFactory().buildAssign(RAW, RAW, col_offset_);
     }
 
     unique_ptr<NodeOutput> StripeHashAgg::execute(const vector<NodeOutput *> &input) {

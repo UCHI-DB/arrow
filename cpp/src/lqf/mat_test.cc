@@ -63,7 +63,7 @@ using namespace lqf::rowcopy;
 TEST(HashMatTest, Mat) {
     auto ptable = ParquetTable::Open("testres/nation", 7);
 
-    HashMat mat(0, RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->field(F_STRING, 1, 0)->buildSnapshot());
+    HashMat mat(0, RowCopyFactory().from(EXTERNAL)->to(RAW)->field(F_STRING, 1, 0)->buildSnapshot());
 
     auto result = mat.mat(*ptable);
     EXPECT_EQ(result->colSize(), vector<uint32_t>({2}));

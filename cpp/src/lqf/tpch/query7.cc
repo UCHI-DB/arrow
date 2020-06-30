@@ -43,7 +43,7 @@ namespace lqf {
         void executeQ7() {
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
             HashMat nationMat(Nation::NATIONKEY, RowCopyFactory()
-                    .from(I_EXTERNAL)->to(I_RAW)
+                    .from(EXTERNAL)->to(RAW)
                     ->field(F_STRING, Nation::NAME, 0)->buildSnapshot());
             auto matNation = nationMat.mat(*nationTable);
 
@@ -143,7 +143,7 @@ namespace lqf {
         void executeQ7Backup() {
             auto nationTable = ParquetTable::Open(Nation::path, {Nation::NAME, Nation::NATIONKEY});
             HashMat nationMat(Nation::NATIONKEY, RowCopyFactory()
-                    .from(I_EXTERNAL)->to(I_RAW)
+                    .from(EXTERNAL)->to(RAW)
                     ->field(F_STRING, Nation::NAME, 0)->buildSnapshot());
             auto matNation = nationMat.mat(*nationTable);
 

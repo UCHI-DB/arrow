@@ -37,8 +37,8 @@ namespace lqf {
 
             vector<int32_t> field_list_;
 
-            INPUT_TYPE left_type_;
-            INPUT_TYPE right_type_;
+            TABLE_TYPE left_type_;
+            TABLE_TYPE right_type_;
 
             vector<uint32_t> left_col_offset_;
             vector<uint32_t> right_col_offset_;

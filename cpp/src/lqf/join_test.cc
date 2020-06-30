@@ -806,7 +806,7 @@ TEST(FilterTransformJoinTest, Join) {
     (*rows)[3][1] = 3;
     (*rows)[4][1] = 4;
 
-    auto snapshot = RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->to_layout(colOffset(3))
+    auto snapshot = RowCopyFactory().from(EXTERNAL)->to(RAW)->to_layout(colOffset(3))
             ->process([](DataRow &output, DataRow &input) {
                 output[0] = input[4].asInt() * input[5].asDouble();
                 output[1] = input[4];

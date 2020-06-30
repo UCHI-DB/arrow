@@ -60,9 +60,9 @@ namespace lqf {
 
             auto join_obj = new FilterTransformJoin(
                     LineItem::PARTKEY, Part::PARTKEY,
-                    RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->to_layout(colOffset(2))
+                    RowCopyFactory().from(EXTERNAL)->to(RAW)->to_layout(colOffset(2))
                             ->process(compute_match)->buildSnapshot(),
-                    RowCopyFactory().from(I_EXTERNAL)->to(I_RAW)->to_layout(colOffset(2))
+                    RowCopyFactory().from(EXTERNAL)->to(RAW)->to_layout(colOffset(2))
                             ->process(compute_unmatch)->buildSnapshot()
             );
             auto join = graph.add(join_obj, {lineitemShipdateFilter, partFilter});

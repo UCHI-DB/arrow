@@ -908,7 +908,7 @@ namespace lqf {
 
     ParquetTable::ParquetTable(const string &fileName, uint64_t columns)
             : name_(fileName), columns_(columns) {
-        external_ = true;
+        type_ = EXTERNAL;
         fileReader_ = ParquetFileReader::OpenFile(fileName);
         if (!fileReader_) {
             throw std::invalid_argument("ParquetTable-Open: file not found");
@@ -962,7 +962,7 @@ namespace lqf {
 
     MaskedTable::MaskedTable(ParquetTable *inner, vector<shared_ptr<Bitmap>> &masks)
             : inner_(inner), masks_(masks) {
-        external_ = inner_->isExternal();
+        type_ = inner->type();
         masks_.resize(inner_->numBlocks());
     }
 
@@ -983,9 +983,10 @@ namespace lqf {
         return make_shared<MaskedBlock>(pblock, masks_[pblock->index()]);
     }
 
-    TableView::TableView(Table *ref, const vector<uint32_t> &col_size, unique_ptr<Stream<shared_ptr<Block>>> stream)
+    TableView::TableView(TABLE_TYPE type, const vector<uint32_t> &col_size,
+                         unique_ptr<Stream<shared_ptr<Block>>> stream)
             : col_size_(col_size), stream_(move(stream)) {
-        external_ = ref->isExternal();
+        type_ = type;
     }
 
     const vector<uint32_t> &TableView::colSize() {
@@ -997,17 +998,17 @@ namespace lqf {
     }
 
     shared_ptr<MemTable> MemTable::Make(uint8_t num_fields, bool vertical) {
-        return shared_ptr<MemTable>(new MemTable(lqf::colSize(num_fields), vertical));
+        return make_shared<MemTable>(lqf::colSize(num_fields), vertical);
     }
 
     shared_ptr<MemTable> MemTable::Make(const vector<uint32_t> col_size, bool vertical) {
-        return shared_ptr<MemTable>(new MemTable(col_size, vertical));
+        return make_shared<MemTable>(col_size, vertical);
     }
 
     MemTable::MemTable(const vector<uint32_t> col_size, bool vertical)
             : vertical_(vertical), col_size_(col_size), row_size_(0),
               col_offset_(lqf::size2offset(col_size)), blocks_(vector<shared_ptr<Block>>()) {
-        external_ = false;
+        type_ = vertical_ ? OTHER : RAW;
         row_size_ = col_offset_.back();
     }
 

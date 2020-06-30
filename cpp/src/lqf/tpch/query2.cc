@@ -61,7 +61,7 @@ namespace lqf {
             auto nrJoin = graph.add(new FilterJoin(Nation::REGIONKEY, Region::REGIONKEY), {nation, regionFilter});
 
             auto nationMat = graph.add(new HashMat(Nation::NATIONKEY, RowCopyFactory()
-                    .from(I_EXTERNAL)->to(I_RAW)
+                    .from(EXTERNAL)->to(RAW)
                     ->field(F_STRING, Nation::NAME, 0)->buildSnapshot()), {nrJoin});
 
             auto snJoin = graph.add(new FilterJoin(Supplier::NATIONKEY, Nation::NATIONKEY), {supplier, nationMat});
@@ -140,7 +140,7 @@ namespace lqf {
             auto filteredNation = nrJoin.join(*nationTable, *filteredRegion);
 
             HashMat nationMat(Nation::NATIONKEY, RowCopyFactory()
-                    .from(I_EXTERNAL)->to(I_RAW)
+                    .from(EXTERNAL)->to(RAW)
                     ->field(F_STRING, Nation::NAME, 0)->buildSnapshot());
             auto memNationTable = nationMat.mat(*filteredNation);
 

@@ -419,9 +419,13 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
     };
 
+    enum TABLE_TYPE {
+        RAW, EXTERNAL, OTHER
+    };
+
     class Table {
     protected:
-        bool external_ = false;
+        TABLE_TYPE type_ = OTHER;
     public:
         virtual unique_ptr<Stream<shared_ptr<Block>>> blocks() = 0;
 
@@ -433,7 +437,7 @@ namespace lqf {
 
         virtual uint64_t size();
 
-        inline bool isExternal() { return external_; }
+        inline TABLE_TYPE type() { return type_; }
     };
 
     class ParquetTable : public Table {
@@ -490,10 +494,9 @@ namespace lqf {
 
     class TableView : public Table {
         vector<uint32_t> col_size_;
-        Table *root_;
         unique_ptr<Stream<shared_ptr<Block>>> stream_;
     public:
-        TableView(Table *, const vector<uint32_t> &, unique_ptr<Stream<shared_ptr<Block>>>);
+        TableView(TABLE_TYPE, const vector<uint32_t> &, unique_ptr<Stream<shared_ptr<Block>>>);
 
         virtual ~TableView() = default;
 
@@ -501,11 +504,10 @@ namespace lqf {
 
         const vector<uint32_t> &colSize() override;
 
-        inline Table *root() { return root_; }
     };
 
     class MemTable : public Table {
-    private:;
+    protected:
         bool vertical_;
 
         // For columnar view
@@ -518,10 +520,9 @@ namespace lqf {
         vector<shared_ptr<Block>> blocks_;
 
         mutex write_lock_;
-    protected:
+    public:
         MemTable(const vector<uint32_t> col_size, bool vertical);
 
-    public:
         static shared_ptr<MemTable> Make(uint8_t num_fields, bool vertical = false);
 
         static shared_ptr<MemTable> Make(const vector<uint32_t> col_size, bool vertical = false);

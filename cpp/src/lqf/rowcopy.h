@@ -16,12 +16,6 @@ namespace lqf {
 
         using namespace std;
 
-        enum INPUT_TYPE {
-            I_RAW, I_EXTERNAL, I_OTHER
-        };
-
-        INPUT_TYPE table_type(Table &table);
-
         enum FIELD_TYPE {
             F_REGULAR, F_STRING, F_RAW
         };
@@ -62,8 +56,8 @@ namespace lqf {
          */
         class RowCopyFactory {
         protected:
-            INPUT_TYPE from_type_;
-            INPUT_TYPE to_type_;
+            TABLE_TYPE from_type_;
+            TABLE_TYPE to_type_;
             vector<uint32_t> from_offset_;
             vector<uint32_t> to_offset_;
             vector<FieldInst> fields_;
@@ -72,9 +66,9 @@ namespace lqf {
             void buildInternal(FunctorBase &);
 
         public:
-            RowCopyFactory *from(INPUT_TYPE from);
+            RowCopyFactory *from(TABLE_TYPE from);
 
-            RowCopyFactory *to(INPUT_TYPE to);
+            RowCopyFactory *to(TABLE_TYPE to);
 
             RowCopyFactory *from_layout(const vector<uint32_t> &offset);
 
@@ -89,10 +83,10 @@ namespace lqf {
             unique_ptr<function<void(DataRow &, DataRow &)>> build();
 
             unique_ptr<function<void(DataRow &, DataRow &)>>
-            buildAssign(INPUT_TYPE from, INPUT_TYPE to, uint32_t num_fields);
+            buildAssign(TABLE_TYPE from, TABLE_TYPE to, uint32_t num_fields);
 
             unique_ptr<function<void(DataRow &, DataRow &)>>
-            buildAssign(INPUT_TYPE from, INPUT_TYPE to, vector<uint32_t> &col_size);
+            buildAssign(TABLE_TYPE from, TABLE_TYPE to, vector<uint32_t> &col_size);
 
             unique_ptr<Snapshoter> buildSnapshot();
         };

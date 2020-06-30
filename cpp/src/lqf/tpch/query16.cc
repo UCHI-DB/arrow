@@ -85,8 +85,8 @@ namespace lqf {
             };
             auto psagg = graph.add(new HashLargeAgg(hasher,
                                                RowCopyFactory().field(F_REGULAR, 1, 0)->field(F_REGULAR, 2, 1)
-                                                       ->field(F_REGULAR, 3, 2)->from(I_RAW)
-                                                       ->to(I_RAW)->from_layout(colOffset(4))->to_layout(
+                                                       ->field(F_REGULAR, 3, 2)->from(RAW)
+                                                       ->to(RAW)->from_layout(colOffset(4))->to_layout(
                                                                colOffset(3))->buildSnapshot(),
                                                []() { return vector<AggField *>({new IntDistinctCount(0)}); }),
                                    {pswithsJoin});
@@ -154,8 +154,8 @@ namespace lqf {
             };
             HashAgg psagg(hasher,
                           RowCopyFactory().field(F_REGULAR, 1, 0)->field(F_REGULAR, 2, 1)
-                                  ->field(F_REGULAR, 3, 2)->from(I_RAW)
-                                  ->to(I_RAW)->from_layout(colOffset(4))->to_layout(
+                                  ->field(F_REGULAR, 3, 2)->from(RAW)
+                                  ->to(RAW)->from_layout(colOffset(4))->to_layout(
                                           colOffset(3))->buildSnapshot(),
                           []() { return vector<AggField *>({new IntDistinctCount(0)}); });
             auto result = psagg.agg(*partWithSupplier);
