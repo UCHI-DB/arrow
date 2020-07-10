@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.12)
 message(STATUS "Building using CMake version: ${CMAKE_VERSION}")
 
 set(ARROW_VERSION "1.0.0-SNAPSHOT")
