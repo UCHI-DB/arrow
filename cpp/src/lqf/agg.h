@@ -280,6 +280,24 @@ namespace lqf {
 
         };
 
+        class HashStrCore : public CoreBase {
+        protected:
+            function<unique_ptr<AggReducer>()> reducer_gen_;
+            function<string(DataRow &)> &hasher_;
+            const vector<uint32_t> &col_offset_;
+            unordered_map<string, unique_ptr<AggReducer>> map_;
+            MemRowVector rows_;
+        public:
+            HashStrCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>, function<string(DataRow &)> &,
+                     function<void(DataRow &, DataRow &)> *, bool);
+
+            void reduce(DataRow &row);
+
+            void merge(HashStrCore &another);
+
+            void dump(MemTable &table, function<bool(DataRow &)>);
+        };
+
         namespace recording {
 
             class RecordingAggField : public AggField {
@@ -454,6 +472,18 @@ namespace lqf {
         SimpleAgg(function<vector<agg::AggField *>()>,
                   function<bool(DataRow &)> pred = nullptr, bool vertical = false);
 
+    };
+
+    class HashStrAgg : public Agg<agg::HashStrCore> {
+    protected:
+        function<string(DataRow &)> hasher_;
+
+        shared_ptr<agg::HashStrCore> makeCore() override;
+
+    public:
+        HashStrAgg(function<string(DataRow &)>, unique_ptr<Snapshoter>,
+                function<vector<agg::AggField *>()>,
+                function<bool(DataRow &)> pred = nullptr, bool vertical = false);
     };
 
     using namespace agg;

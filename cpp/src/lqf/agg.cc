@@ -477,6 +477,86 @@ namespace lqf {
             (*row_copier_)(row->next(), storage_);
         }
 
+        HashStrCore::HashStrCore(const vector<uint32_t> &col_offset, function<unique_ptr<AggReducer>()> reducer_gen,
+                           function<string(DataRow &)> &hasher,
+                           function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : CoreBase(move(row_copier), need_dump), reducer_gen_(reducer_gen), hasher_(hasher),
+                  col_offset_(col_offset), rows_(col_offset, 16384) {}
+
+        void HashStrCore::reduce(DataRow &row) {
+            auto key = hasher_(row);
+            auto found = map_.find(key);
+            if (__builtin_expect(found != map_.cend(), 1)) {
+                found->second->reduce(row);
+            } else {
+                DataRow &newstorage = rows_.push_back();
+                auto reducer = reducer_gen_();
+                reducer->attach(newstorage.raw());
+                reducer->init(row);
+                map_[key] = move(reducer);
+            }
+        }
+
+        void HashStrCore::merge(HashStrCore &another) {
+            for (auto &ite: another.map_) {
+                auto exist = map_.find(ite.first);
+                if (exist != map_.cend()) {
+                    exist->second->merge(*ite.second);
+                } else {
+                    DataRow &storage = rows_.push_back();
+                    memcpy((void *) storage.raw(), (void *) ite.second->storage()->raw(),
+                           sizeof(uint64_t) * storage.size());
+                    auto &reducer = ite.second;
+                    reducer->attach(storage.raw());
+                    map_[ite.first] = move(reducer);
+                }
+            }
+        }
+
+        void HashStrCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+            auto block = table.allocate(map_.size());
+            auto writerows = block->rows();
+            if (!pred) {
+                if (need_dump_) {
+                    for (auto &iterator:map_) {
+                        iterator.second->dump();
+                        DataRow &next = *(iterator.second->storage());
+                        DataRow &to = writerows->next();
+                        (*row_copier_)(to, next);
+                    }
+                } else {
+                    for (auto &iterator:map_) {
+                        DataRow &next = *(iterator.second->storage());
+                        DataRow &to = writerows->next();
+                        (*row_copier_)(to, next);
+                    }
+                }
+            } else {
+                int counter = 0;
+                if (need_dump_) {
+                    for (auto &iterator:map_) {
+                        iterator.second->dump();
+                        DataRow &next = *(iterator.second->storage());
+                        if (pred(next)) {
+                            DataRow &to = writerows->next();
+                            (*row_copier_)(to, next);
+                            ++counter;
+                        }
+                    }
+                } else {
+                    for (auto &iterator:map_) {
+                        DataRow &next = *(iterator.second->storage());
+                        if (pred(next)) {
+                            DataRow &to = writerows->next();
+                            (*row_copier_)(to, next);
+                            ++counter;
+                        }
+                    }
+                }
+                block->resize(counter);
+            }
+        }
+
         namespace recording {
 
             RecordingAggField::RecordingAggField(uint32_t
@@ -776,6 +856,16 @@ namespace lqf {
 
     shared_ptr<SimpleCore> SimpleAgg::makeCore() {
         return make_shared<SimpleCore>(col_offset_, createReducer(), row_copier_.get(), need_field_dump_);
+    }
+
+    HashStrAgg::HashStrAgg(function<string(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
+                     function<vector<agg::AggField *>()> fields_gen,
+                     function<bool(DataRow &)> pred, bool vertical)
+            : Agg(move(header_copier), fields_gen, pred, vertical), hasher_(hasher) {}
+
+    shared_ptr<HashStrCore> HashStrAgg::makeCore() {
+        function<unique_ptr<AggReducer>()> rc = bind(&HashStrAgg::createReducer, this);
+        return make_shared<HashStrCore>(col_offset_, rc, hasher_, row_copier_.get(), need_field_dump_);
     }
 
     RecordingHashAgg::RecordingHashAgg(function<uint64_t(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,

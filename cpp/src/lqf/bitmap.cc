@@ -106,9 +106,9 @@ namespace lqf {
         // Attention: Due to a glitch in sboost, the bitmap should be one word larger than
         // the theoretical size. Otherwise sboost will read past the boundary and cause
         // memory issues.
-        // In addition, the RLE encoding may have at most 7 entries appended to the tail.
-        // For simplicity, we just make the bitmap at least 64 bit larger.
-        array_size_ = (size >> 6) + 2;
+        // In addition, the RLE encoding may have at most 503 entries appended to the tail.
+        // For simplicity, we just make the bitmap large enough.
+        array_size_ = (size >> 6) + 10;
 //        bitmap_ = (uint64_t *) malloc(sizeof(uint64_t) * array_size_);
         bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);

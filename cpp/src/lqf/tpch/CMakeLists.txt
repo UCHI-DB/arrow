@@ -37,6 +37,14 @@ target_compile_options(tpch_static PUBLIC ${LQF_SIMD_FLAGS})
 
 add_lqf_benchmark(tpchquery_benchmark)
 
+add_lqf_benchmark(filter_onecol_benchmark)
+add_lqf_benchmark(filter_twocol_benchmark)
+add_lqf_benchmark(filter_in_benchmark)
+
+add_lqf_benchmark(agg_dict_benchmark)
+add_lqf_benchmark(agg_stripe_benchmark)
+
+add_lqf_benchmark(join_con_benchmark)
 
 add_tpch_exec(lqf-tpch-query-dev tpchquery_dev.cc)
 add_tpch_exec(lqf-threadsanitizer-exp threadsanitizer_exp.cc)
