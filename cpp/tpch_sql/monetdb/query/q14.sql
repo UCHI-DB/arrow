@@ -8,6 +8,3 @@ from lineitem,
 where l_partkey = p_partkey
   and l_shipdate >= '1995-09-01'
   and l_shipdate < '1995-10-01';
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

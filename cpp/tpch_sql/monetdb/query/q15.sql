@@ -19,6 +19,4 @@ where s_suppkey = supplier_no
     from revenue
 )
 order by s_suppkey;
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;
 drop view revenue;

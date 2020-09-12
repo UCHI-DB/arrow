@@ -22,6 +22,3 @@ where s_suppkey in (
   and s_nationkey = n_nationkey
   and n_name = 'CANADA'
 order by s_name;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

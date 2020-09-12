@@ -35,6 +35,3 @@ group by
     o_year
 order by
     o_year;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

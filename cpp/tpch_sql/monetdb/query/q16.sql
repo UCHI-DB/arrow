@@ -20,6 +20,3 @@ order by supplier_cnt desc,
          p_brand,
          p_type,
          p_size;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

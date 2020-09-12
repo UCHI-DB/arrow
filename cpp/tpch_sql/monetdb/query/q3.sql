@@ -21,6 +21,3 @@ order by
     revenue desc,
     o_orderdate
 limit 10;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

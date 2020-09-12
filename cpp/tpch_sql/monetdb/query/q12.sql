@@ -26,6 +26,3 @@ group by
     l_shipmode
 order by
     l_shipmode;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

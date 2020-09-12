@@ -25,6 +25,3 @@ group by
     )
 order by
     value desc;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

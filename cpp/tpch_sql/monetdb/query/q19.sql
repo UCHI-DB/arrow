@@ -28,6 +28,3 @@ where (
         and l_shipmode in ('AIR', 'REG AIR')
         and l_shipinstruct = 'DELIVER IN PERSON'
     );
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

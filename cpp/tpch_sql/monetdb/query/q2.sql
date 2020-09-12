@@ -35,6 +35,3 @@ order by s_acctbal desc,
          s_name,
          p_partkey
 limit 100;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

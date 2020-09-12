@@ -22,6 +22,3 @@ group by c_name,
          o_totalprice
 order by o_totalprice desc,
          o_orderdate;
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;
