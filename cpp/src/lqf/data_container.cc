@@ -76,10 +76,14 @@ namespace lqf {
             return unique_ptr<Iterator<DataRow &>>(new MemRowVectorIterator(memory_, accessor_.offset(), size_));
         }
 
-        MemRowMap::MemRowMap(const vector<uint32_t> &offset) : MemRowVector(offset) {}
+        MemRowMap::MemRowMap(const vector<uint32_t> &offset) : MemRowVector(offset) {
+            map_.set_empty_key(-1);
+        }
 
         MemRowMap::MemRowMap(const vector<uint32_t> &offset, uint32_t slab_size)
-                : MemRowVector(offset, slab_size) {}
+                : MemRowVector(offset, slab_size) {
+            map_.set_empty_key(-1);
+        }
 
         DataRow &MemRowMap::insert(uint64_t key) {
             push_back();
@@ -115,14 +119,14 @@ namespace lqf {
         class MemRowMapIterator : public Iterator<pair<uint64_t, DataRow &> &> {
         protected:
             vector<shared_ptr<vector<uint64_t>>> &memory_ref_;
-            unordered_map<uint64_t, uint64_t>::iterator map_it_;
-            unordered_map<uint64_t, uint64_t>::const_iterator map_end_;
+            google::dense_hash_map<uint64_t, uint64_t>::iterator map_it_;
+            google::dense_hash_map<uint64_t, uint64_t>::iterator map_end_;
             MemDataRowPointer accessor_;
             pair<uint64_t, DataRow &> pair_;
         public:
             MemRowMapIterator(vector<shared_ptr<vector<uint64_t>>> &ref,
-                              const vector<uint32_t> &offset, unordered_map<uint64_t, uint64_t> &map)
-                    : memory_ref_(ref), map_it_(map.begin()), map_end_(map.cend()), accessor_(offset),
+                              const vector<uint32_t> &offset, google::dense_hash_map<uint64_t, uint64_t> &map)
+                    : memory_ref_(ref), map_it_(map.begin()), map_end_(map.end()), accessor_(offset),
                       pair_(0, accessor_) {}
 
             bool hasNext() override {

@@ -6,6 +6,8 @@
 #define ARROW_AGG_H
 
 #include <unordered_set>
+#include <cuckoohash_map.hh>
+#include <sparsehash/dense_hash_map>
 #include "data_model.h"
 #include "data_container.h"
 #include "rowcopy.h"
@@ -183,9 +185,13 @@ namespace lqf {
             MemDataRowPointer storage_;
             Snapshoter *header_copier_;
         public:
+            explicit AggReducer(AggReducer&&);
+
             AggReducer(const vector<uint32_t> &, Snapshoter *, vector<AggField *>, const vector<uint32_t> &);
 
             AggReducer(const vector<uint32_t> &, Snapshoter *, AggField *, uint32_t);
+
+            AggReducer& operator=(AggReducer&&);
 
             void attach(uint64_t *);
 
@@ -241,6 +247,51 @@ namespace lqf {
             void reduce(DataRow &row);
 
             void merge(HashCore &another);
+
+            void dump(MemTable &table, function<bool(DataRow &)>);
+        };
+
+        class CuckooHashCore : public CoreBase {
+        protected:
+            function<unique_ptr<AggReducer>()> reducer_gen_;
+            function<uint64_t(DataRow &)> &hasher_;
+            const vector<uint32_t> &col_offset_;
+            // Cuckoo cannot do iterate, so use a vector to
+            // store the pointers for later release
+            vector<AggReducer*> clear_buffer_;
+            // Do not use unique_ptr in cuckoo due to the way
+            // cuckoo performs find and use
+            libcuckoo::cuckoohash_map<uint64_t, AggReducer*> map_;
+            MemRowVector rows_;
+        public:
+            CuckooHashCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>, function<uint64_t(DataRow &)> &,
+                     function<void(DataRow &, DataRow &)> *, bool);
+
+            virtual ~CuckooHashCore();
+
+            void reduce(DataRow &row);
+
+            void merge(CuckooHashCore &another);
+
+            void dump(MemTable &table, function<bool(DataRow &)>);
+        };
+
+        class DenseHashCore : public CoreBase {
+        protected:
+            function<unique_ptr<AggReducer>()> reducer_gen_;
+            function<uint64_t(DataRow &)> &hasher_;
+            const vector<uint32_t> &col_offset_;
+            google::dense_hash_map<uint64_t, AggReducer*> map_;
+            MemRowVector rows_;
+        public:
+            DenseHashCore(const vector<uint32_t> &, function<unique_ptr<AggReducer>()>, function<uint64_t(DataRow &)> &,
+                     function<void(DataRow &, DataRow &)> *, bool);
+
+            virtual ~DenseHashCore();
+
+            void reduce(DataRow &row);
+
+            void merge(DenseHashCore &another);
 
             void dump(MemTable &table, function<bool(DataRow &)>);
         };
@@ -447,6 +498,18 @@ namespace lqf {
 
     public:
         HashAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
+                function<vector<agg::AggField *>()>,
+                function<bool(DataRow &)> pred = nullptr, bool vertical = false);
+    };
+
+    class DenseHashAgg : public Agg<agg::DenseHashCore> {
+    protected:
+        function<uint64_t(DataRow &)> hasher_;
+
+        shared_ptr<agg::DenseHashCore> makeCore() override;
+
+    public:
+        DenseHashAgg(function<uint64_t(DataRow &)>, unique_ptr<Snapshoter>,
                 function<vector<agg::AggField *>()>,
                 function<bool(DataRow &)> pred = nullptr, bool vertical = false);
     };

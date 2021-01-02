@@ -5,6 +5,7 @@
 #ifndef ARROW_DATA_CONTAINER_H
 #define ARROW_DATA_CONTAINER_H
 
+#include <sparsehash/dense_hash_map>
 #include "lang.h"
 #include "data_model.h"
 #include "container.h"
@@ -43,7 +44,7 @@ namespace lqf {
 
         class MemRowMap : public MemRowVector {
         protected:
-            unordered_map<uint64_t, uint64_t> map_;
+            google::dense_hash_map<uint64_t, uint64_t> map_;
         public:
             MemRowMap(const vector<uint32_t> &offset);
 

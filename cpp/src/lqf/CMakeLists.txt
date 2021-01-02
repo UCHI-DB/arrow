@@ -41,6 +41,10 @@ function(ADD_LQF_BENCHMARK REL_TEST_NAME)
             ${ARG_UNPARSED_ARGUMENTS})
 endfunction()
 
+# Include the folder of header only libraries
+include_directories(../../external/libcuckoo)
+include_directories(../../external/sparsehash)
+
 set(LQF_SIMD_FLAGS -msse4.1 -mavx -mavx2 -mavx512f -mavx512bw -mavx512dq -mavx512vl -mbmi2)
 set(LQF_BENCHMARK_LINK_LIBS benchmark::benchmark benchmark::benchmark_main Threads::Threads lqf_static)
 
@@ -137,3 +141,5 @@ add_lqf_benchmark(data_container_benchmark)
 add_lqf_benchmark(hash_container_benchmark)
 
 add_subdirectory(tpch)
+
+add_executable(lqf_playground playground.cc)
