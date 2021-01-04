@@ -18,21 +18,22 @@ namespace lqf {
         public:
             static const string path;
             static const int ORDERKEY = 0;
-            static const int PARTKEY = 1;
-            static const int SUPPKEY = 2;
-            static const int LINENUMBER = 3;
-            static const int QUANTITY = 4;
-            static const int EXTENDEDPRICE = 5;
-            static const int DISCOUNT = 6;
-            static const int TAX = 7;
-            static const int RETURNFLAG = 8;
-            static const int LINESTATUS = 9;
-            static const int SHIPDATE = 10;
-            static const int COMMITDATE = 11;
-            static const int RECEIPTDATE = 12;
-            static const int SHIPINSTRUCT = 13;
-            static const int SHIPMODE = 14;
-            static const int COMMENT = 15;
+            static const int LINENUMBER = 1;
+            static const int CUSTKEY = 2;
+            static const int PARTKEY = 3;
+            static const int SUPPKEY = 4;
+            static const int ORDERDATE = 5;
+            static const int ORDPRIORITY = 6;
+            static const int SHIPPRIORITY = 7;
+            static const int QUANTITY = 8;
+            static const int EXTENDEDPRICE = 9;
+            static const int ORDTOTALPRICE = 10;
+            static const int DISCOUNT = 11;
+            static const int REVENUE = 12;
+            static const int SUPPLYCOST = 13;
+            static const int TAX = 14;
+            static const int COMMITDATE = 15;
+            static const int SHIPMODE = 16;
         };
 
         class Part {
@@ -41,12 +42,12 @@ namespace lqf {
             static const int PARTKEY = 0;
             static const int NAME = 1;
             static const int MFGR = 2;
-            static const int BRAND = 3;
-            static const int TYPE = 4;
-            static const int SIZE = 5;
-            static const int CONTAINER = 6;
-            static const int RETAILPRICE = 7;
-            static const int COMMENT = 8;
+            static const int CATEGORY = 3;
+            static const int BRAND = 4;
+            static const int COLOR = 5;
+            static const int TYPE = 6;
+            static const int SIZE = 7;
+            static const int CONTAINER = 8;
         };
 
         class Supplier {
@@ -55,10 +56,10 @@ namespace lqf {
             static const int SUPPKEY = 0;
             static const int NAME = 1;
             static const int ADDRESS = 2;
-            static const int NATIONKEY = 3;
-            static const int PHONE = 4;
-            static const int ACCTBAL = 5;
-            static const int COMMENT = 6;
+            static const int CITY = 3;
+            static const int NATION = 4;
+            static const int REGION = 5;
+            static const int PHONE = 6;
         };
 
         class Customer {
@@ -67,35 +68,36 @@ namespace lqf {
             static const int CUSTKEY = 0;
             static const int NAME = 1;
             static const int ADDRESS = 2;
-            static const int NATIONKEY = 3;
-            static const int PHONE = 4;
-            static const int ACCTBAL = 5;
-            static const int MKTSEGMENT = 6;
-            static const int COMMENT = 7;
+            static const int CITY = 3;
+            static const int NATION = 4;
+            static const int REGION = 5;
+            static const int PHONE = 6;
+            static const int MKTSEGMENT = 7;
         };
 
-        void executeQ1();
-        void executeQ2();
-        void executeQ3();
-        void executeQ4();
-        void executeQ5();
-        void executeQ6();
-        void executeQ7();
-        void executeQ8();
-        void executeQ9();
-        void executeQ10();
-        void executeQ11();
-        void executeQ12();
-        void executeQ13();
-        void executeQ14();
-        void executeQ15();
-        void executeQ16();
-        void executeQ17();
-        void executeQ18();
-        void executeQ19();
-        void executeQ20();
-        void executeQ21();
-        void executeQ22();
+        class Date {
+        public:
+            static const string path;
+            static const int DATEKEY = 0;
+            static const int DATE = 1;
+            static const int DAYOFWEEK = 2;
+            static const int MONTH = 3;
+            static const int YEAR = 4;
+            static const int YEARMONTHNUM = 5;
+            static const int YEARMONTH = 6;
+            static const int DAYNUMINWEEK = 7;
+            static const int DAYNUMINMONTH = 8;
+            static const int DAYNUMINYEAR = 9;
+            static const int MONTHNUMINYEAR = 10;
+            static const int WEEKNUMINYEAR = 11;
+            static const int SELLINGSEASON = 12;
+            static const int LASTDAYINWEEKFL = 13;
+            static const int LASTDAYINMONTHFL = 14;
+            static const int HOLIDAYFL = 15;
+            static const int WEEKDAYFL = 16;
+        };
+
+        void executeQ1_1();
     }
 
     namespace udf {

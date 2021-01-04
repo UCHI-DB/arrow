@@ -1,0 +1,34 @@
+//
+// Created by Harper on 1/2/21.
+//
+
+#ifndef ARROW_QUERY2_H
+#define ARROW_QUERY2_H
+
+#include "../data_model.h"
+#include "../filter.h"
+#include "../agg.h"
+#include "../join.h"
+#include "../print.h"
+#include "../sort.h"
+#include "ssbquery.h"
+
+namespace lqf {
+    namespace ssb {
+        namespace q2 {
+            class Q2RowBuilder : public RowBuilder {
+            public:
+                Q2RowBuilder() : RowBuilder(
+                        {JL(LineOrder::ORDERDATE), JL(LineOrder::REVENUE), JR(Part::BRAND)}, false, false) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
+                    target[0] = left[LineOrder::REVENUE];
+                    target[1] = udf::date2year(left[LineOrder::ORDERDATE].asByteArray());
+                    target[2] = right(Part::BRAND);
+                }
+            };
+        }
+    }
+}
+
+#endif //ARROW_QUERY2_H

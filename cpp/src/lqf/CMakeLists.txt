@@ -141,5 +141,6 @@ add_lqf_benchmark(data_container_benchmark)
 add_lqf_benchmark(hash_container_benchmark)
 
 add_subdirectory(tpch)
+add_subdirectory(ssb)
 
 add_executable(lqf_playground playground.cc)

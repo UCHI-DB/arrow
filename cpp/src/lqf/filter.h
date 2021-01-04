@@ -349,6 +349,9 @@ namespace lqf {
         virtual ~SboostRowFilter() = default;
     };
 
+    /**
+     * Filter the data satisfying column1 < column2 < column3
+     */
     class SboostRow2Filter : public Filter {
     protected:
         uint32_t column1_;
