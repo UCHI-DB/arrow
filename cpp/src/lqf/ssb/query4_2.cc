@@ -53,13 +53,13 @@ namespace lqf {
             auto filteredPart = partFilter.filter(*partTable);
 
             ColFilter orderFilter(new SBoostByteArrayPredicate(LineOrder::ORDERDATE,
-                                                               bind(ByteArrayDictBetween::build, date_from, date_to)));
+                                                               bind(ByteArrayDictBetween::build, year_from, year_to)));
             auto filteredOrder = orderFilter.filter(*lineorderTable);
 
             FilterJoin custFilterJoin(LineOrder::CUSTKEY, Customer::CUSTKEY);
-            auto orderOnValidCust = custFilterJoin.join(*filteredOrder, *filteredCust);
+            auto orderOnValidCust = custFilterJoin.join(*filteredOrder, *filteredCustomer);
 
-            HashJoin withSuppJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new OrderProfiltBuilder());
+            HashJoin withSuppJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new OrderProfitBuilder());
             auto orderWithSupp = withSuppJoin.join(*orderOnValidCust, *filteredSupp);
 
             HashJoin withPartJoin(2, Part::PARTKEY,

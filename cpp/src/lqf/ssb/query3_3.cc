@@ -32,7 +32,7 @@ namespace lqf {
             };
 
             ColFilter supplierFilter(
-                    new SBoostByteArrayPredicate(Supplier::NATION, bind(DictMultiEq<ByteArray>::build, match)));
+                    new SBoostByteArrayPredicate(Supplier::NATION, bind(ByteArrayDictMultiEq::build, match)));
             auto filteredSupplier = supplierFilter.filter(*supplierTable);
 
             ColFilter custFilter(
