@@ -56,7 +56,7 @@ namespace lqf {
             HashAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)
                     ->field(F_REGULAR, 1, 1)
                     ->field(F_REGULAR, 2, 2)->buildSnapshot(), aggFields);
-            auto agged = agg.agg(*withPart);
+            auto agged = agg.agg(*allJoined);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SILE(2) || (SIE(2) && SDGE(3));
