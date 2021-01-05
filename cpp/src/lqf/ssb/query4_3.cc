@@ -64,7 +64,7 @@ namespace lqf {
             auto validOrder = withPartJoin.join(*orderWithSupp, *filteredPart);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
-                return data[0].asInt() << 20 + data[1].asInt() << 10 + data[2].asInt();
+                return (data[0].asInt() << 20) + (data[1].asInt() << 10) + data[2].asInt();
             };
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{new DoubleSum(3)};

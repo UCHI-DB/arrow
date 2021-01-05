@@ -36,14 +36,13 @@ namespace lqf {
             auto withPart = partJoin.join(*filteredLineorder, *filteredPart);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
-                return data(1).asInt() << 32 + data(2).asInt();
+                return (data(1).asInt() << 16) + data(2).asInt();
             };
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{new DoubleSum(0)};
             };
             HashAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 1, 0)
-                                ->field(F_REGULAR, 2, 1)->buildSnapshot(),
-                        aggFields);
+                                ->field(F_REGULAR, 2, 1)->buildSnapshot(), aggFields);
             auto agged = agg.agg(*withPart);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {

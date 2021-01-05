@@ -59,7 +59,7 @@ namespace lqf {
             auto validOrder = withCustJoin.join(*orderOnValidSP, *filteredCustomer);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
-                return data[0].asInt() << 10 + data[1].asInt();
+                return (data[0].asInt() << 10) + data[1].asInt();
             };
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{new DoubleSum(2)};

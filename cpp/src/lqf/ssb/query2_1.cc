@@ -36,7 +36,7 @@ namespace lqf {
             auto withPart = partJoin.join(*filteredLineorder, *filteredPart);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
-                return data(1).asInt() << 32 + data(2).asInt();
+                return (data(1).asInt() << 16) + data(2).asInt();
             };
             function<vector<AggField *>()> aggFields = []() {
                 return vector<AggField *>{new DoubleSum(0)};
