@@ -1,4 +1,4 @@
-with open('/Users/harper/ssb/lineorder.tbl') as lineorder:
+with open('lineorder.tbl') as lineorder:
     sum = 0
     for line in lineorder.read().splitlines():
         columns = line.split('|')
