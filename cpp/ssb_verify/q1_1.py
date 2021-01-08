@@ -1,6 +1,6 @@
 with open('lineorder.tbl') as lineorder:
     for line in lineorder.read().splitlines():
-        columns = line.splitlines('|')
+        columns = line.split('|')
         discount = int(columns(11))
         quantity = int(columns(8))
         orderdate = columns(5)
