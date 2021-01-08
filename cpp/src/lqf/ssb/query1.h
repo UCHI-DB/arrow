@@ -2,9 +2,10 @@
 // Created by Harper on 1/2/21.
 //
 
-#ifndef ARROW_QUERY1_H
-#define ARROW_QUERY1_H
+#ifndef ARROW_SSB_QUERY1_H
+#define ARROW_SSB_QUERY1_H
 
+#include "ssbquery.h"
 #include "../agg.h"
 #include "../data_model.h"
 #include "../filter.h"
@@ -26,4 +27,4 @@ namespace lqf {
         }
     }
 }
-#endif //ARROW_QUERY1_H
+#endif //ARROW_SSB_QUERY1_H

@@ -6,7 +6,7 @@ endfunction()
 
 
 set(TPCH_SRC
-        ssbquery.cc
+        tpchquery.cc
         query1.cc
         query2.cc
         query3.cc

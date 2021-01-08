@@ -117,4 +117,4 @@ namespace lqf {
 
 
 }
-#endif //ARROW_TPCHQUERY_H
+#endif //ARROW_SSBQUERY_H

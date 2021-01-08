@@ -1,7 +1,6 @@
 //
 // Created by Harper on 1/2/21.
 //
-#include "ssbquery.h"
 #include "query1.h"
 #include <iostream>
 
