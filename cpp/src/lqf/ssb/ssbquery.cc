@@ -21,12 +21,13 @@ namespace lqf {
 
         const string Customer::path = tablePath("customer");
 
-    }
-
-    namespace udf {
-        int date2year(parquet::ByteArray &date) {
-            return (date.ptr[0] - '0') * 1000 + (date.ptr[1] - '0') * 100 + (date.ptr[2] - '0') * 10 + date.ptr[3] -
-                   '0';
+        namespace udf {
+            int date2year(parquet::ByteArray &date) {
+                return (date.ptr[0] - '0') * 1000 + (date.ptr[1] - '0') * 100 + (date.ptr[2] - '0') * 10 + date.ptr[3] -
+                       '0';
+            }
         }
     }
+
+
 }

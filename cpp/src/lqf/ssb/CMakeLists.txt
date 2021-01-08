@@ -25,4 +25,4 @@ add_library(ssb_static ${SSB_SRC})
 target_link_libraries(ssb_static PUBLIC lqf_static)
 target_compile_options(ssb_static PUBLIC ${LQF_SIMD_FLAGS})
 
-add_tpch_exec(lqf-ssb-query-dev ssbquery_dev.cc)
+add_ssb_exec(lqf-ssb-query-dev ssbquery_dev.cc)

@@ -98,10 +98,23 @@ namespace lqf {
         };
 
         void executeQ1_1();
+        void executeQ1_2();
+        void executeQ1_3();
+        void executeQ2_1();
+        void executeQ2_2();
+        void executeQ2_3();
+        void executeQ3_1();
+        void executeQ3_2();
+        void executeQ3_3();
+        void executeQ4_1();
+        void executeQ4_2();
+        void executeQ4_3();
+
+        namespace udf {
+            int date2year(parquet::ByteArray &);
+        }
     }
 
-    namespace udf {
-        int date2year(parquet::ByteArray &);
-    }
+
 }
 #endif //ARROW_TPCHQUERY_H

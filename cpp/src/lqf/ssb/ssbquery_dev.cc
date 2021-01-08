@@ -8,12 +8,15 @@
 
 using namespace std;
 using namespace std::chrono;
+using namespace lqf;
+using namespace lqf::ssb;
 
 int main() {
 // Get starting timepoint
     auto start = high_resolution_clock::now();
 
     // Call the function,
+    executeQ1_2();
 
     // Get ending timepoint
     auto stop = high_resolution_clock::now();
