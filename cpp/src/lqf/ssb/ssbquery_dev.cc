@@ -16,7 +16,7 @@ int main() {
     auto start = high_resolution_clock::now();
 
     // Call the function,
-    executeQ1_2();
+    executeQ1_1();
 
     // Get ending timepoint
     auto stop = high_resolution_clock::now();

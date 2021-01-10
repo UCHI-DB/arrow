@@ -10,6 +10,7 @@
 #include "../data_model.h"
 #include "../filter.h"
 #include "../print.h"
+#include "../parallel.h"
 
 namespace lqf {
     using namespace agg;
