@@ -19,12 +19,12 @@ namespace lqf {
             class Q2RowBuilder : public RowBuilder {
             public:
                 Q2RowBuilder() : RowBuilder(
-                        {JL(LineOrder::ORDERDATE), JL(LineOrder::REVENUE), JR(Part::BRAND)}, false, false) {}
+                        {JL(LineOrder::ORDERDATE), JL(LineOrder::REVENUE), JRR(Part::BRAND)}, false, false) {}
 
                 void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
-                    target[0] = left[LineOrder::REVENUE];
+                    target[0] = left[LineOrder::REVENUE].asDouble();
                     target[1] = udf::date2year(left[LineOrder::ORDERDATE].asByteArray());
-                    target[2] = right(Part::BRAND);
+                    target[2] = right(Part::BRAND).asInt();
                 }
             };
         }

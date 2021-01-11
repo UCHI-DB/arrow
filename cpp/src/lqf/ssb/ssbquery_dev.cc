@@ -3,6 +3,7 @@
 //
 
 #include "ssbquery.h"
+#include "../env.h"
 #include <chrono>
 #include <iostream>
 
@@ -16,7 +17,10 @@ int main() {
     auto start = high_resolution_clock::now();
 
     // Call the function,
-    executeQ1_1();
+    env_init();
+    executeQ3_1();
+    env_cleanup();
+
 
     // Get ending timepoint
     auto stop = high_resolution_clock::now();

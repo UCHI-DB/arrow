@@ -18,9 +18,9 @@ namespace lqf {
 
         void executeQ2_3Plain() {
             auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
-            auto partTable = ParquetTable::Open(Supplier::path, {Part::PARTKEY, Part::BRAND});
-            auto lineorderTable = ParquetTable::Open(Supplier::path,
-                                                     {LineOrder::PARTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE});
+            auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::BRAND});
+            auto lineorderTable = ParquetTable::Open(LineOrder::path, {LineOrder::PARTKEY, LineOrder::SUPPKEY,
+                                                                       LineOrder::ORDERDATE, LineOrder::REVENUE});
 
             ColFilter partFilter(new SboostPredicate<ByteArrayType>(
                     Part::BRAND, bind(ByteArrayDictEq::build, brand)));
@@ -42,7 +42,7 @@ namespace lqf {
                 return vector<AggField *>{new DoubleSum(0)};
             };
             HashAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 1, 0)
-                                ->field(F_REGULAR, 2, 1)->buildSnapshot(), aggFields);
+                    ->field(F_REGULAR, 2, 1)->buildSnapshot(), aggFields);
             auto agged = agg.agg(*withPart);
 
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
@@ -60,9 +60,9 @@ namespace lqf {
             ExecutionGraph graph;
 
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
-            auto part = ParquetTable::Open(Supplier::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
-            auto lineorder = ParquetTable::Open(Supplier::path,
-                                                {LineOrder::PARTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE});
+            auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
+            auto lineorder = ParquetTable::Open(LineOrder::path, {LineOrder::PARTKEY, LineOrder::SUPPKEY,
+                                                                  LineOrder::ORDERDATE, LineOrder::REVENUE});
 
             auto supplierTable = graph.add(new TableNode(supplier), {});
             auto partTable = graph.add(new TableNode(part), {});

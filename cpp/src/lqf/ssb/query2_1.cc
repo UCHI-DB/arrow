@@ -3,6 +3,7 @@
 //
 
 #include "query2.h"
+#include <iostream>
 
 namespace lqf {
     namespace ssb {
@@ -19,9 +20,9 @@ namespace lqf {
 
         void executeQ2_1Plain() {
             auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
-            auto partTable = ParquetTable::Open(Supplier::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
-            auto lineorderTable = ParquetTable::Open(Supplier::path,
-                                                     {LineOrder::PARTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE});
+            auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
+            auto lineorderTable = ParquetTable::Open(LineOrder::path, {LineOrder::PARTKEY, LineOrder::SUPPKEY,
+                                                                       LineOrder::ORDERDATE, LineOrder::REVENUE});
 
             ColFilter partFilter(new SboostPredicate<ByteArrayType>(
                     Part::CATEGORY, bind(ByteArrayDictEq::build, category)));
@@ -53,6 +54,7 @@ namespace lqf {
             SmallSort sort(comparator);
             auto sorted = sort.sort(*agged);
 
+            auto brandDict = partTable->LoadDictionary<ByteArrayType>(Part::BRAND);
             // TODO use dictionary to print column 1
             Printer printer(PBEGIN PD(2) PI(0) PI(1) PEND);
             printer.print(*sorted);
@@ -62,9 +64,9 @@ namespace lqf {
             ExecutionGraph graph;
 
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
-            auto part = ParquetTable::Open(Supplier::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
-            auto lineorder = ParquetTable::Open(Supplier::path,
-                                                {LineOrder::PARTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE});
+            auto part = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
+            auto lineorder = ParquetTable::Open(LineOrder::path, {LineOrder::PARTKEY, LineOrder::SUPPKEY,
+                                                                  LineOrder::ORDERDATE, LineOrder::REVENUE});
 
             auto supplierTable = graph.add(new TableNode(supplier), {});
             auto partTable = graph.add(new TableNode(part), {});
@@ -98,6 +100,7 @@ namespace lqf {
             };
             auto sort = graph.add(new SmallSort(comparator), {agg});
 
+            auto brandDict = part->LoadDictionary<ByteArrayType>(Part::BRAND);
             // TODO use dictionary to print column 1
             graph.add(new Printer(PBEGIN PD(2) PI(0) PI(1) PEND), {sort});
 
