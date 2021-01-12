@@ -491,8 +491,9 @@ namespace lqf {
     }
 
     HashColumnJoin::HashColumnJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex, lqf::ColumnBuilder *builder,
-                                   uint32_t expect_size) : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder,
-                                                                         expect_size), columnBuilder_(builder) {}
+                                   bool need_filter, uint32_t expect_size)
+            : HashBasedJoin(leftKeyIndex, rightKeyIndex, builder, expect_size), need_filter_(need_filter),
+              columnBuilder_(builder) {}
 
     shared_ptr<Block> HashColumnJoin::probe(const shared_ptr<Block> &leftBlock) {
         shared_ptr<MemvBlock> leftvBlock = dynamic_pointer_cast<MemvBlock>(leftBlock);
@@ -500,12 +501,17 @@ namespace lqf {
         assert(leftvBlock.get() != nullptr);
 
         auto leftkeys = leftBlock->col(leftKeyIndex_);
-        auto leftrows = leftBlock->rows();
 
         MemvBlock vblock(leftBlock->size(), columnBuilder_->rightColSize());
         auto writer = vblock.rows();
 
         auto left_block_size = leftBlock->size();
+
+        shared_ptr<Bitmap> filter;
+        if (need_filter_) {
+            filter = make_shared<SimpleBitmap>(left_block_size);
+        }
+
         if (outer_) {
             for (uint32_t i = 0; i < left_block_size; ++i) {
                 DataField &key = leftkeys->next();
@@ -516,12 +522,26 @@ namespace lqf {
                     (*writer)[i] = *result;
             }
         } else {
-            for (uint32_t i = 0; i < left_block_size; ++i) {
-                DataField &key = leftkeys->next();
-                auto leftval = key.asInt();
+            if (need_filter_) {
+                for (uint32_t i = 0; i < left_block_size; ++i) {
+                    DataField &key = leftkeys->next();
+                    auto leftval = key.asInt();
 
-                auto result = move(container_->get(leftval));
-                (*writer)[i] = *result;
+                    auto result = container_->get(leftval);
+                    if (result) {
+                        (*writer)[i] = *move(result);
+                    } else {
+                        // mask filter
+                        filter->put(i);
+                    }
+                }
+            } else {
+                for (uint32_t i = 0; i < left_block_size; ++i) {
+                    DataField &key = leftkeys->next();
+                    auto leftval = key.asInt();
+                    auto result = move(container_->get(leftval));
+                    (*writer)[i] = *result;
+                }
             }
         }
 
@@ -530,6 +550,9 @@ namespace lqf {
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
         columnBuilder_->build(*newvblock, *leftvBlock, vblock);
+        if (need_filter_) {
+            return newvblock->mask(~(*filter));
+        }
         return newvblock;
     }
 

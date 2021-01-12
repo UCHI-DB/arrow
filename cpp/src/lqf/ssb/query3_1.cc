@@ -17,7 +17,7 @@ namespace lqf {
         using namespace sboost;
 
 
-        void executeQ3_1Plain() {
+        void executeQ3_1() {
             auto customerTable = ParquetTable::Open(Customer::path,
                                                     {Customer::NATION, Customer::REGION, Customer::CUSTKEY});
             auto lineorderTable = ParquetTable::Open(LineOrder::path,
@@ -69,7 +69,7 @@ namespace lqf {
             printer.print(*sorted);
         }
 
-        void executeQ3_1() {
+        void executeQ3_1Graph() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path,

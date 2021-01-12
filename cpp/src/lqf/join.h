@@ -253,11 +253,14 @@ namespace lqf {
      */
     class HashColumnJoin : public HashBasedJoin {
     public:
-        HashColumnJoin(uint32_t, uint32_t, ColumnBuilder *, uint32_t expect_size = CONTAINER_SIZE);
+        HashColumnJoin(uint32_t, uint32_t, ColumnBuilder *, bool need_filter = false,
+                       uint32_t expect_size = CONTAINER_SIZE);
 
         virtual ~HashColumnJoin() = default;
 
     protected:
+        bool need_filter_;
+
         ColumnBuilder *columnBuilder_;
 
         shared_ptr<Block> probe(const shared_ptr<Block> &) override;

@@ -1113,6 +1113,68 @@ TEST(HashColumnJoinTest, Join) {
     }
 }
 
+TEST(HashColumnJoinTest, JoinWithFilter) {
+    auto left = MemTable::Make(2, true);
+    auto lblock1 = left->allocate(100);
+    auto lblock2 = left->allocate(150);
+
+    std::random_device rd;  //Will be used to obtain a seed for the random number engine
+    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+    std::uniform_real_distribution<> dis(1.0, 2.0);
+
+    auto lrow1 = lblock1->rows();
+    for (int i = 0; i < 100; i++) {
+        int32_t rand = gen() % 10;
+        (*lrow1)[i][0] = rand;
+        (*lrow1)[i][1] = dis(gen);
+    }
+    auto lrow2 = lblock2->rows();
+    for (int i = 0; i < 150; i++) {
+        int32_t rand = gen() % 10;
+        (*lrow2)[i][0] = rand;
+        (*lrow2)[i][1] = dis(gen);
+    }
+
+    auto right = MemTable::Make(2);
+    auto block = right->allocate(10);
+    auto rows = block->rows();
+
+    array<int32_t, 10> data{35, 99, 1154, 4452, 5987, 14145};
+
+    for (auto i = 0; i < 6; ++i) {
+        (*rows)[i][0] = data[i];
+        (*rows)[i][1] = i;
+    }
+
+    HashColumnJoin join(0, 1, new ColumnBuilder({JL(0), JL(1), JR(0)}), true);
+
+    auto joined = join.join(*left, *right);
+    EXPECT_EQ(vector<uint32_t>({1, 1, 1}), joined->colSize());
+
+    auto results = joined->blocks()->collect();
+    EXPECT_EQ(results->size(), 2);
+
+    auto block1 = (*results)[0];
+    auto asmvblock = dynamic_pointer_cast<MaskedBlock>(block1);
+    EXPECT_TRUE(asmvblock.get() != nullptr);
+
+    auto block2 = (*results)[1];
+    asmvblock = dynamic_pointer_cast<MaskedBlock>(block2);
+    EXPECT_TRUE(asmvblock.get() != nullptr);
+
+    EXPECT_EQ(100, block1->size());
+    auto res_rows = block1->rows();
+    for (int i = 0; i < 100; ++i) {
+        EXPECT_EQ(data[(*res_rows)[i][0].asInt()], (*res_rows)[i][2].asInt());
+    }
+
+    EXPECT_EQ(150, block2->size());
+    res_rows = block2->rows();
+    for (int i = 0; i < 150; ++i) {
+        EXPECT_EQ(data[(*res_rows)[i][0].asInt()], (*res_rows)[i][2].asInt());
+    }
+}
+
 TEST(HashMultiJoinTest, Join) {
     auto left = MemTable::Make(2, true);
     auto lblock1 = left->allocate(100);
