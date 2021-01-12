@@ -248,11 +248,13 @@ namespace lqf {
         uint64_t counter = 0;
         uint64_t limit = size_ / 64;
         uint64_t offset = size_ & 0x3F;
-        for (uint64_t i = 0; i < limit - 1; i++) {
+        for (uint64_t i = 0; i < limit; i++) {
             counter += _mm_popcnt_u64(bitmap_[i]);
         }
-        auto last = bitmap_[limit - 1] & ((1L << offset) - 1);
-        counter += _mm_popcnt_u64(last);
+        if(offset > 0) {
+            auto last = bitmap_[limit] & ((1L << offset) - 1);
+            counter += _mm_popcnt_u64(last);
+        }
         return counter;
     }
 

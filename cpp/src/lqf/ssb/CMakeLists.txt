@@ -16,6 +16,7 @@ set(SSB_SRC
         query3_1.cc
         query3_2.cc
         query3_3.cc
+        query3_4.cc
         query4_1.cc
         query4_2.cc
         query4_3.cc

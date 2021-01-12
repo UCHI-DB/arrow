@@ -3,6 +3,7 @@
 //
 
 #include "query4.h"
+#include <iostream>
 
 namespace lqf {
     namespace ssb {
@@ -32,10 +33,11 @@ namespace lqf {
         using namespace q4_3;
         using namespace sboost;
 
-        void executeQ4_3Plain() {
-            auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::NATION});
+        void executeQ4_3() {
+            auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::REGION});
             auto partTable = ParquetTable::Open(Part::path, {Part::CATEGORY, Part::BRAND, Part::PARTKEY});
-            auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
+            auto supplierTable = ParquetTable::Open(Supplier::path,
+                                                    {Supplier::SUPPKEY, Supplier::REGION, Supplier::CITY});
             auto lineorderTable = ParquetTable::Open(LineOrder::path,
                                                      {LineOrder::ORDERDATE, LineOrder::SUPPKEY, LineOrder::PARTKEY,
                                                       LineOrder::CUSTKEY, LineOrder::REVENUE, LineOrder::SUPPLYCOST});
@@ -63,6 +65,8 @@ namespace lqf {
                                   new RowBuilder({JL(0), JL(1), JRR(Part::BRAND), JL(3)}, false, false));
             auto validOrder = withPartJoin.join(*orderWithSupp, *filteredPart);
 
+            std::cout << validOrder->size() << endl;
+
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
                 return (data[0].asInt() << 20) + (data[1].asInt() << 10) + data[2].asInt();
             };
@@ -84,12 +88,12 @@ namespace lqf {
             printer.print(*sorted);;
         }
 
-        void executeQ4_3() {
+        void executeQ4_3Graph() {
             ExecutionGraph graph;
 
-            auto customer = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::NATION});
+            auto customer = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::REGION});
             auto part = ParquetTable::Open(Part::path, {Part::CATEGORY, Part::BRAND, Part::PARTKEY});
-            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
+            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION, Supplier::CITY});
             auto lineorder = ParquetTable::Open(LineOrder::path,
                                                 {LineOrder::ORDERDATE, LineOrder::SUPPKEY, LineOrder::PARTKEY,
                                                  LineOrder::CUSTKEY, LineOrder::REVENUE, LineOrder::SUPPLYCOST});
@@ -137,10 +141,10 @@ namespace lqf {
             function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
                 return SILE(0) || (SIE(0) && SILE(1)) || (SIE(0) && SIE(1) && SILE(2));
             };
-            auto sort = graph.add(new SmallSort(comparator),{agg});
+            auto sort = graph.add(new SmallSort(comparator), {agg});
 
             // TODO use dictionary to print column 1
-            graph.add(new Printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND),{sort});
+            graph.add(new Printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND), {sort});
 
             graph.execute(true);
         }

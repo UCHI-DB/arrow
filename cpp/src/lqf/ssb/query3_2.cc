@@ -44,7 +44,7 @@ namespace lqf {
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
             HashColumnJoin allJoin(0, Customer::CUSTKEY,
-                                   new ColumnBuilder({JRR(Customer::CITY), JL(1), JL(2), JL(3)}));
+                                   new ColumnBuilder({JRR(Customer::CITY), JL(1), JL(2), JL(3)}),true);
             auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
@@ -101,7 +101,7 @@ namespace lqf {
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
             auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
-                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)})),
+                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true),
                                      {orderSupplierJoin, custFilter});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {

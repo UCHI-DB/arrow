@@ -1118,21 +1118,16 @@ TEST(HashColumnJoinTest, JoinWithFilter) {
     auto lblock1 = left->allocate(100);
     auto lblock2 = left->allocate(150);
 
-    std::random_device rd;  //Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
-    std::uniform_real_distribution<> dis(1.0, 2.0);
 
     auto lrow1 = lblock1->rows();
     for (int i = 0; i < 100; i++) {
-        int32_t rand = gen() % 10;
-        (*lrow1)[i][0] = rand;
-        (*lrow1)[i][1] = dis(gen);
+        (*lrow1)[i][0] = i % 10;
+        (*lrow1)[i][1] = i * 0.1;
     }
     auto lrow2 = lblock2->rows();
     for (int i = 0; i < 150; i++) {
-        int32_t rand = gen() % 10;
-        (*lrow2)[i][0] = rand;
-        (*lrow2)[i][1] = dis(gen);
+        (*lrow2)[i][0] = i % 10;
+        (*lrow2)[i][1] = i * 0.2;
     }
 
     auto right = MemTable::Make(2);
@@ -1141,7 +1136,7 @@ TEST(HashColumnJoinTest, JoinWithFilter) {
 
     array<int32_t, 10> data{35, 99, 1154, 4452, 5987, 14145};
 
-    for (auto i = 0; i < 6; ++i) {
+    for (int i = 0; i < 6; ++i) {
         (*rows)[i][0] = data[i];
         (*rows)[i][1] = i;
     }
@@ -1162,16 +1157,24 @@ TEST(HashColumnJoinTest, JoinWithFilter) {
     asmvblock = dynamic_pointer_cast<MaskedBlock>(block2);
     EXPECT_TRUE(asmvblock.get() != nullptr);
 
-    EXPECT_EQ(100, block1->size());
+    EXPECT_EQ(60, block1->size());
     auto res_rows = block1->rows();
-    for (int i = 0; i < 100; ++i) {
-        EXPECT_EQ(data[(*res_rows)[i][0].asInt()], (*res_rows)[i][2].asInt());
+    for (int i = 0; i < 60; ++i) {
+        auto key = (*res_rows)[i][0].asInt();
+        auto v1 = (*res_rows)[i][1].asDouble();
+        auto v2 = (*res_rows)[i][2].asInt();
+        EXPECT_EQ(v1, key*0.1);
+        EXPECT_EQ(v2, data[key]);
     }
 
-    EXPECT_EQ(150, block2->size());
+    EXPECT_EQ(90, block2->size());
     res_rows = block2->rows();
-    for (int i = 0; i < 150; ++i) {
-        EXPECT_EQ(data[(*res_rows)[i][0].asInt()], (*res_rows)[i][2].asInt());
+    for (int i = 0; i < 90; ++i) {
+        auto key = (*res_rows)[i][0].asInt();
+        auto v1 = (*res_rows)[i][1].asDouble();
+        auto v2 = (*res_rows)[i][2].asInt();
+        EXPECT_EQ(v1, key*0.2);
+        EXPECT_EQ(v2, data[key]);
     }
 }
 

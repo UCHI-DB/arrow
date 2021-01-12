@@ -39,6 +39,20 @@ TEST(SimpleBitmapTest, Cardinality) {
     ASSERT_EQ(2, sb->cardinality());
 }
 
+TEST(SimpleBitmapTest, Negate) {
+    auto sb1 = make_shared<SimpleBitmap>(64);
+    sb1->put(37);
+    ASSERT_EQ(1, sb1->cardinality());
+    ~(*sb1);
+    ASSERT_EQ(63, sb1->cardinality());
+
+    auto sb2 = make_shared<SimpleBitmap>(100);
+    sb2->put(37);
+    ASSERT_EQ(1, sb2->cardinality());
+    ~(*sb2);
+    ASSERT_EQ(99, sb2->cardinality());
+}
+
 TEST(SimpleBitmapTest, MoveTo) {
     auto sb = make_shared<SimpleBitmap>(1000);
     sb->put(241);

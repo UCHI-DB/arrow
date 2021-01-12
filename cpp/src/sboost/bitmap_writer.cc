@@ -18,7 +18,7 @@ namespace sboost {
                 data[index] |= ((1L << repetition) - 1) << bitOffset;
             } else {
                 uint32_t remain = repetition;
-                data[index++] |= -1L << bitOffset;
+                data[index++] |= 0xFFFFFFFFFFFFFFFFL << bitOffset;
                 remain -= 64 - bitOffset;
                 while (remain >= 64) {
                     data[index++] = -1L;

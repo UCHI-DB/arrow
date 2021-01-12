@@ -6,32 +6,37 @@
 
 namespace lqf {
     namespace ssb {
-        namespace q3_1 {
-            ByteArray region("ASIA");
-            ByteArray date_from("19920101");
+        namespace q3_4 {
+            ByteArray city1("UNITED KI1");
+            ByteArray city2("UNITED KI5");
+            ByteArray date_from("19971201");
             ByteArray date_to("19971231");
         }
 
         using namespace q3;
-        using namespace q3_1;
+        using namespace q3_4;
         using namespace sboost;
 
 
-        void executeQ3_1Plain() {
+        void executeQ3_4() {
             auto customerTable = ParquetTable::Open(Customer::path,
-                                                    {Customer::NATION, Customer::REGION, Customer::CUSTKEY});
+                                                    {Customer::CITY, Customer::CUSTKEY});
             auto lineorderTable = ParquetTable::Open(LineOrder::path,
                                                      {LineOrder::CUSTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE,
                                                       LineOrder::REVENUE});
             auto supplierTable = ParquetTable::Open(Supplier::path,
-                                                    {Supplier::SUPPKEY, Supplier::NATION, Supplier::REGION});
+                                                    {Supplier::SUPPKEY, Supplier::CITY});
+
+            function<bool(const ByteArray &)> match = [=](const ByteArray &data) {
+                return data == city1 || data == city2;
+            };
 
             ColFilter supplierFilter(
-                    new SBoostByteArrayPredicate(Supplier::REGION, bind(ByteArrayDictEq::build, region)));
+                    new SBoostByteArrayPredicate(Supplier::CITY, bind(ByteArrayDictMultiEq::build, match)));
             auto filteredSupplier = supplierFilter.filter(*supplierTable);
 
             ColFilter custFilter(
-                    new SBoostByteArrayPredicate(Customer::REGION, bind(ByteArrayDictEq::build, region)));
+                    new SBoostByteArrayPredicate(Customer::CITY, bind(ByteArrayDictMultiEq::build, match)));
             auto filteredCustomer = custFilter.filter(*customerTable);
 
             ColFilter orderFilter(
@@ -39,12 +44,12 @@ namespace lqf {
                                                  bind(ByteArrayDictBetween::build, date_from, date_to)));
             auto filteredOrder = orderFilter.filter(*lineorderTable);
 
-            HashJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder());
-            // CUSTKEY, S_NATION, YEAR, REVENUE
+            HashJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithCityBuilder());
+            // CUSTKEY, S_CITY, YEAR, REVENUE
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
             HashColumnJoin allJoin(0, Customer::CUSTKEY,
-                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true);
+                                   new ColumnBuilder({JRR(Customer::CITY), JL(1), JL(2), JL(3)}), true);
             auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
@@ -66,29 +71,33 @@ namespace lqf {
 
             // TODO use dictionary to print column 1
             Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
-            printer.print(*sorted);
+            printer.print(*sorted);;
         }
 
-        void executeQ3_1() {
+        void executeQ3_4Graph() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path,
-                                               {Customer::NATION, Customer::REGION, Customer::CUSTKEY});
+                                               {Customer::CITY, Customer::CUSTKEY});
             auto lineorder = ParquetTable::Open(LineOrder::path,
                                                 {LineOrder::CUSTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE,
                                                  LineOrder::REVENUE});
             auto supplier = ParquetTable::Open(Supplier::path,
-                                               {Supplier::SUPPKEY, Supplier::NATION, Supplier::REGION});
+                                               {Supplier::CITY, Supplier::REGION});
 
             auto customerTable = graph.add(new TableNode(customer), {});
             auto lineorderTable = graph.add(new TableNode(lineorder), {});
             auto supplierTable = graph.add(new TableNode(supplier), {});
 
+            function<bool(const ByteArray &)> match = [=](const ByteArray &data) {
+                return data == city1 || data == city2;
+            };
+
             auto supplierFilter = graph.add(new ColFilter(
-                    new SBoostByteArrayPredicate(Supplier::REGION, bind(ByteArrayDictEq::build, region))),
+                    new SBoostByteArrayPredicate(Supplier::CITY, bind(ByteArrayDictMultiEq::build, match))),
                                             {supplierTable});
             auto custFilter = graph.add(new ColFilter(
-                    new SBoostByteArrayPredicate(Customer::REGION, bind(ByteArrayDictEq::build, region))),
+                    new SBoostByteArrayPredicate(Customer::CITY, bind(ByteArrayDictMultiEq::build, match))),
                                         {customerTable});
             auto orderFilter = graph.add(new ColFilter(
                     new SBoostByteArrayPredicate(LineOrder::ORDERDATE,
@@ -101,7 +110,7 @@ namespace lqf {
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
             auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
-                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true),
+                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true),
                                      {orderSupplierJoin, custFilter});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
