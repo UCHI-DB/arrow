@@ -474,6 +474,9 @@ namespace lqf {
         template<typename DTYPE>
         void DictLess<DTYPE>::dict(Dictionary<DTYPE> &dict) {
             rawTarget_ = dict.lookup(target_);
+            if(rawTarget_ < 0) {
+                rawTarget_ = -rawTarget_;
+            }
         };
 
         template<typename DTYPE>
@@ -518,7 +521,12 @@ namespace lqf {
         template<typename DTYPE>
         void DictBetween<DTYPE>::dict(Dictionary<DTYPE> &dict) {
             rawLower_ = dict.lookup(lower_);
+            if(rawLower_<0)
+                rawLower_ = -rawLower_;
             rawUpper_ = dict.lookup(upper_);
+            if(rawUpper_<0) {
+                rawUpper_ = -rawUpper_;
+            }
         };
 
         template<typename DTYPE>

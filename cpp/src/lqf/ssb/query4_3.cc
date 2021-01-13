@@ -65,8 +65,6 @@ namespace lqf {
                                   new RowBuilder({JL(0), JL(1), JRR(Part::BRAND), JL(3)}, false, false));
             auto validOrder = withPartJoin.join(*orderWithSupp, *filteredPart);
 
-            std::cout << validOrder->size() << endl;
-
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
                 return (data[0].asInt() << 20) + (data[1].asInt() << 10) + data[2].asInt();
             };
