@@ -83,7 +83,7 @@ namespace lqf {
                                                 {LineOrder::CUSTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE,
                                                  LineOrder::REVENUE});
             auto supplier = ParquetTable::Open(Supplier::path,
-                                               {Supplier::CITY, Supplier::REGION});
+                                               {Supplier::SUPPKEY, Supplier::CITY});
 
             auto customerTable = graph.add(new TableNode(customer), {});
             auto lineorderTable = graph.add(new TableNode(lineorder), {});
@@ -105,12 +105,12 @@ namespace lqf {
                                          {lineorderTable});
 
             auto orderSupplierJoin = graph.add(
-                    new HashJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder()),
+                    new HashJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithCityBuilder()),
                     {orderFilter, supplierFilter});
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
             auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
-                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true),
+                    {JRR(Customer::CITY), JL(1), JL(2), JL(3)}), true),
                                      {orderSupplierJoin, custFilter});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {

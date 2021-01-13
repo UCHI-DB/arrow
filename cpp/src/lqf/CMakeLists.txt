@@ -134,6 +134,7 @@ set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
 
 add_lqf_benchmark(container_benchmark)
 add_lqf_benchmark(join_benchmark)
+add_lqf_benchmark(join2_benchmark)
 add_lqf_benchmark(bitmap_benchmark)
 add_lqf_benchmark(stream_benchmark)
 add_lqf_benchmark(rowcopy_benchmark)
@@ -144,3 +145,4 @@ add_subdirectory(tpch)
 add_subdirectory(ssb)
 
 add_executable(lqf_playground playground.cc)
+target_link_libraries(lqf_playground lqf_static)

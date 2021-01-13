@@ -1051,7 +1051,7 @@ public:
 #if HAS_UNCAUGHT_EXCEPTIONS
                 std::uncaught_exceptions() == 0 &&
 #else
-                !std::uncaught_exception() &&
+                !std::uncaught_exceptions() &&
 #endif
                 this->is_.good())
             this->is_.rdbuf()->pubsync();
