@@ -254,7 +254,7 @@ add_arrow_lib(parquet
         ${PARQUET_SHARED_PRIVATE_LINK_LIBS}
         STATIC_LINK_LIBS
         ${PARQUET_STATIC_LINK_LIBS})
-target_compile_options(parquet_objlib PUBLIC -mavx2 -mavx512vl -mavx512f)
+target_compile_options(parquet_objlib PUBLIC -mavx -mavx2 -mavx512vl -mavx512f -mavx512bw)
 
 if (WIN32 AND NOT (ARROW_TEST_LINKAGE STREQUAL "static"))
     add_library(parquet_test_support STATIC parquet_constants.cpp parquet_types.cpp)
