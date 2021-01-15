@@ -33,11 +33,11 @@ namespace lqf {
         using namespace q4_3;
         using namespace sboost;
 
-        void executeQ4_3() {
+        void executeQ4_3Plain() {
             auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::REGION});
             auto partTable = ParquetTable::Open(Part::path, {Part::CATEGORY, Part::BRAND, Part::PARTKEY});
             auto supplierTable = ParquetTable::Open(Supplier::path,
-                                                    {Supplier::SUPPKEY, Supplier::REGION, Supplier::CITY});
+                                                    {Supplier::SUPPKEY, Supplier::NATION, Supplier::CITY});
             auto lineorderTable = ParquetTable::Open(LineOrder::path,
                                                      {LineOrder::ORDERDATE, LineOrder::SUPPKEY, LineOrder::PARTKEY,
                                                       LineOrder::CUSTKEY, LineOrder::REVENUE, LineOrder::SUPPLYCOST});
@@ -86,12 +86,12 @@ namespace lqf {
             printer.print(*sorted);;
         }
 
-        void executeQ4_3Graph() {
+        void executeQ4_3() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::REGION});
             auto part = ParquetTable::Open(Part::path, {Part::CATEGORY, Part::BRAND, Part::PARTKEY});
-            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION, Supplier::CITY});
+            auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::NATION, Supplier::CITY});
             auto lineorder = ParquetTable::Open(LineOrder::path,
                                                 {LineOrder::ORDERDATE, LineOrder::SUPPKEY, LineOrder::PARTKEY,
                                                  LineOrder::CUSTKEY, LineOrder::REVENUE, LineOrder::SUPPLYCOST});
