@@ -130,7 +130,7 @@ add_test_case(all-test
 arrow_install_all_headers(lqf)
 
 add_custom_target(lqf-benchmarks)
-set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
+set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} lqf_static)
 
 add_lqf_benchmark(container_benchmark)
 add_lqf_benchmark(join_benchmark)
