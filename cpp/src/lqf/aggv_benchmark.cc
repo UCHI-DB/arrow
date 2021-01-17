@@ -10,22 +10,20 @@ using namespace lqf;
 
 static int table_size = 10000000;
 static int key_size =   1000;
-static shared_ptr<MemTable> leftRowTable_;
-static shared_ptr<MemTable> leftColTable_;
-static shared_ptr<MemTable> rightTable_;
+static shared_ptr<MemTable> rowTable_;
+static shared_ptr<MemTable> colTable_;
 static uint64_t size_;
 
 void init() {
-    leftRowTable_ = MemTable::Make(5, false);
-    leftColTable_ = MemTable::Make(5, true);
-    rightTable_ = MemTable::Make(2, false);
+    rowTable_ = MemTable::Make(5, false);
+    colTable_ = MemTable::Make(5, true);
 
-    auto leftRowBlock = leftRowTable_->allocate(left_size);
-    auto leftColBlock = leftColTable_->allocate(left_size);
+    auto rowBlock = rowTable_->allocate(table_size);
+    auto colBlock = colTable_->allocate(table_size);
     srand(time(NULL));
 
-    auto leftRowWriter = leftRowBlock->rows();
-    auto leftColWriter = leftColBlock->rows();
+    auto rowWriter = rowBlock->rows();
+    auto colWriter = colBlock->rows();
 
     auto mod = (int) (right_size / mod_ratio);
     for (int i = 0; i < left_size; ++i) {
