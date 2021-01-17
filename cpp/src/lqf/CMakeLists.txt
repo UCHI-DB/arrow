@@ -133,6 +133,7 @@ add_custom_target(lqf-benchmarks)
 set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} lqf_static)
 
 add_lqf_benchmark(container_benchmark)
+add_lqf_benchmark(aggv_benchmark)
 add_lqf_benchmark(join_benchmark)
 add_lqf_benchmark(join2_benchmark)
 add_lqf_benchmark(bitmap_benchmark)

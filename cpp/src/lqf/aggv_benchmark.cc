@@ -1,23 +1,15 @@
 //
-// This benchmark compares HashColumnJoin vs HashJoin
-//
-// We perform a join on a large table against a medium size table.
-// The left table get 5 columns. The right table get two columns.
-//
-// One item uses vertical table for the left. One item uses horizontal.
-//
-// Created by Harper on 1/12/21.
+// Created by harper on 4/4/20.
 //
 
+// This benchmark tests if aggregation on MemvTable is faster or slower than MemTable
 #include <benchmark/benchmark.h>
 #include "join.h"
 
 using namespace lqf;
 
-static int left_size = 10000000;
-static int right_size = 100000;
-static double mod_ratio = 0.7;
-
+static int table_size = 10000000;
+static int key_size =   1000;
 static shared_ptr<MemTable> leftRowTable_;
 static shared_ptr<MemTable> leftColTable_;
 static shared_ptr<MemTable> rightTable_;
