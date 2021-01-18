@@ -130,7 +130,7 @@ add_test_case(all-test
 arrow_install_all_headers(lqf)
 
 add_custom_target(lqf-benchmarks)
-set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} lqf_static)
+set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
 
 add_lqf_benchmark(container_benchmark)
 add_lqf_benchmark(aggv_benchmark)
@@ -139,6 +139,7 @@ add_lqf_benchmark(join2_benchmark)
 add_lqf_benchmark(bitmap_benchmark)
 add_lqf_benchmark(stream_benchmark)
 add_lqf_benchmark(rowcopy_benchmark)
+add_lqf_benchmark(memtable_benchmark)
 add_lqf_benchmark(data_container_benchmark)
 add_lqf_benchmark(hash_container_benchmark)
 
