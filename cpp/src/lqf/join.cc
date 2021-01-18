@@ -560,8 +560,61 @@ namespace lqf {
                                                  lqf::ColumnBuilder *builder, uint32_t expect_size)
             : HashColumnJoin(leftKeyIndex, rightKeyIndex, builder, true, expect_size) {}
 
-    shared_ptr<Block> ParquetHashColumnJoin::probe(const shared_ptr<Block> &block) {
+    shared_ptr<Block> ParquetHashColumnJoin::probe(const shared_ptr<Block> &leftBlock) {
+        auto leftkeys = leftBlock->col(leftKeyIndex_);
 
+        MemvBlock probed(leftBlock->size(), columnBuilder_->rightColSize());
+        auto writer = probed.rows();
+
+        auto left_block_size = leftBlock->size();
+
+        shared_ptr<Bitmap> filter;
+        if (need_filter_) {
+            filter = make_shared<SimpleBitmap>(left_block_size);
+        }
+
+        if (outer_) {
+            for (uint32_t i = 0; i < left_block_size; ++i) {
+                DataField &key = leftkeys->next();
+                auto leftval = key.asInt();
+
+                auto result = container_->get(leftval);
+                if (result)
+                    (*writer)[i] = *result;
+            }
+        } else {
+            if (need_filter_) {
+                for (uint32_t i = 0; i < left_block_size; ++i) {
+                    DataField &key = leftkeys->next();
+                    auto leftval = key.asInt();
+
+                    auto result = container_->get(leftval);
+                    if (result) {
+                        (*writer)[i] = *move(result);
+                    } else {
+                        // mask filter
+                        filter->put(i);
+                    }
+                }
+            } else {
+                for (uint32_t i = 0; i < left_block_size; ++i) {
+                    DataField &key = leftkeys->next();
+                    auto leftval = key.asInt();
+                    auto result = move(container_->get(leftval));
+                    (*writer)[i] = *result;
+                }
+            }
+        }
+
+        auto newblock = makeBlock(0);
+        // Merge result block with original block
+        auto newvblock = static_pointer_cast<MemvBlock>(newblock);
+
+        columnBuilder_->build(*newvblock, *leftvBlock, vblock);
+        if (need_filter_) {
+            return newvblock->mask(~(*filter));
+        }
+        return newvblock;
     }
 
     HashMultiJoin::HashMultiJoin(uint32_t lk, uint32_t rk, RowBuilder *rbuilder)
