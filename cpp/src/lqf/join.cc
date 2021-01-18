@@ -556,6 +556,14 @@ namespace lqf {
         return newvblock;
     }
 
+    ParquetHashColumnJoin::ParquetHashColumnJoin(uint32_t leftKeyIndex, uint32_t rightKeyIndex,
+                                                 lqf::ColumnBuilder *builder, uint32_t expect_size)
+            : HashColumnJoin(leftKeyIndex, rightKeyIndex, builder, true, expect_size) {}
+
+    shared_ptr<Block> ParquetHashColumnJoin::probe(const shared_ptr<Block> &block) {
+
+    }
+
     HashMultiJoin::HashMultiJoin(uint32_t lk, uint32_t rk, RowBuilder *rbuilder)
             : left_key_index_(lk), right_key_index_(rk), builder_(unique_ptr<RowBuilder>(rbuilder)) {}
 

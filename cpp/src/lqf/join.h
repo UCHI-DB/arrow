@@ -267,6 +267,19 @@ namespace lqf {
     };
 
     /**
+     * HashColumnJoin working on ParquetTable, caching columns into MemvTable
+     */
+    class ParquetHashColumnJoin : public HashColumnJoin {
+    public:
+        ParquetHashColumnJoin(uint32_t, uint32_t, ColumnBuilder *, uint32_t expect_size = CONTAINER_SIZE);
+
+        virtual ~ParquetHashColumnJoin();
+
+    protected:
+        shared_ptr<Block> probe(const shared_ptr<Block> &) override;
+    };
+
+    /**
      * Build a hash table on multiple entries with same key
      */
     class HashMultiJoin : public Join {
