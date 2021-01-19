@@ -164,6 +164,23 @@ namespace lqf {
             output.merge(left, left_merge_inst_);
             output.merge(right, right_merge_inst_);
         }
+
+        shared_ptr<MemvBlock> ColumnBuilder::cacheToMem(Block &input) {
+            auto memcache = make_shared<MemvBlock>(input.size(), load_col_size_);
+
+            for (uint32_t index = 0; index < left_merge_inst_.size(); ++index) {
+                auto src_index = left_merge_inst_[index].first;
+                auto target_index = index;
+
+
+            }
+
+            return memcache;
+        }
+
+        void ColumnBuilder::buildFromMem(MemvBlock &output, MemvBlock &leftMem, MemvBlock &right) {
+
+        }
     }
 
     using namespace join;
@@ -588,18 +605,15 @@ namespace lqf {
         }
 
         ~(*filter);
+        auto maskedParquet = leftBlock->mask(filter);
         // Load columns into memory from left side
-        auto leftBlock = make_shared<MemvBlock>(counter, columnBuilder_->leftColSize());
-
+        auto leftCacheBlock = columnBuilder_->cacheToMem(*maskedParquet);
 
         auto newblock = makeBlock(0);
         // Merge result block with original block
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
-        columnBuilder_->build(*newvblock, *leftvBlock, probed);
-        if (need_filter_) {
-            return newvblock->mask(~(*filter));
-        }
+        columnBuilder_->buildFromMem(*newvblock, *leftCacheBlock, probed);
         return newvblock;
     }
 

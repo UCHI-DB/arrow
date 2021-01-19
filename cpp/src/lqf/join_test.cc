@@ -144,6 +144,32 @@ TEST(ColumnBuilderTest, CreateWithString) {
 //    EXPECT_EQ(vright, cb.rightInst());
 }
 
+TEST(ColumnBuilderTest, cacheToMem) {
+    ColumnBuilder cb({JL(0), JL(1), JR(2), JR(0), JL(2), JL(3)});
+    cb.init();
+
+    auto ptable = ParquetTable::Open("testres/lineitem", {0, 1, 2, 3});
+    auto blocks = ptable->blocks()->collect();
+    auto first_block = (*blocks)[0];
+
+    auto first_block_size = first_block->size();
+    auto mask = make_shared<SimpleBitmap>(first_block_size);
+    for (uint32_t i = 0; i < first_block_size; ++i) {
+        if (i % 5 == 0) {
+            mask.put(i);
+        }
+    }
+    auto masked = first_block->mask(mask);
+
+    auto memcache = make_shared<
+
+    cb.cacheToMem();
+}
+
+TEST(ColumnBuilderTest, buildFromMem) {
+    FAIL() << "Not implemented";
+}
+
 TEST(HashJoinTest, JoinWithoutKey) {
     auto left = ParquetTable::Open("testres/lineitem");
     left->updateColumns((1 << 14) - 1);
@@ -1163,7 +1189,7 @@ TEST(HashColumnJoinTest, JoinWithFilter) {
         auto key = (*res_rows)[i][0].asInt();
         auto v1 = (*res_rows)[i][1].asDouble();
         auto v2 = (*res_rows)[i][2].asInt();
-        EXPECT_EQ(v1, key*0.1);
+        EXPECT_EQ(v1, key * 0.1);
         EXPECT_EQ(v2, data[key]);
     }
 
@@ -1173,7 +1199,7 @@ TEST(HashColumnJoinTest, JoinWithFilter) {
         auto key = (*res_rows)[i][0].asInt();
         auto v1 = (*res_rows)[i][1].asDouble();
         auto v2 = (*res_rows)[i][2].asInt();
-        EXPECT_EQ(v1, key*0.2);
+        EXPECT_EQ(v1, key * 0.2);
         EXPECT_EQ(v2, data[key]);
     }
 }

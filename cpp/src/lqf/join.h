@@ -101,11 +101,15 @@ namespace lqf {
 
             virtual void init() override;
 
-            inline const vector<uint32_t> &leftColSize() { return load_col_size_; }
-
             inline const vector<uint32_t> &rightColSize() { return snapshot_col_size_; }
 
             virtual void build(MemvBlock &, MemvBlock &, MemvBlock &);
+
+            // Cache left table to memory
+            virtual shared_ptr<MemvBlock> cacheToMem(Block &);
+
+            // The left table is a memory cache
+            virtual void buildFromMem(MemvBlock &, MemvBlock &, MemvBlock &);
         };
 
     }
