@@ -176,7 +176,7 @@ namespace lqf {
                 auto reader = input.col(src_index);
                 auto writer = memcache->col(target_index);
                 for (uint32_t j = 0; j < block_size; ++j) {
-                    (*writer)[j] = (*reader)[j];
+                    (*writer)[j] = reader->next();
                 }
             }
 
@@ -586,6 +586,10 @@ namespace lqf {
                                                  lqf::ColumnBuilder *builder, uint32_t expect_size)
             : HashColumnJoin(leftKeyIndex, rightKeyIndex, builder, true, expect_size) {}
 
+    ParquetHashColumnJoin::~ParquetHashColumnJoin() {
+
+    }
+
     shared_ptr<Block> ParquetHashColumnJoin::probe(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(leftKeyIndex_);
 
@@ -609,7 +613,7 @@ namespace lqf {
                 filter->put(i);
             }
         }
-
+        probed.resize(counter);
         ~(*filter);
         auto maskedParquet = leftBlock->mask(filter);
         // Load columns into memory from left side

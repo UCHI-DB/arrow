@@ -3,6 +3,7 @@
 //
 
 #include <gtest/gtest.h>
+#include <tuple>
 #include "join.h"
 
 using namespace lqf;
@@ -49,8 +50,8 @@ TEST(RowBuilderTest, CreateWithString) {
 //    EXPECT_EQ(vector<uint32_t>({0, 1, 2, 3, 4, 5, 7, 9}), rb.outputColOffset());
     EXPECT_EQ(false, rb.useVertical());
 
-    const vector<uint32_t> offset{0, 1, 2, 3, 5};
-    const vector<uint32_t> offset2{0, 1, 2, 4};
+    const vector <uint32_t> offset{0, 1, 2, 3, 5};
+    const vector <uint32_t> offset2{0, 1, 2, 4};
 
     MemDataRow left(offset);
     MemDataRow right(offset2);
@@ -66,7 +67,7 @@ TEST(RowBuilderTest, CreateWithString) {
     right[1] = 34359543;
     right[2] = bytedata2;
 
-    const vector<uint32_t> resoffset{0, 1, 2, 3, 4, 5, 7, 9};
+    const vector <uint32_t> resoffset{0, 1, 2, 3, 4, 5, 7, 9};
     MemDataRow output(resoffset);
 
     rb.build(output, left, right, 123214);
@@ -86,8 +87,8 @@ TEST(RowBuilderTest, CreateRaw) {
     EXPECT_EQ(vector<uint32_t>({1, 1, 1, 1, 1, 1, 1}), rb.outputColSize());
     EXPECT_EQ(false, rb.useVertical());
 
-    const vector<uint32_t> offset{0, 1, 2, 3, 4};
-    const vector<uint32_t> offset2{0, 1, 2, 3};
+    const vector <uint32_t> offset{0, 1, 2, 3, 4};
+    const vector <uint32_t> offset2{0, 1, 2, 3};
 
     MemDataRow left(offset);
     MemDataRow right(offset2);
@@ -100,7 +101,7 @@ TEST(RowBuilderTest, CreateRaw) {
     right[1] = 34359543;
     right[2] = 4242;
 
-    const vector<uint32_t> resoffset{0, 1, 2, 3, 4, 5, 6, 7};
+    const vector <uint32_t> resoffset{0, 1, 2, 3, 4, 5, 6, 7};
     MemDataRow output(resoffset);
 
     rb.build(output, left, right, 123214);
@@ -116,31 +117,31 @@ TEST(RowBuilderTest, CreateRaw) {
 
 class ColumnBuilderForTest : public ColumnBuilder {
 public:
-    ColumnBuilderForTest(initializer_list<int32_t> list) : ColumnBuilder(list) {}
+    ColumnBuilderForTest(initializer_list <int32_t> list) : ColumnBuilder(list) {}
 
-    vector<pair<uint8_t, uint8_t>> &leftInst() {
+    vector <pair<uint8_t, uint8_t>> &leftInst() {
         return left_merge_inst_;
     }
 
-    vector<pair<uint8_t, uint8_t>> &leftMemInst() {
+    vector <pair<uint8_t, uint8_t>> &leftMemInst() {
         return leftmem_merge_inst_;
     }
 
-    vector<pair<uint8_t, uint8_t>> &rightInst() {
+    vector <pair<uint8_t, uint8_t>> &rightInst() {
         return right_merge_inst_;
     }
 };
 
 TEST(ColumnBuilderTest, Create) {
-    ColumnBuilderForTest cb({JL(0), JR(2), JL(1), JR(0)});
+    ColumnBuilderForTest cb({JL(0), JR(2), JL(2), JR(0)});
     cb.init();
     EXPECT_EQ(true, cb.useVertical());
     EXPECT_EQ(vector<uint32_t>({1, 1, 1, 1}), cb.outputColSize());
 
     EXPECT_EQ(vector<uint32_t>({1, 1}), cb.rightColSize());
-    vector<pair<uint8_t, uint8_t>> vleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 2})});
-    vector<pair<uint8_t, uint8_t>> vmemleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1})});
-    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 1), pair<uint8_t, uint8_t>({1, 3})});
+    vector <pair<uint8_t, uint8_t>> vleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({2, 2})});
+    vector <pair<uint8_t, uint8_t>> vmemleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 2})});
+    vector <pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 1), pair<uint8_t, uint8_t>({1, 3})});
     EXPECT_EQ(vleft, cb.leftInst());
     EXPECT_EQ(vmemleft, cb.leftMemInst());
     EXPECT_EQ(vright, cb.rightInst());
@@ -154,12 +155,12 @@ TEST(ColumnBuilderTest, CreateWithString) {
     EXPECT_EQ(vector<uint32_t>({0, 1, 2, 3, 4, 6, 8}), cb.outputColOffset());
 
     EXPECT_EQ(vector<uint32_t>({1, 1, 2}), cb.rightColSize());
-    vector<pair<uint8_t, uint8_t>> vleft(
+    vector <pair<uint8_t, uint8_t>> vleft(
             {pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1}), pair<uint8_t, uint8_t>(3, 4)});
-    vector<pair<uint8_t, uint8_t>> vmemleft(
+    vector <pair<uint8_t, uint8_t>> vmemleft(
             {pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1}), pair<uint8_t, uint8_t>(2, 4)});
-    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3}),
-                                           pair<uint8_t, uint8_t>(2, 5)});
+    vector <pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3}),
+                                            pair<uint8_t, uint8_t>(2, 5)});
     EXPECT_EQ(vleft, cb.leftInst());
     EXPECT_EQ(vmemleft, cb.leftMemInst());
     EXPECT_EQ(vright, cb.rightInst());
@@ -187,21 +188,42 @@ TEST(ColumnBuilderTest, cacheToMem) {
     EXPECT_EQ(cached_size, cached->size());
 
     auto ptable2 = ParquetTable::Open("testres/lineitem", {0, 1, 2, 3});
-    auto blocks2 = ptable->blocks()->collect();
-    auto first_block2 = (*blocks)[0];
+    auto blocks2 = ptable2->blocks()->collect();
+    auto first_block2 = (*blocks2)[0];
 
     auto cached_rows = cached->rows();
     auto origin_rows = first_block2->rows();
     for (uint32_t i = 0; i < cached_size; ++i) {
-        EXPECT_EQ((*cached_rows)[i][0].asInt(), (*origin_rows)[5 * i][0].asInt());
-        EXPECT_EQ((*cached_rows)[i][1].asInt(), (*origin_rows)[5 * i][1].asInt());
-        EXPECT_EQ((*cached_rows)[i][2].asInt(), (*origin_rows)[5 * i][2].asInt());
-        EXPECT_EQ((*cached_rows)[i][3].asInt(), (*origin_rows)[5 * i][3].asInt());
+        EXPECT_EQ((*cached_rows)[i][0].asInt(), (*origin_rows)[5 * i][0].asInt()) << i;
+        EXPECT_EQ((*cached_rows)[i][1].asInt(), (*origin_rows)[5 * i][1].asInt()) << i;
+        EXPECT_EQ((*cached_rows)[i][2].asInt(), (*origin_rows)[5 * i][2].asInt()) << i;
+        EXPECT_EQ((*cached_rows)[i][3].asInt(), (*origin_rows)[5 * i][3].asInt()) << i;
     }
 }
 
-TEST(ColumnBuilderTest, buildFromMem) {
-    FAIL() << "Not implemented";
+TEST(ColumnBuilderTest, BuildFromMem) {
+    ColumnBuilderForTest cb({JL(0), JR(0), JL(1)});
+    cb.init();
+    auto leftBlock = make_shared<MemvBlock>(10, lqf::colSize(2));
+    auto rightBlock = make_shared<MemvBlock>(10, lqf::colSize(1));
+
+    auto leftWriter = leftBlock->rows();
+    auto rightWriter = rightBlock->rows();
+    for (int i = 0; i < 10; ++i) {
+        (*leftWriter)[i][0] = i;
+        (*leftWriter)[i][1] = 2 * i;
+        (*rightWriter)[i][0] = i + 3.75;
+    }
+    auto mergedBlock = make_shared<MemvBlock>(0, lqf::colSize(3));
+    cb.buildFromMem(*mergedBlock, *leftBlock, *rightBlock);
+
+    EXPECT_EQ(10, mergedBlock->size());
+    auto reader = mergedBlock->rows();
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_EQ((*reader)[i][0].asInt(), i) << i;
+        EXPECT_EQ((*reader)[i][1].asDouble(), i + 3.75) << i;
+        EXPECT_EQ((*reader)[i][2].asInt(), 2 * i) << i;
+    }
 }
 
 TEST(HashJoinTest, JoinWithoutKey) {
@@ -1236,6 +1258,65 @@ TEST(HashColumnJoinTest, JoinWithFilter) {
         EXPECT_EQ(v1, key * 0.2);
         EXPECT_EQ(v2, data[key]);
     }
+}
+
+TEST(ParquetHashColumnJoinTest, Join) {
+    auto left = ParquetTable::Open("testres/lineitem", {0, 1, 2, 3});
+
+    auto right = MemTable::Make(2);
+    auto block = right->allocate(10);
+    auto rows = block->rows();
+
+    array<int32_t, 10> data{35, 99, 1154, 4452, 5987, 14145, 21859, 40, 1230, 3234};
+
+    (*rows)[0][0] = 35;
+    (*rows)[1][0] = 99;
+    (*rows)[2][0] = 1154;
+    (*rows)[3][0] = 4452;
+    (*rows)[4][0] = 5987;
+    (*rows)[0][1] = 0;
+    (*rows)[1][1] = 1;
+    (*rows)[2][1] = 2;
+    (*rows)[3][1] = 3;
+    (*rows)[4][1] = 4;
+
+    ParquetHashColumnJoin join(3, 1, new ColumnBuilder({JL(0), JL(1), JL(2), JR(0)}));
+
+    auto joined = join.join(*left, *right);
+
+    int counter = 0;
+    vector <tuple<int, int, int, int>> storage;
+    auto temp = ParquetTable::Open("testres/lineitem", {0, 1, 2, 3});
+    temp->blocks()->sequential()->foreach([&counter, &storage](const shared_ptr <Block> &block) {
+        auto rows = block->rows();
+        auto size = block->size();
+        for (uint32_t i = 0; i < size; ++i) {
+            DataRow &row = rows->next();
+            auto key = row[3].asInt();
+            if (key >= 0 && key <= 4) {
+                counter++;
+                storage.emplace_back(make_tuple(row[0].asInt(), row[1].asInt(), row[2].asInt(), row[3].asInt()));
+            }
+        }
+    });
+
+    uint32_t table_size = 0;
+
+    joined->blocks()->sequential()->foreach([&storage, &data, &table_size](const shared_ptr <Block> &block) {
+        auto rows = block->rows();
+        auto size = block->size();
+        table_size += size;
+        int id1,id2,id3,id4;
+        for (uint32_t i = 0; i < size; ++i) {
+            DataRow &row = rows->next();
+            std::tie(id1,id2,id3,id4) = storage[i];
+            EXPECT_EQ(row[0].asInt(),id1);
+            EXPECT_EQ(row[1].asInt(),id2);
+            EXPECT_EQ(row[2].asInt(),id3);
+            EXPECT_EQ(row[3].asInt(),data[id4]);
+        }
+    });
+    EXPECT_EQ(counter, table_size);
 }
 
 TEST(HashMultiJoinTest, Join) {
