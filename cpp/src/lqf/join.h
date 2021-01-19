@@ -93,6 +93,7 @@ namespace lqf {
         class ColumnBuilder : public JoinBuilder {
         protected:
             vector<pair<uint8_t, uint8_t>> left_merge_inst_;
+            vector<pair<uint8_t, uint8_t>> leftmem_merge_inst_;
             vector<pair<uint8_t, uint8_t>> right_merge_inst_;
         public:
             ColumnBuilder(initializer_list<int32_t>);

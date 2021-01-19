@@ -155,6 +155,7 @@ namespace lqf {
                     right_merge_inst_.emplace_back(right_counter++, i);
                 } else {
                     left_merge_inst_.emplace_back(index, i);
+                    leftmem_merge_inst_.emplace_back(leftmem_merge_inst_.size(), i);
                 }
                 ++i;
             }
@@ -166,20 +167,25 @@ namespace lqf {
         }
 
         shared_ptr<MemvBlock> ColumnBuilder::cacheToMem(Block &input) {
-            auto memcache = make_shared<MemvBlock>(input.size(), load_col_size_);
+            auto block_size = input.size();
+            auto memcache = make_shared<MemvBlock>(block_size, load_col_size_);
 
             for (uint32_t index = 0; index < left_merge_inst_.size(); ++index) {
                 auto src_index = left_merge_inst_[index].first;
                 auto target_index = index;
-
-
+                auto reader = input.col(src_index);
+                auto writer = memcache->col(target_index);
+                for (uint32_t j = 0; j < block_size; ++j) {
+                    (*writer)[j] = (*reader)[j];
+                }
             }
 
             return memcache;
         }
 
         void ColumnBuilder::buildFromMem(MemvBlock &output, MemvBlock &leftMem, MemvBlock &right) {
-
+            output.merge(leftMem, leftmem_merge_inst_);
+            output.merge(right, right_merge_inst_);
         }
     }
 

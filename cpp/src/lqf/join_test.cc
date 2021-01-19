@@ -114,12 +114,15 @@ TEST(RowBuilderTest, CreateRaw) {
     EXPECT_EQ(4242, output[6].asInt());
 }
 
+class ColumnBuilderForTest : public ColumnBuilder {
+
+};
+
 TEST(ColumnBuilderTest, Create) {
     ColumnBuilder cb({JL(0), JL(1), JR(2), JR(0)});
     cb.init();
     EXPECT_EQ(true, cb.useVertical());
     EXPECT_EQ(vector<uint32_t>({1, 1, 1, 1}), cb.outputColSize());
-//    EXPECT_EQ(vector<uint32_t>({0, 1, 2, 3, 4}), cb.outputColOffset());
 
     EXPECT_EQ(vector<uint32_t>({1, 1}), cb.rightColSize());
 //    vector<pair<uint8_t, uint8_t>> vleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1})});
