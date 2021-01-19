@@ -40,12 +40,17 @@ namespace lqf {
             TABLE_TYPE left_type_;
             TABLE_TYPE right_type_;
 
+            // These two are the original table offsets
             vector<uint32_t> left_col_offset_;
             vector<uint32_t> right_col_offset_;
+
+            // The loaded columns from left table
+            vector<uint32_t> load_col_size_;
 
             vector<uint32_t> output_col_offset_;
             vector<uint32_t> output_col_size_;
 
+            // The hashed columns from right table
             vector<uint32_t> snapshot_col_offset_;
             vector<uint32_t> snapshot_col_size_;
 
@@ -95,6 +100,8 @@ namespace lqf {
             virtual ~ColumnBuilder() = default;
 
             virtual void init() override;
+
+            inline const vector<uint32_t> &leftColSize() { return load_col_size_; }
 
             inline const vector<uint32_t> &rightColSize() { return snapshot_col_size_; }
 

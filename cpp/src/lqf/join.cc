@@ -49,19 +49,22 @@ namespace lqf {
                 output_col_size_.push_back(is_string ? 2 : 1);
                 output_col_offset_.push_back(output_col_offset_.back() + output_col_size_.back());
 
+                FIELD_TYPE ifield_type;
+                if (is_raw) {
+                    ifield_type = F_RAW;
+                } else if (is_string) {
+                    ifield_type = F_STRING;
+                } else {
+                    ifield_type = F_REGULAR;
+                }
+
                 if (is_right) {
-                    FIELD_TYPE ifield_type;
-                    if (is_raw) {
-                        ifield_type = F_RAW;
-                    } else if (is_string) {
-                        ifield_type = F_STRING;
-                    } else {
-                        ifield_type = F_REGULAR;
-                    }
                     snapshot_factory.field(ifield_type, index, right_counter++);
 
                     snapshot_col_size_.push_back(output_col_size_.back());
                     snapshot_col_offset_.push_back(snapshot_col_offset_.back() + snapshot_col_size_.back());
+                } else {
+                    load_col_size_.push_back(output_col_size_.back());
                 }
                 ++i;
             }
@@ -583,6 +586,11 @@ namespace lqf {
                 filter->put(i);
             }
         }
+
+        ~(*filter);
+        // Load columns into memory from left side
+        auto leftBlock = make_shared<MemvBlock>(counter, columnBuilder_->leftColSize());
+
 
         auto newblock = makeBlock(0);
         // Merge result block with original block
