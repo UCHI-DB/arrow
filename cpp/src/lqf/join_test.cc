@@ -115,40 +115,58 @@ TEST(RowBuilderTest, CreateRaw) {
 }
 
 class ColumnBuilderForTest : public ColumnBuilder {
+public:
+    ColumnBuilderForTest(initializer_list<int32_t> list) : ColumnBuilder(list) {}
 
+    vector<pair<uint8_t, uint8_t>> &leftInst() {
+        return left_merge_inst_;
+    }
+
+    vector<pair<uint8_t, uint8_t>> &leftMemInst() {
+        return leftmem_merge_inst_;
+    }
+
+    vector<pair<uint8_t, uint8_t>> &rightInst() {
+        return right_merge_inst_;
+    }
 };
 
 TEST(ColumnBuilderTest, Create) {
-    ColumnBuilder cb({JL(0), JL(1), JR(2), JR(0)});
+    ColumnBuilderForTest cb({JL(0), JR(2), JL(1), JR(0)});
     cb.init();
     EXPECT_EQ(true, cb.useVertical());
     EXPECT_EQ(vector<uint32_t>({1, 1, 1, 1}), cb.outputColSize());
 
     EXPECT_EQ(vector<uint32_t>({1, 1}), cb.rightColSize());
-//    vector<pair<uint8_t, uint8_t>> vleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1})});
-//    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3})});
-//    EXPECT_EQ(vleft, cb.leftInst());
-//    EXPECT_EQ(vright, cb.rightInst());
+    vector<pair<uint8_t, uint8_t>> vleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 2})});
+    vector<pair<uint8_t, uint8_t>> vmemleft({pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1})});
+    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 1), pair<uint8_t, uint8_t>({1, 3})});
+    EXPECT_EQ(vleft, cb.leftInst());
+    EXPECT_EQ(vmemleft, cb.leftMemInst());
+    EXPECT_EQ(vright, cb.rightInst());
 }
 
 TEST(ColumnBuilderTest, CreateWithString) {
-    ColumnBuilder cb({JL(0), JL(1), JR(2), JR(0), JLS(3), JRS(3)});
+    ColumnBuilderForTest cb({JL(0), JL(1), JR(2), JR(0), JLS(3), JRS(3)});
     cb.init();
     EXPECT_EQ(true, cb.useVertical());
     EXPECT_EQ(vector<uint32_t>({1, 1, 1, 1, 2, 2}), cb.outputColSize());
-//    EXPECT_EQ(vector<uint32_t>({0, 1, 2, 3, 4, 6, 8}), cb.outputColOffset());
+    EXPECT_EQ(vector<uint32_t>({0, 1, 2, 3, 4, 6, 8}), cb.outputColOffset());
 
     EXPECT_EQ(vector<uint32_t>({1, 1, 2}), cb.rightColSize());
-//    vector<pair<uint8_t, uint8_t>> vleft(
-//            {pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1}), pair<uint8_t, uint8_t>(3, 4)});
-//    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3}),
-//                                           pair<uint8_t, uint8_t>(2, 5)});
-//    EXPECT_EQ(vleft, cb.leftInst());
-//    EXPECT_EQ(vright, cb.rightInst());
+    vector<pair<uint8_t, uint8_t>> vleft(
+            {pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1}), pair<uint8_t, uint8_t>(3, 4)});
+    vector<pair<uint8_t, uint8_t>> vmemleft(
+            {pair<uint8_t, uint8_t>(0, 0), pair<uint8_t, uint8_t>({1, 1}), pair<uint8_t, uint8_t>(2, 4)});
+    vector<pair<uint8_t, uint8_t>> vright({pair<uint8_t, uint8_t>(0, 2), pair<uint8_t, uint8_t>({1, 3}),
+                                           pair<uint8_t, uint8_t>(2, 5)});
+    EXPECT_EQ(vleft, cb.leftInst());
+    EXPECT_EQ(vmemleft, cb.leftMemInst());
+    EXPECT_EQ(vright, cb.rightInst());
 }
 
 TEST(ColumnBuilderTest, cacheToMem) {
-    ColumnBuilder cb({JL(0), JL(1), JR(2), JR(0), JL(2), JL(3)});
+    ColumnBuilderForTest cb({JL(0), JL(1), JR(2), JR(0), JL(2), JL(3)});
     cb.init();
 
     auto ptable = ParquetTable::Open("testres/lineitem", {0, 1, 2, 3});
@@ -159,14 +177,27 @@ TEST(ColumnBuilderTest, cacheToMem) {
     auto mask = make_shared<SimpleBitmap>(first_block_size);
     for (uint32_t i = 0; i < first_block_size; ++i) {
         if (i % 5 == 0) {
-            mask.put(i);
+            mask->put(i);
         }
     }
     auto masked = first_block->mask(mask);
+    auto cached = cb.cacheToMem(*masked);
 
-    auto memcache = make_shared<
+    auto cached_size = first_block_size / 5;
+    EXPECT_EQ(cached_size, cached->size());
 
-    cb.cacheToMem();
+    auto ptable2 = ParquetTable::Open("testres/lineitem", {0, 1, 2, 3});
+    auto blocks2 = ptable->blocks()->collect();
+    auto first_block2 = (*blocks)[0];
+
+    auto cached_rows = cached->rows();
+    auto origin_rows = first_block2->rows();
+    for (uint32_t i = 0; i < cached_size; ++i) {
+        EXPECT_EQ((*cached_rows)[i][0].asInt(), (*origin_rows)[5 * i][0].asInt());
+        EXPECT_EQ((*cached_rows)[i][1].asInt(), (*origin_rows)[5 * i][1].asInt());
+        EXPECT_EQ((*cached_rows)[i][2].asInt(), (*origin_rows)[5 * i][2].asInt());
+        EXPECT_EQ((*cached_rows)[i][3].asInt(), (*origin_rows)[5 * i][3].asInt());
+    }
 }
 
 TEST(ColumnBuilderTest, buildFromMem) {
