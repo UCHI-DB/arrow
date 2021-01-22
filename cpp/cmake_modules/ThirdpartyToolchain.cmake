@@ -1628,7 +1628,8 @@ macro(build_benchmark)
 endmacro()
 
 if(ARROW_BUILD_BENCHMARKS)
-  resolve_dependency(benchmark)
+  # resolve_dependency(benchmark)
+  build_dependency(benchmark)
   # TODO: Don't use global includes but rather target_include_directories
   get_target_property(BENCHMARK_INCLUDE_DIR benchmark::benchmark
                       INTERFACE_INCLUDE_DIRECTORIES)
