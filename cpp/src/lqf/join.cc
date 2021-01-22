@@ -173,19 +173,28 @@ namespace lqf {
             for (uint32_t index = 0; index < left_merge_inst_.size(); ++index) {
                 auto src_index = left_merge_inst_[index].first;
                 auto target_index = index;
-                auto reader = input.col(src_index);
-                auto writer = memcache->col(target_index);
-                for (uint32_t j = 0; j < block_size; ++j) {
-                    (*writer)[j] = reader->next();
-                }
+                copyColumn(block_size, *memcache,target_index,input,src_index);
+//                auto reader = input.col(src_index);
+//                auto writer = memcache->col(target_index);
+//                for (uint32_t j = 0; j < block_size; ++j) {
+//                    (*writer)[j] = reader->next();
+//                }
             }
-
             return memcache;
         }
 
         void ColumnBuilder::buildFromMem(MemvBlock &output, MemvBlock &leftMem, MemvBlock &right) {
             output.merge(leftMem, leftmem_merge_inst_);
             output.merge(right, right_merge_inst_);
+        }
+
+        void ColumnBuilder::copyColumn(uint32_t size, MemvBlock &target, uint32_t target_index, Block &input,
+                                       uint32_t input_index) {
+            auto reader = input.col(input_index);
+            auto writer = target.col(target_index);
+            for (uint32_t j = 0; j < size; ++j) {
+                (*writer)[j] = reader->next();
+            }
         }
     }
 

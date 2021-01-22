@@ -11,10 +11,27 @@ namespace lqf {
             ByteArray date_from("19920101");
             ByteArray date_to("19971231");
 
-            class WithNationColBuilder : ColumnBuilder {
+            class WithNationColBuilder : public ColumnBuilder {
             public:
-                shared_ptr<MemvBlock> cacheToMem(Block&) override {
+                WithNationColBuilder() : ColumnBuilder({JL(LineOrder::CUSTKEY), JRR(Supplier::NATION),
+                                                        JL(LineOrder::ORDERDATE), JL(LineOrder::REVENUE)}) {}
 
+                shared_ptr<MemvBlock> cacheToMem(Block &input) override {
+                    auto block_size = input.size();
+                    auto memcache = make_shared<MemvBlock>(block_size, load_col_size_);
+
+                    copyColumn(block_size, *memcache, 0, input, LineOrder::CUSTKEY);
+
+                    // Copy year
+                    auto reader = input.col(LineOrder::ORDERDATE);
+                    auto writer = memcache->col(1);
+                    for (uint32_t j = 0; j < block_size; ++j) {
+                        (*writer)[j] = udf::date2year(reader->next().asByteArray());
+                    }
+
+                    copyColumn(block_size, *memcache, 2, input, LineOrder::REVENUE);
+
+                    return memcache;
                 }
             };
         }
@@ -51,7 +68,7 @@ namespace lqf {
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
             HashColumnJoin allJoin(0, Customer::CUSTKEY,
-                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true);
+                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true);
             auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
@@ -98,12 +115,12 @@ namespace lqf {
                                                  bind(ByteArrayDictBetween::build, date_from, date_to)));
             auto filteredOrder = orderFilter.filter(*lineorderTable);
 
-            ParquetHashColumnJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder());
+            ParquetHashColumnJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationColBuilder());
             // CUSTKEY, S_NATION, YEAR, REVENUE
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
             HashColumnJoin allJoin(0, Customer::CUSTKEY,
-                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true);
+                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true);
             auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
@@ -160,7 +177,7 @@ namespace lqf {
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
             auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
-                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true),
+                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true),
                                      {orderSupplierJoin, custFilter});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {

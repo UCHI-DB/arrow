@@ -95,6 +95,9 @@ namespace lqf {
             vector<pair<uint8_t, uint8_t>> left_merge_inst_;
             vector<pair<uint8_t, uint8_t>> leftmem_merge_inst_;
             vector<pair<uint8_t, uint8_t>> right_merge_inst_;
+
+            void copyColumn(uint32_t size, MemvBlock &target, uint32_t, Block &input, uint32_t);
+
         public:
             ColumnBuilder(initializer_list<int32_t>);
 
