@@ -1010,7 +1010,7 @@ namespace lqf {
         for (uint32_t i = 0; i < blockSize; ++i) {
             core->reduce(rows->next());
         }
-        return move(core);
+        return core;
     }
 
 // Subclass should override this
