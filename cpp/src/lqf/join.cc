@@ -174,11 +174,6 @@ namespace lqf {
                 auto src_index = left_merge_inst_[index].first;
                 auto target_index = index;
                 copyColumn(block_size, *memcache,target_index,input,src_index);
-//                auto reader = input.col(src_index);
-//                auto writer = memcache->col(target_index);
-//                for (uint32_t j = 0; j < block_size; ++j) {
-//                    (*writer)[j] = reader->next();
-//                }
             }
             return memcache;
         }

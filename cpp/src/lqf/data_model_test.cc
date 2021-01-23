@@ -244,8 +244,9 @@ TEST(MemvBlockTest, Column) {
     auto col2r = mb.col(2);
 
     for (int i = 0; i < 100; ++i) {
-        EXPECT_DOUBLE_EQ(buf1[i], (*col0r)[i].asDouble());
-        EXPECT_EQ(1, (*col0r)[i].size_);
+        auto c0 = col0r->next();
+        EXPECT_DOUBLE_EQ(buf1[i], c0.asDouble());
+        EXPECT_EQ(1, c0.size_);
 
         EXPECT_EQ(buf2[i], (*col1r)[i].asInt());
         EXPECT_EQ(1, (*col1r)[i].size_);

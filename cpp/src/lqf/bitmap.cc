@@ -176,42 +176,23 @@ namespace lqf {
 
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
+        assert(size_ == sx1.size_);
         this->first_valid_ = -1;
-//        uint64_t limit = (array_size_ >> 3) << 3;
-//        uint64_t i = 0;
-//        for (i = 0; i < limit; i += 8) {
-//            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
-//            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
-//            __m512i res = _mm512_and_si512(a, b);
-//            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
-//        }
-//        for (; i < array_size_; ++i) {
-//            this->bitmap_[i] &= sx1.bitmap_[i];
-//        }
         sboost::simd::simd_and(bitmap_, sx1.bitmap_, array_size_);
         return shared_from_this();
     }
 
     shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
+        assert(size_ == sx1.size_);
         this->first_valid_ = -1;
-//        uint64_t limit = (array_size_ >> 3) << 3;
-//        uint64_t i = 0;
-//        for (i = 0; i < limit; i += 8) {
-//            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
-//            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
-//            __m512i res = _mm512_or_si512(a, b);
-//            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
-//        }
-//        for (; i < array_size_; ++i) {
-//            this->bitmap_[i] |= sx1.bitmap_[i];
-//        }
         sboost::simd::simd_or(bitmap_, sx1.bitmap_, array_size_);
         return shared_from_this();
     }
 
     shared_ptr<Bitmap> SimpleBitmap::operator^(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
+        assert(size_ == sx1.size_);
 //        validate_true(size_ == sx1.size_, "size not the same");
         this->first_valid_ = -1;
         uint64_t limit = (array_size_ >> 3) << 3;

@@ -708,7 +708,11 @@ namespace lqf {
     shared_ptr<Block> MaskedBlock::mask(shared_ptr<Bitmap> mask) {
         /// This sequence makes sure that we do not change the original mask, which may be shared by
         /// other instances of MaskedBlock
-        this->mask_ = (*mask) & (*this->mask_);
+        if (this->mask_->size() == mask->size())
+            this->mask_ = (*mask) & (*this->mask_);
+        else { // Not same size, apply mask over valid entries in this->mask_
+
+        }
         return this->shared_from_this();
     }
 
