@@ -28,6 +28,8 @@ namespace lqf {
         return value_ != 0;
     }
 
+    static uint64_t MINUS_ONE = 0xFFFFFFFFFFFFFFFFL;
+
     SimpleBitmapIterator::SimpleBitmapIterator(uint64_t *content, uint64_t content_size, uint64_t num_bits) {
         this->content_ = content;
         this->content_size_ = content_size;
@@ -84,6 +86,63 @@ namespace lqf {
         return answer;
     }
 
+    SimpleBitmapInvIterator::SimpleBitmapInvIterator(uint64_t *content, uint64_t content_size, uint64_t num_bits) {
+        this->content_ = content;
+        // The unused part of bitmap is filled with 0, need to exclude them
+        this->content_size_ = (num_bits + 63) >> 6;
+        this->num_bits_ = num_bits;
+        this->final_mask_ = ~((1L << (num_bits & 0x3f)) - 1);
+
+        for (pointer_ = 0; pointer_ < content_size_; ++pointer_) {
+            if ((cached_ = content_[pointer_]) != MINUS_ONE) {
+                break;
+            }
+        }
+    }
+
+    void SimpleBitmapInvIterator::moveTo(uint64_t pos) {
+        pointer_ = pos >> 6;
+        // Find next non-all-one pointer
+        if (content_[pointer_] != MINUS_ONE) {
+            uint64_t remain = pos & 0x3F;
+            cached_ = content_[pointer_];
+            cached_ |= MINUS_ONE << remain;
+            while (cached_ == MINUS_ONE) {
+                ++pointer_;
+                if (pointer_ == content_size_) {
+                    break;
+                }
+                cached_ = content_[pointer_];
+            }
+        } else {
+            while (content_[pointer_] == MINUS_ONE && pointer_ < content_size_) {
+                pointer_++;
+            }
+            if (pointer_ < content_size_) {
+                cached_ = content_[pointer_];
+            }
+        }
+    }
+
+    bool SimpleBitmapInvIterator::hasNext() {
+        return pointer_ < content_size_ - 1 ||
+               (pointer_ == content_size_ - 1 && (cached_ | final_mask_) != MINUS_ONE);
+    }
+
+    uint64_t SimpleBitmapInvIterator::next() {
+        uint64_t t = (cached_ | (cached_ + 1)) ^cached_; // isolate rightmost 0
+        uint64_t answer = (pointer_ << 6) + _mm_popcnt_u64(t - 1);
+        cached_ |= t;
+        while (cached_ == MINUS_ONE) {
+            ++pointer_;
+            if (pointer_ == content_size_) {
+                break;
+            }
+            cached_ = content_[pointer_];
+        }
+        return answer;
+    }
+
     FullBitmapIterator::FullBitmapIterator(uint64_t size) {
         this->size_ = size;
         this->counter_ = 0;
@@ -102,32 +161,25 @@ namespace lqf {
     }
 
     SimpleBitmap::SimpleBitmap(uint64_t size) {
-//        validate_true(size < 0xFFFFFFFFL, "size overflow");
         // Attention: Due to a glitch in sboost, the bitmap should be one word larger than
         // the theoretical size. Otherwise sboost will read past the boundary and cause
         // memory issues.
         // In addition, the RLE encoding may have at most 503 entries appended to the tail.
         // For simplicity, we just make the bitmap large enough.
         array_size_ = (size >> 6) + 10;
-//        bitmap_ = (uint64_t *) malloc(sizeof(uint64_t) * array_size_);
         bitmap_ = (uint64_t *) aligned_alloc(64, sizeof(uint64_t) * array_size_);
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
         size_ = (int) size;
     }
-
-//    SimpleBitmap::SimpleBitmap(const SimpleBitmap &copy) {
-//        array_size_ = copy.array_size_;
-//        size_ = copy.size_;
-//        first_valid_ = copy.first_valid_;
-//        bitmap_ = (uint64_t *) aligned_alloc(64, array_size_);
-//        memcpy((void *) bitmap_, (void *) copy.bitmap_, sizeof(uint64_t) * array_size_);
-//    }
 
     SimpleBitmap::SimpleBitmap(SimpleBitmap &&move) {
         array_size_ = move.array_size_;
         size_ = move.size_;
         first_valid_ = move.first_valid_;
         bitmap_ = move.bitmap_;
+        cached_cardinality_ = move.cached_cardinality_;
+        dirty_ = move.dirty_;
+
         move.bitmap_ = nullptr;
     }
 
@@ -137,16 +189,6 @@ namespace lqf {
         bitmap_ = nullptr;
     }
 
-//    SimpleBitmap &SimpleBitmap::operator=(const SimpleBitmap &copy) {
-//        if (bitmap_ != nullptr)
-//            free(bitmap_);
-//        array_size_ = copy.array_size_;
-//        size_ = copy.size_;
-//        first_valid_ = copy.first_valid_;
-//        bitmap_ = (uint64_t *) aligned_alloc(64, array_size_);
-//        memcpy((void *) bitmap_, (void *) copy.bitmap_, sizeof(uint64_t) * array_size_);
-//    }
-
     SimpleBitmap &SimpleBitmap::operator=(SimpleBitmap &&move) {
         if (bitmap_ != nullptr)
             free(bitmap_);
@@ -154,6 +196,9 @@ namespace lqf {
         size_ = move.size_;
         first_valid_ = move.first_valid_;
         bitmap_ = move.bitmap_;
+        cached_cardinality_ = move.cached_cardinality_;
+        dirty_ = move.dirty_;
+
         move.bitmap_ = nullptr;
         return *this;
     }
@@ -168,10 +213,13 @@ namespace lqf {
         uint32_t index = static_cast<uint32_t>(pos >> 6);
         uint32_t offset = static_cast<uint32_t> (pos & 0x3F);
         bitmap_[index] |= 1L << offset;
+        dirty_ = true;
     }
 
     void SimpleBitmap::clear() {
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
+        cached_cardinality_ = 0;
+        dirty_ = false;
     }
 
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
@@ -179,6 +227,7 @@ namespace lqf {
         assert(size_ == sx1.size_);
         this->first_valid_ = -1;
         sboost::simd::simd_and(bitmap_, sx1.bitmap_, array_size_);
+        dirty_ = true;
         return shared_from_this();
     }
 
@@ -187,6 +236,7 @@ namespace lqf {
         assert(size_ == sx1.size_);
         this->first_valid_ = -1;
         sboost::simd::simd_or(bitmap_, sx1.bitmap_, array_size_);
+        dirty_ = true;
         return shared_from_this();
     }
 
@@ -206,6 +256,7 @@ namespace lqf {
         for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= sx1.bitmap_[i];
         }
+        dirty_ = true;
         return shared_from_this();
     }
 
@@ -222,21 +273,26 @@ namespace lqf {
         for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= -1;
         }
+        dirty_ = true;
         return shared_from_this();
     }
 
     uint64_t SimpleBitmap::cardinality() {
-        uint64_t counter = 0;
-        uint64_t limit = size_ / 64;
-        uint64_t offset = size_ & 0x3F;
-        for (uint64_t i = 0; i < limit; i++) {
-            counter += _mm_popcnt_u64(bitmap_[i]);
+        if (dirty_) {
+            uint64_t counter = 0;
+            uint64_t limit = size_ / 64;
+            uint64_t offset = size_ & 0x3F;
+            for (uint64_t i = 0; i < limit; i++) {
+                counter += _mm_popcnt_u64(bitmap_[i]);
+            }
+            if (offset > 0) {
+                auto last = bitmap_[limit] & ((1L << offset) - 1);
+                counter += _mm_popcnt_u64(last);
+            }
+            cached_cardinality_ = counter;
+            dirty_ = false;
         }
-        if(offset > 0) {
-            auto last = bitmap_[limit] & ((1L << offset) - 1);
-            counter += _mm_popcnt_u64(last);
-        }
-        return counter;
+        return cached_cardinality_;
     }
 
     uint64_t SimpleBitmap::size() {
@@ -260,11 +316,44 @@ namespace lqf {
                 new SimpleBitmapIterator(this->bitmap_, this->array_size_, this->size_));
     }
 
+    std::unique_ptr<BitmapIterator> SimpleBitmap::inv_iterator() {
+        return std::unique_ptr<BitmapIterator>(
+                new SimpleBitmapInvIterator(this->bitmap_, this->array_size_, this->size_));
+    }
+
+    shared_ptr<Bitmap> SimpleBitmap::mask(Bitmap &input) {
+        auto ite = iterator();
+        auto input_zeroite = input.inv_iterator();
+        auto ite_size = input.size();
+
+        assert(!input.isFull());
+        auto next_flip = input_zeroite->next();
+        for (uint64_t i = 0; i < ite_size; ++i) {
+            if (i < next_flip) {
+                ite->next();
+            } else {
+                erase(ite->next());
+                next_flip = input_zeroite->next();
+            }
+        }
+        dirty_ = true;
+        return shared_from_this();
+    }
+
+    void SimpleBitmap::erase(uint64_t pos) {
+        uint32_t index = static_cast<uint32_t>(pos >> 6);
+        uint32_t offset = static_cast<uint32_t> (pos & 0x3F);
+        bitmap_[index] &= ~(1L << offset);
+        dirty_ = true;
+    }
+
+
     uint64_t *SimpleBitmap::raw() {
         return bitmap_;
     }
 
-    ConcurrentBitmap::ConcurrentBitmap(uint64_t size) : SimpleBitmap(size) {}
+    ConcurrentBitmap::ConcurrentBitmap(uint64_t
+                                       size) : SimpleBitmap(size) {}
 
     void ConcurrentBitmap::put(uint64_t pos) {
         uint32_t index = static_cast<uint32_t>(pos >> 6);
@@ -279,7 +368,8 @@ namespace lqf {
                                               std::memory_order_seq_cst, std::memory_order_seq_cst));
     }
 
-    FullBitmap::FullBitmap(uint64_t size) {
+    FullBitmap::FullBitmap(uint64_t
+                           size) {
         this->size_ = size;
     }
 
@@ -333,6 +423,14 @@ namespace lqf {
 
     std::unique_ptr<BitmapIterator> FullBitmap::iterator() {
         return std::unique_ptr<BitmapIterator>(new FullBitmapIterator(this->size_));
+    }
+
+    std::unique_ptr<BitmapIterator> FullBitmap::inv_iterator() {
+        return std::unique_ptr<BitmapIterator>(new EmptyBitmapIterator());
+    }
+
+    shared_ptr<Bitmap> FullBitmap::mask(Bitmap &input) {
+        return input.shared_from_this();
     }
 
 }

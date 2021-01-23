@@ -711,7 +711,7 @@ namespace lqf {
         if (this->mask_->size() == mask->size())
             this->mask_ = (*mask) & (*this->mask_);
         else { // Not same size, apply mask over valid entries in this->mask_
-
+            this->mask_ = mask_->mask(*mask);
         }
         return this->shared_from_this();
     }

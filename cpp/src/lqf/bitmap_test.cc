@@ -94,6 +94,32 @@ TEST(SimpleBitmapTest, Iterator) {
     ASSERT_EQ(1410140, data[data.size() - 1]);
 }
 
+TEST(SimpleBitmapTest, InvIterator) {
+    auto sb = make_shared<SimpleBitmap>(10000);
+    for (int i = 0; i < 10000; i++) {
+        if (i % 3 == 0)
+            sb->put(i);
+    }
+    auto ite = sb->inv_iterator();
+    std::vector<uint64_t> data = std::vector<uint64_t>();
+    while (ite->hasNext()) {
+        uint64_t value = ite->next();
+        data.push_back(value);
+        ASSERT_TRUE(value < sb->size()) << value;
+    }
+    ASSERT_EQ(6666, data.size());
+    ASSERT_EQ(1, data[0]);
+
+    for (int i = 0; i < 6666; ++i) {
+        ASSERT_EQ(data[i], 3 * (i / 2) + i % 2 + 1) << i;
+    }
+    ASSERT_EQ(9998, data[data.size() - 1]);
+}
+
+TEST(SimpleBitmapTest, Mask) {
+    FAIL() << "Not implemented";
+}
+
 TEST(SimpleBitmapTest, BitwiseAnd) {
 
     auto bitmap1 = make_shared<SimpleBitmap>(1410541);

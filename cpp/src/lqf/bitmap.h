@@ -37,7 +37,7 @@ namespace lqf {
     };
 
     class SimpleBitmapIterator : public BitmapIterator {
-    private:
+    protected:
         uint64_t *content_;
         uint64_t content_size_;
         uint64_t num_bits_;
@@ -56,6 +56,27 @@ namespace lqf {
         virtual uint64_t next() override;
     };
 
+    class SimpleBitmapInvIterator : public BitmapIterator {
+    protected:
+        uint64_t *content_;
+        uint64_t content_size_;
+        uint64_t num_bits_;
+        uint64_t pointer_;
+        uint64_t cached_;
+        uint64_t final_mask_;
+    public :
+        SimpleBitmapInvIterator(uint64_t *content, uint64_t content_size, uint64_t bit_size);
+
+        virtual ~SimpleBitmapInvIterator() = default;
+
+        virtual void moveTo(uint64_t pos) override;
+
+        virtual bool hasNext() override;
+
+        virtual uint64_t next() override;
+    };
+
+
     class FullBitmapIterator : public BitmapIterator {
     private:
         uint64_t size_;
@@ -70,6 +91,19 @@ namespace lqf {
         virtual bool hasNext() override;
 
         virtual uint64_t next() override;
+    };
+
+    class EmptyBitmapIterator : public BitmapIterator {
+    public :
+        EmptyBitmapIterator() {};
+
+        virtual ~EmptyBitmapIterator() = default;
+
+        virtual void moveTo(uint64_t pos) override {}
+
+        virtual bool hasNext() override { return false; }
+
+        virtual uint64_t next() override { return -1; }
     };
 
     class Bitmap : public enable_shared_from_this<Bitmap> {
@@ -99,8 +133,15 @@ namespace lqf {
 
         virtual double ratio() = 0;
 
+        // An iterator return the position of all 1s
         virtual unique_ptr<BitmapIterator> iterator() = 0;
 
+        // An iterator return the position of all 0s
+        virtual unique_ptr<BitmapIterator> inv_iterator() = 0;
+
+        // Use the given mask to mask the current bitmap
+        // Assume the input bitmap has the size equals this->cardinality()
+        virtual shared_ptr<Bitmap> mask(Bitmap &) = 0;
     };
 
     class SimpleBitmap : public Bitmap {
@@ -109,6 +150,11 @@ namespace lqf {
         uint64_t array_size_;
         uint64_t size_;
         uint64_t first_valid_ = -1;
+        uint64_t cached_cardinality_ = -1;
+        // Dirty flag only makes the set 0.5% slower
+        bool dirty_ = false;
+
+        void erase(uint64_t pos);
     public:
         SimpleBitmap(uint64_t size);
 
@@ -148,8 +194,13 @@ namespace lqf {
 
         std::unique_ptr<BitmapIterator> iterator() override;
 
+        std::unique_ptr<BitmapIterator> inv_iterator() override;
+
+        shared_ptr<Bitmap> mask(Bitmap &) override;
+
         uint64_t *raw();
     };
+
 
     /**
      * Support non-blocking concurrent append
@@ -194,6 +245,10 @@ namespace lqf {
         double ratio() override;
 
         std::unique_ptr<BitmapIterator> iterator() override;
+
+        std::unique_ptr<BitmapIterator> inv_iterator() override;
+
+        shared_ptr<Bitmap> mask(Bitmap &) override;
 
     private:
         uint64_t size_;

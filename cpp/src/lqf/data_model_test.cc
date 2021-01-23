@@ -353,6 +353,10 @@ TEST(MemvBlockTest, RowCopy) {
     }
 }
 
+TEST(MaskedBlockTest, Mask) {
+    FAIL() << "Not implemented";
+}
+
 TEST(FlexBlockTest, Access) {
 
     MemFlexBlock flex(colOffset(3));
