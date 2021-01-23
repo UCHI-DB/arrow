@@ -177,8 +177,8 @@ namespace lqf {
         size_ = move.size_;
         first_valid_ = move.first_valid_;
         bitmap_ = move.bitmap_;
-        cached_cardinality_ = move.cached_cardinality_;
-        dirty_ = move.dirty_;
+//        cached_cardinality_ = move.cached_cardinality_;
+//        dirty_ = move.dirty_;
 
         move.bitmap_ = nullptr;
     }
@@ -196,8 +196,8 @@ namespace lqf {
         size_ = move.size_;
         first_valid_ = move.first_valid_;
         bitmap_ = move.bitmap_;
-        cached_cardinality_ = move.cached_cardinality_;
-        dirty_ = move.dirty_;
+//        cached_cardinality_ = move.cached_cardinality_;
+//        dirty_ = move.dirty_;
 
         move.bitmap_ = nullptr;
         return *this;
@@ -213,13 +213,13 @@ namespace lqf {
         uint32_t index = static_cast<uint32_t>(pos >> 6);
         uint32_t offset = static_cast<uint32_t> (pos & 0x3F);
         bitmap_[index] |= 1L << offset;
-        dirty_ = true;
+//        dirty_ = true;
     }
 
     void SimpleBitmap::clear() {
         memset(bitmap_, 0, sizeof(uint64_t) * array_size_);
-        cached_cardinality_ = 0;
-        dirty_ = false;
+//        cached_cardinality_ = 0;
+//        dirty_ = false;
     }
 
     shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
@@ -227,7 +227,7 @@ namespace lqf {
         assert(size_ == sx1.size_);
         this->first_valid_ = -1;
         sboost::simd::simd_and(bitmap_, sx1.bitmap_, array_size_);
-        dirty_ = true;
+//        dirty_ = true;
         return shared_from_this();
     }
 
@@ -236,7 +236,7 @@ namespace lqf {
         assert(size_ == sx1.size_);
         this->first_valid_ = -1;
         sboost::simd::simd_or(bitmap_, sx1.bitmap_, array_size_);
-        dirty_ = true;
+//        dirty_ = true;
         return shared_from_this();
     }
 
@@ -256,7 +256,7 @@ namespace lqf {
         for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= sx1.bitmap_[i];
         }
-        dirty_ = true;
+//        dirty_ = true;
         return shared_from_this();
     }
 
@@ -273,12 +273,12 @@ namespace lqf {
         for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= -1;
         }
-        dirty_ = true;
+//        dirty_ = true;
         return shared_from_this();
     }
 
     uint64_t SimpleBitmap::cardinality() {
-        if (dirty_) {
+//        if (dirty_) {
             uint64_t counter = 0;
             uint64_t limit = size_ / 64;
             uint64_t offset = size_ & 0x3F;
@@ -289,10 +289,11 @@ namespace lqf {
                 auto last = bitmap_[limit] & ((1L << offset) - 1);
                 counter += _mm_popcnt_u64(last);
             }
-            cached_cardinality_ = counter;
-            dirty_ = false;
-        }
-        return cached_cardinality_;
+            return counter;
+//            cached_cardinality_ = counter;
+//            dirty_ = false;
+//        }
+//        return cached_cardinality_;
     }
 
     uint64_t SimpleBitmap::size() {
@@ -336,7 +337,7 @@ namespace lqf {
                 next_flip = input_zeroite->next();
             }
         }
-        dirty_ = true;
+//        dirty_ = true;
         return shared_from_this();
     }
 
@@ -344,7 +345,7 @@ namespace lqf {
         uint32_t index = static_cast<uint32_t>(pos >> 6);
         uint32_t offset = static_cast<uint32_t> (pos & 0x3F);
         bitmap_[index] &= ~(1L << offset);
-        dirty_ = true;
+//        dirty_ = true;
     }
 
 

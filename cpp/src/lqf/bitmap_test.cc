@@ -117,7 +117,40 @@ TEST(SimpleBitmapTest, InvIterator) {
 }
 
 TEST(SimpleBitmapTest, Mask) {
-    FAIL() << "Not implemented";
+    auto big = make_shared<SimpleBitmap>(1000);
+    for (int i = 0; i < 1000; ++i) {
+        if (i % 5 && !((i + 1) % 5 == 0 && i % 2 == 0)) {
+            big->put(i);
+        }
+    }
+    EXPECT_EQ(700, big->cardinality());
+    auto small = make_shared<SimpleBitmap>(700);
+    for (int i = 0; i < 700; ++i) {
+        if (i % 3 == 0) {
+            small->put(i);
+        }
+    }
+    auto masked = big->mask(*small);
+
+    vector<int32_t> data1;
+    vector<int32_t> data;
+    for (int i = 0; i < 1000; ++i) {
+        if (i % 5 && !((i + 1) % 5 == 0 && i % 2 == 0)) {
+            data1.push_back(i);
+        }
+    }
+    for (uint32_t i = 0; i < data1.size(); ++i) {
+        if (i % 3 == 0)
+            data.push_back(data1[i]);
+    }
+
+    EXPECT_EQ(1000, masked->size());
+    EXPECT_EQ(234, masked->cardinality());
+
+    auto ite = masked->iterator();
+    for (uint32_t i = 0; i < 234; ++i) {
+        EXPECT_EQ(data[i], ite->next());
+    }
 }
 
 TEST(SimpleBitmapTest, BitwiseAnd) {

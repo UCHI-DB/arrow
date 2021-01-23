@@ -150,9 +150,9 @@ namespace lqf {
         uint64_t array_size_;
         uint64_t size_;
         uint64_t first_valid_ = -1;
-        uint64_t cached_cardinality_ = -1;
+//        uint64_t cached_cardinality_ = -1;
         // Dirty flag only makes the set 0.5% slower
-        bool dirty_ = false;
+//        bool dirty_ = true;
 
         void erase(uint64_t pos);
     public:

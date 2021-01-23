@@ -590,9 +590,7 @@ namespace lqf {
                                                  lqf::ColumnBuilder *builder, uint32_t expect_size)
             : HashColumnJoin(leftKeyIndex, rightKeyIndex, builder, true, expect_size) {}
 
-    ParquetHashColumnJoin::~ParquetHashColumnJoin() {
-
-    }
+    ParquetHashColumnJoin::~ParquetHashColumnJoin() {}
 
     shared_ptr<Block> ParquetHashColumnJoin::probe(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(leftKeyIndex_);

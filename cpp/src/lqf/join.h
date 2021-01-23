@@ -282,7 +282,8 @@ namespace lqf {
     };
 
     /**
-     * HashColumnJoin working on ParquetTable, caching columns into MemvTable
+     * ParquetHashColumnJoin working on ParquetTable, caching columns into MemvTable
+     * TODO ParquetHashColumnJoin does not support copying raw data into memory now. Need support later
      */
     class ParquetHashColumnJoin : public HashColumnJoin {
     public:

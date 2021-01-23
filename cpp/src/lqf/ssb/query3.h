@@ -24,7 +24,7 @@ namespace lqf {
 
                 void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
                     target[0] = left[LineOrder::CUSTKEY].asInt();
-                    target[1] = right(Supplier::NATION).asInt();
+                    target[1] = right[0].asInt();
                     target[2] = udf::date2year(left[LineOrder::ORDERDATE].asByteArray());
                     target[3] = left[LineOrder::REVENUE].asDouble();
                 }
@@ -38,7 +38,7 @@ namespace lqf {
 
                 void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
                     target[0] = left[LineOrder::CUSTKEY].asInt();
-                    target[1] = right(Supplier::CITY).asInt();
+                    target[1] = right[0].asInt();
                     target[2] = udf::date2year(left[LineOrder::ORDERDATE].asByteArray());
                     target[3] = left[LineOrder::REVENUE].asDouble();
                 }

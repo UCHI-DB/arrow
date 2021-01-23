@@ -9,7 +9,7 @@ namespace lqf {
 
         static const string tablePath(const string &name) {
             std::ostringstream stringStream;
-            stringStream << "/local/hajiang/ssb/20/" << name << ".parquet";
+            stringStream << "/local/hajiang/ssb/1/" << name << ".parquet";
             return stringStream.str();
         }
 

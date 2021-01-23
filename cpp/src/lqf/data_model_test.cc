@@ -354,7 +354,44 @@ TEST(MemvBlockTest, RowCopy) {
 }
 
 TEST(MaskedBlockTest, Mask) {
-    FAIL() << "Not implemented";
+    auto block = make_shared<MemvBlock>(1000, lqf::colSize(3));
+    auto col0 = block->col(0);
+    auto col1 = block->col(1);
+    auto col2 = block->col(2);
+    for (int i = 0; i < 1000; ++i) {
+        (*col0)[i] = i;
+        (*col1)[i] = 2 * i;
+        (*col2)[i] = 3 * i;
+    }
+
+    auto bitmap = make_shared<SimpleBitmap>(1000);
+
+    for (int i = 0; i < 1000; ++i) {
+        if (i % 5 == 0) {
+            bitmap->put(i);
+        }
+    }
+    auto masked = block->mask(bitmap);
+
+    EXPECT_EQ(masked->size(), 200);
+
+    auto bitmap2 = make_shared<SimpleBitmap>(200);
+    for (int i = 0; i < 200; ++i) {
+        if (i % 3)
+            bitmap2->put(i);
+    }
+    auto again = masked->mask(bitmap2);
+    EXPECT_EQ(again->size(), 133);
+
+    auto maskedcol0 = again->col(0);
+    auto maskedcol1 = again->col(1);
+    auto maskedcol2 = again->col(2);
+    for (int i = 0; i < 133; ++i) {
+        auto val = 5 * (3 * (i / 2) + i % 2 + 1);
+        EXPECT_EQ(val, maskedcol0->next().asInt());
+        EXPECT_EQ(val * 2, maskedcol1->next().asInt());
+        EXPECT_EQ(val * 3, maskedcol2->next().asInt());
+    }
 }
 
 TEST(FlexBlockTest, Access) {
