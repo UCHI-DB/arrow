@@ -2,8 +2,8 @@
 // Created by harper on 2/25/20.
 //
 
-#ifndef CHIDATA_LQF_JOIN_H
-#define CHIDATA_LQF_JOIN_H
+#ifndef LQF_JOIN_H
+#define LQF_JOIN_H
 
 #include <climits>
 #include "data_model.h"
@@ -387,4 +387,4 @@ namespace lqf {
         };
     }
 }
-#endif //CHIDATA_LQF_JOIN_H
+#endif //LQF_JOIN_H

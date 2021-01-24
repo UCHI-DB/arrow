@@ -105,6 +105,12 @@ namespace lqf {
             inline ktype min() { return min_.load(); }
 
             inline ktype max() { return max_.load(); }
+
+            static shared_ptr<HashSparseContainer<Int32>> build(Table &input, uint32_t, Snapshoter *,
+                                                         uint32_t expect_size = CONTAINER_SIZE);
+
+            static shared_ptr<HashSparseContainer<Int64>> build(Table &input, function<int64_t(DataRow &)>,
+                    Snapshoter *, uint32_t expect_size = CONTAINER_SIZE);
         };
 
         template<typename DTYPE, typename MAP>
@@ -176,6 +182,14 @@ namespace lqf {
             static shared_ptr<Hash64Container>
             buildContainer(Table &input, function<int64_t(DataRow &)>, Snapshoter *,
                            uint32_t expect_size = CONTAINER_SIZE);
+
+            template <typename Container32>
+            static shared_ptr<Container32> buildParallel(Table &input, uint32_t, Snapshoter *,
+                                                  uint32_t expect_size = CONTAINER_SIZE);
+
+            template <typename Container64>
+            static shared_ptr<Container64> buildParallel(Table &input, function<int64_t(DataRow &)>, Snapshoter *,
+                                                  uint32_t expect_size = CONTAINER_SIZE);
         };
 
     }

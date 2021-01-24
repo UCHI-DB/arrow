@@ -328,5 +328,56 @@ namespace lqf {
             input.blocks()->foreach(processor);
             return retval;
         }
+
+        template<typename DTYPE>
+        shared_ptr<DTYPE> HashBuilder::buildParallel(Table &input, uint32_t keyIndex, Snapshoter *builder,
+                                uint32_t expect_size) {
+            DTYPE *container = new DTYPE(builder->colOffset(), expect_size);
+            shared_ptr<DTYPE> retval = shared_ptr<DTYPE>(container);
+
+            function<void(const shared_ptr<Block> &)> processor = [builder, keyIndex, &container, &retval](
+                    const shared_ptr<Block> &block) {
+                auto hashblock = dynamic_pointer_cast<HashMemBlock<Hash32Container>>(block);
+                if (hashblock) {
+                    retval = hashblock->content();
+                    return;
+                }
+                auto rows = block->rows();
+                auto block_size = block->size();
+                for (uint32_t i = 0; i < block_size; ++i) {
+                    DataRow &row = rows->next();
+                    auto key = row[keyIndex].asInt();
+                    DataRow &writeto = container->add(key);
+                    (*builder)(writeto, row);
+                }
+            };
+            input.blocks()->foreach(processor);
+            return retval;
+        }
+
+        template <typename Container64>
+        shared_ptr<Hash64Container> HashBuilder::buildContainer(Table &input,
+                                                                function<int64_t(DataRow &)> key_maker,
+                                                                Snapshoter *builder, uint32_t expect_size) {
+            Hash64Container *container = new Hash64Container(builder->colOffset(), expect_size);
+            shared_ptr<Hash64Container> retval = shared_ptr<Hash64Container>(container);
+            function<void(const shared_ptr<Block> &)> processor = [builder, &container, &retval, key_maker](
+                    const shared_ptr<Block> &block) {
+                auto hashblock = dynamic_pointer_cast<HashMemBlock<Hash64Container>>(block);
+                if (hashblock) {
+                    retval = hashblock->content();
+                }
+                auto rows = block->rows();
+                auto block_size = block->size();
+                for (uint32_t i = 0; i < block_size; ++i) {
+                    DataRow &row = rows->next();
+                    auto key = key_maker(row);
+                    DataRow &writeto = container->add(key);
+                    (*builder)(writeto, row);
+                }
+            };
+            input.blocks()->foreach(processor);
+            return retval;
+        }
     }
 }

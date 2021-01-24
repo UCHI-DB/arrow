@@ -58,6 +58,7 @@ set(LQF_SRCS
         filter.cc
         filter_executor.cc
         join.cc
+        tjoin.cc
         print.cc
         sort.cc
         mat.cc
