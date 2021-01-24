@@ -170,13 +170,6 @@ namespace lqf {
 
             static shared_ptr<Int32Predicate> buildBitmapPredicate(Table &input, uint32_t, uint32_t);
 
-//            static shared_ptr<Hash32NewContainer>
-//            buildNewContainer(Table &input, uint32_t, Snapshoter *, uint32_t expect_size = CONTAINER_SIZE);
-//
-//            static shared_ptr<Hash64NewContainer>
-//            buildNewContainer(Table &input, function<int64_t(DataRow &)>, Snapshoter *,
-//                           uint32_t expect_size = CONTAINER_SIZE);
-
             static shared_ptr<Hash32Container>
             buildContainer(Table &input, uint32_t, Snapshoter *, uint32_t expect_size = CONTAINER_SIZE);
 
