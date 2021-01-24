@@ -93,7 +93,7 @@ namespace lqf {
             printer.print(*sorted);
         }
 
-        void executeQ3_1Column() {
+        void executeQ3_1() {
             auto customerTable = ParquetTable::Open(Customer::path,
                                                     {Customer::NATION, Customer::REGION, Customer::CUSTKEY});
             auto lineorderTable = ParquetTable::Open(LineOrder::path,
@@ -145,7 +145,7 @@ namespace lqf {
             printer.print(*sorted);
         }
 
-        void executeQ3_1() {
+        void executeQ3_1Graph() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path,
@@ -174,6 +174,10 @@ namespace lqf {
             auto orderSupplierJoin = graph.add(
                     new HashJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder()),
                     {orderFilter, supplierFilter});
+//            auto orderSupplierJoin = graph.add(
+//                    new ParquetHashColumnJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationColBuilder()),
+//                    {orderFilter, supplierFilter});
+
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
             auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
@@ -223,12 +227,22 @@ namespace lqf {
                                                  bind(ByteArrayDictBetween::build, date_from, date_to)));
             auto filteredOrder = orderFilter.filter(*lineorderTable);
 
-            HashJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder());
-            // CUSTKEY, S_NATION, YEAR, REVENUE
-            auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
+            WithNationBuilder builder;
+            builder.on(*filteredOrder, *filteredSupplier);
+            builder.init();
 
-            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
-            printer.print(*orderWithSupp);
+//            auto container = HashBuilder::buildContainer(*filteredSupplier, Supplier::SUPPKEY, builder.snapshoter(),
+//                                                         1048576);
+//            cout<< container->size() << endl;
+//cout << filteredOrder->blocks()->collect()->size() << endl;
+
+            HashJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder());
+//             CUSTKEY, S_NATION, YEAR, REVENUE
+            auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
+////
+            cout << orderWithSupp->size() << endl;
+//            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
+//            printer.print(*orderWithSupp);
 
             /*
             HashColumnJoin allJoin(0, Customer::CUSTKEY,
@@ -285,8 +299,9 @@ namespace lqf {
             // CUSTKEY, S_NATION, YEAR, REVENUE
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
-            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
-            printer.print(*orderWithSupp);
+            cout << orderWithSupp->size() << endl;
+//            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
+//            printer.print(*orderWithSupp);
 
             /*
             HashColumnJoin allJoin(0, Customer::CUSTKEY,

@@ -144,8 +144,8 @@ namespace lqf {
         using Hash32DenseContainer = HashDenseContainer<Int32, CInt32MemRowMap>;
         using Hash64DenseContainer = HashDenseContainer<Int64, CInt64MemRowMap>;
 
-        using Hash32Container = Hash32DenseContainer;
-        using Hash64Container = Hash64DenseContainer;
+        using Hash32Container = Hash32SparseContainer;
+        using Hash64Container = Hash64SparseContainer;
 
         using namespace datacontainer;
 
