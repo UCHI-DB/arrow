@@ -329,15 +329,15 @@ namespace lqf {
             return retval;
         }
 
-        template<typename DTYPE>
-        shared_ptr<DTYPE> HashBuilder::buildParallel(Table &input, uint32_t keyIndex, Snapshoter *builder,
-                                uint32_t expect_size) {
-            DTYPE *container = new DTYPE(builder->colOffset(), expect_size);
-            shared_ptr<DTYPE> retval = shared_ptr<DTYPE>(container);
+        template<typename C32>
+        shared_ptr<C32> buildContainerP32(Table &input, uint32_t keyIndex, Snapshoter *builder,
+                                          uint32_t expect_size = CONTAINER_SIZE) {
+            C32 *container = new C32(builder->colOffset(), expect_size);
+            shared_ptr<C32> retval = shared_ptr<C32>(container);
 
             function<void(const shared_ptr<Block> &)> processor = [builder, keyIndex, &container, &retval](
                     const shared_ptr<Block> &block) {
-                auto hashblock = dynamic_pointer_cast<HashMemBlock<Hash32Container>>(block);
+                auto hashblock = dynamic_pointer_cast<HashMemBlock<C32>>(block);
                 if (hashblock) {
                     retval = hashblock->content();
                     return;
@@ -355,15 +355,14 @@ namespace lqf {
             return retval;
         }
 
-        template <typename Container64>
-        shared_ptr<Hash64Container> HashBuilder::buildContainer(Table &input,
-                                                                function<int64_t(DataRow &)> key_maker,
-                                                                Snapshoter *builder, uint32_t expect_size) {
-            Hash64Container *container = new Hash64Container(builder->colOffset(), expect_size);
-            shared_ptr<Hash64Container> retval = shared_ptr<Hash64Container>(container);
+        template<typename C64>
+        shared_ptr<C64> buildContainerP64(Table &input, function<int64_t(DataRow &)> key_maker,
+                                          Snapshoter *builder, uint32_t expect_size) {
+            C64 *container = new C64(builder->colOffset(), expect_size);
+            shared_ptr<C64> retval = shared_ptr<C64>(container);
             function<void(const shared_ptr<Block> &)> processor = [builder, &container, &retval, key_maker](
                     const shared_ptr<Block> &block) {
-                auto hashblock = dynamic_pointer_cast<HashMemBlock<Hash64Container>>(block);
+                auto hashblock = dynamic_pointer_cast<HashMemBlock<C64>>(block);
                 if (hashblock) {
                     retval = hashblock->content();
                 }
@@ -378,6 +377,40 @@ namespace lqf {
             };
             input.blocks()->foreach(processor);
             return retval;
+        }
+
+        void buildContainerS32();
+
+        void buildContainerS64();
+
+        template<>
+        shared_ptr<Hash32SparseContainer>
+        ContainerBuilder::build<Hash32SparseContainer>(Table &input, uint32_t keyIndex,
+                                                       Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerP32<Hash32SparseContainer>(input, keyIndex, builder, expect_size);
+        }
+
+        template<>
+        shared_ptr<Hash64SparseContainer>
+        ContainerBuilder::build<Hash64SparseContainer>(Table &input,
+                                                       function<int64_t(DataRow &)> key_maker,
+                                                       Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerP64<Hash64SparseContainer>(input, key_maker, builder, expect_size);
+        }
+
+        template<>
+        shared_ptr<Hash32DenseContainer>
+        ContainerBuilder::build<Hash32DenseContainer>(Table &input, uint32_t keyIndex,
+                                                      Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerP32<Hash32DenseContainer>(input, keyIndex, builder, expect_size);
+        }
+
+        template<>
+        shared_ptr<Hash64DenseContainer>
+        ContainerBuilder::build<Hash64DenseContainer>(Table &input,
+                                                      function<int64_t(DataRow &)> key_maker,
+                                                      Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerP64<Hash64DenseContainer>(input, key_maker, builder, expect_size);
         }
     }
 }

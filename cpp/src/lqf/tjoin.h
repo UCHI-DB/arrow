@@ -11,7 +11,7 @@
 namespace lqf {
 
     template<typename Container>
-    class HashBasedTJoin : public HashBasedJoin {
+    class HashBasedTJoin : public Join {
     protected:
         uint32_t left_key_index_;
         uint32_t right_key_index_;
@@ -29,12 +29,81 @@ namespace lqf {
 
         inline void useOuter() { outer_ = true; };
     protected:
+
         virtual shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock) = 0;
 
         shared_ptr<Block> makeBlock(uint32_t);
 
         shared_ptr<TableView> makeTable(unique_ptr<Stream<shared_ptr<Block>>>);
     };
+
+    template<typename Container>
+    class HashTJoin : public HashBasedTJoin<Container> {
+    public:
+        HashTJoin(uint32_t, uint32_t, RowBuilder *, function<bool(DataRow &, DataRow &)> pred = nullptr,
+                  uint32_t expect_size = CONTAINER_SIZE);
+
+        virtual ~HashTJoin() = default;
+
+    protected:
+        RowBuilder *rowBuilder_;
+        function<bool(DataRow &, DataRow &)> predicate_;
+
+        virtual shared_ptr<Block> probe(const shared_ptr<Block> &) override;
+    };
+
+    template<typename Container>
+    class HashColumnTJoin : public HashBasedTJoin<Container> {
+    public:
+        HashColumnTJoin(uint32_t, uint32_t, ColumnBuilder *, bool need_filter = false,
+                        uint32_t expect_size = CONTAINER_SIZE);
+
+        virtual ~HashColumnTJoin() = default;
+
+    protected:
+        bool need_filter_;
+
+        ColumnBuilder *columnBuilder_;
+
+        shared_ptr<Block> probe(const shared_ptr<Block> &) override;
+    };
+
+    /**
+     * ParquetHashColumnJoin working on ParquetTable, caching columns into MemvTable
+     * TODO ParquetHashColumnJoin does not support copying raw data into memory now. Need support later
+     */
+
+    template<typename Container>
+    class ParquetHashColumnTJoin : public HashColumnTJoin<Container> {
+    public:
+        ParquetHashColumnTJoin(uint32_t, uint32_t, ColumnBuilder *, uint32_t expect_size = CONTAINER_SIZE);
+
+        virtual ~ParquetHashColumnTJoin() = default;
+
+    protected:
+        shared_ptr<Block> probe(const shared_ptr<Block> &) override;
+    };
+
+    /**
+     * Instantiate templates
+     */
+    template
+    class HashTJoin<Hash32SparseContainer>;
+
+    template
+    class HashTJoin<Hash32DenseContainer>;
+
+    template
+    class HashColumnTJoin<Hash32SparseContainer>;
+
+    template
+    class HashColumnTJoin<Hash32DenseContainer>;
+
+    template
+    class ParquetHashColumnTJoin<Hash32SparseContainer>;
+
+    template
+    class ParquetHashColumnTJoin<Hash32DenseContainer>;
 }
 
 #endif //LQF_TJOIN_H
