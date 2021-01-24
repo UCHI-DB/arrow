@@ -74,6 +74,10 @@ namespace lqf {
 
         using namespace datacontainer;
 
+        /**
+         * PhaseConcurrentMap based heap allocation MemDataRow container
+         * @tparam DTYPE
+         */
         template<typename DTYPE>
         class HashSparseContainer : public IntPredicate<DTYPE> {
             using ktype = typename DTYPE::type;
@@ -107,6 +111,13 @@ namespace lqf {
             inline ktype max() { return max_.load(); }
         };
 
+        using Hash32SparseContainer = HashSparseContainer<Int32>;
+        using Hash64SparseContainer = HashSparseContainer<Int64>;
+        /**
+         * PhaseConcurrentMap based page allocation container
+         * @tparam DTYPE
+         * @tparam MAP
+         */
         template<typename DTYPE, typename MAP>
         class HashDenseContainer : public IntPredicate<DTYPE> {
             using ktype = typename DTYPE::type;
@@ -139,10 +150,75 @@ namespace lqf {
             inline ktype max() { return max_.load(); }
         };
 
-        using Hash32SparseContainer = HashSparseContainer<Int32>;
-        using Hash64SparseContainer = HashSparseContainer<Int64>;
         using Hash32DenseContainer = HashDenseContainer<Int32, CInt32MemRowMap>;
         using Hash64DenseContainer = HashDenseContainer<Int64, CInt64MemRowMap>;
+
+        /**
+         * A 32-bit map based heap allocation container
+         */
+        class Hash32MapHeapContainer : public IntPredicate<Int32> {
+        protected:
+            vector<uint32_t> col_offset_;
+            google::dense_hash_map<int32_t, MemDataRow *> map_;
+            atomic<int32_t> min_;
+            atomic<int32_t> max_;
+
+        public:
+            Hash32MapHeapContainer(const vector<uint32_t> &);
+
+            Hash32MapHeapContainer(const vector<uint32_t> &, uint32_t size);
+
+            virtual ~Hash32MapHeapContainer();
+
+            DataRow &add(int32_t key);
+
+            bool test(int32_t) override;
+
+            DataRow *get(int32_t key);
+
+            unique_ptr<DataRow> remove(int32_t key);
+
+            unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> iterator();
+
+            inline uint32_t size() { return map_.size(); }
+
+            inline int32_t min() { return min_.load(); }
+
+            inline int32_t max() { return max_.load(); }
+        };
+
+        /**
+         * A 32-bit map based page allocation container
+         */
+        class Hash32MapPageContainer : public IntPredicate<Int32> {
+        protected:
+            MemRowMap map_;
+            atomic<int32_t> min_;
+            atomic<int32_t> max_;
+
+        public:
+            Hash32MapPageContainer(const vector<uint32_t> &);
+
+            Hash32MapPageContainer(const vector<uint32_t> &, uint32_t size);
+
+            virtual ~Hash32MapPageContainer() = default;
+
+            DataRow &add(int32_t key);
+
+            bool test(int32_t) override;
+
+            DataRow *get(int32_t key);
+
+            unique_ptr<DataRow> remove(int32_t key);
+
+            unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> iterator();
+
+            inline uint32_t size() { return map_.size(); }
+
+            inline int32_t min() { return min_.load(); }
+
+            inline int32_t max() { return max_.load(); }
+        };
 
         using Hash32Container = Hash32SparseContainer;
         using Hash64Container = Hash64SparseContainer;
@@ -180,6 +256,7 @@ namespace lqf {
 
         // TODO Use this to replace the one in HashBuilder
         class ContainerBuilder {
+        public:
             template<typename C32>
             static shared_ptr<C32> build(Table &, uint32_t, Snapshoter *, uint32_t expect_size = CONTAINER_SIZE) {
                 // Default implementation return nothing

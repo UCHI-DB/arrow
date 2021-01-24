@@ -174,6 +174,78 @@ namespace lqf {
         template
         class HashSparseContainer<Int64>;
 
+        Hash32MapHeapContainer::Hash32MapHeapContainer(const vector<uint32_t> &offset)
+                : Hash32MapHeapContainer(offset, CONTAINER_SIZE) {}
+
+        Hash32MapHeapContainer::Hash32MapHeapContainer(const vector<uint32_t> &offset, uint32_t size) :
+                col_offset_(offset), map_(size) {}
+
+        Hash32MapHeapContainer::~Hash32MapHeapContainer() noexcept {
+            for (auto &p:map_) {
+                delete p.second;
+            }
+        }
+
+        DataRow &Hash32MapHeapContainer::add(int32_t key) {
+            auto row = new MemDataRow(col_offset_);
+            map_[key] = row;
+            return *row;
+        }
+
+        bool Hash32MapHeapContainer::test(int32_t key) {
+            return map_.find(key) != map_.end();
+        }
+
+        DataRow *Hash32MapHeapContainer::get(int32_t key) {
+            auto found = map_.find(key);
+            if (found != map_.end()) {
+                return found->second;
+            }
+            return nullptr;
+        }
+
+        unique_ptr<DataRow> Hash32MapHeapContainer::remove(int32_t key) {
+            auto found = map_.find(key);
+            if (found == map_.end()) {
+                return nullptr;
+            } else {
+                DataRow *pointer = found->second;
+                map_.erase(found);
+                return unique_ptr<DataRow>(pointer);
+            }
+        }
+
+        unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> Hash32MapHeapContainer::iterator() {
+            throw "Not implemented";
+        }
+
+        Hash32MapPageContainer::Hash32MapPageContainer(const vector<uint32_t> &offset)
+                : Hash32MapPageContainer(offset, CONTAINER_SIZE) {}
+
+        Hash32MapPageContainer::Hash32MapPageContainer(const vector<uint32_t> &offset, uint32_t size) :
+                map_(offset, size) {}
+
+        DataRow &Hash32MapPageContainer::add(int32_t key) {
+            return map_.insert(key);
+        }
+
+        bool Hash32MapPageContainer::test(int32_t key) {
+            return map_.find(key) != nullptr;
+        }
+
+        DataRow *Hash32MapPageContainer::get(int32_t key) {
+            return map_.find(key);
+        }
+
+        unique_ptr<DataRow> Hash32MapPageContainer::remove(int32_t key) {
+            throw "Not supported";
+        }
+
+        unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> Hash32MapPageContainer::iterator() {
+            throw "Not supported";
+        }
+
+
         template<typename CONTENT>
         HashMemBlock<CONTENT>::HashMemBlock(shared_ptr<CONTENT> predicate) : MemBlock(0, 0) {
             content_ = move(predicate);
@@ -379,7 +451,26 @@ namespace lqf {
             return retval;
         }
 
-        void buildContainerS32();
+        template<typename C32>
+        shared_ptr<C32> buildContainerS32(Table &input, uint32_t keyIndex, Snapshoter *builder,
+                                          uint32_t expect_size = CONTAINER_SIZE) {
+            C32 *container = new C32(builder->colOffset(), expect_size);
+            shared_ptr<C32> retval = shared_ptr<C32>(container);
+
+            function<void(const shared_ptr<Block> &)> processor = [builder, keyIndex, &container, &retval](
+                    const shared_ptr<Block> &block) {
+                auto rows = block->rows();
+                auto block_size = block->size();
+                for (uint32_t i = 0; i < block_size; ++i) {
+                    DataRow &row = rows->next();
+                    auto key = row[keyIndex].asInt();
+                    DataRow &writeto = container->add(key);
+                    (*builder)(writeto, row);
+                }
+            };
+            input.blocks()->sequential()->foreach(processor);
+            return retval;
+        }
 
         void buildContainerS64();
 
@@ -411,6 +502,20 @@ namespace lqf {
                                                       function<int64_t(DataRow &)> key_maker,
                                                       Snapshoter *builder, uint32_t expect_size) {
             return buildContainerP64<Hash64DenseContainer>(input, key_maker, builder, expect_size);
+        }
+
+        template<>
+        shared_ptr<Hash32MapHeapContainer>
+        ContainerBuilder::build<Hash32MapHeapContainer>(Table &input, uint32_t keyIndex,
+                                                        Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerS32<Hash32MapHeapContainer>(input, keyIndex, builder, expect_size);
+        }
+
+        template<>
+        shared_ptr<Hash32MapPageContainer>
+        ContainerBuilder::build<Hash32MapPageContainer>(Table &input, uint32_t keyIndex,
+                                                        Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerS32<Hash32MapPageContainer>(input, keyIndex, builder, expect_size);
         }
     }
 }

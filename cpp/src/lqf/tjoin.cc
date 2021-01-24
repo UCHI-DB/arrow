@@ -9,6 +9,46 @@ using namespace std::placeholders;
 using namespace lqf::rowcopy;
 
 namespace lqf {
+
+    /**
+     * Instantiate templates
+     */
+    template
+    class HashTJoin<Hash32SparseContainer>;
+
+    template
+    class HashTJoin<Hash32DenseContainer>;
+
+    template
+    class HashTJoin<Hash32MapHeapContainer>;
+
+    template
+    class HashTJoin<Hash32MapPageContainer>;
+
+    template
+    class HashColumnTJoin<Hash32SparseContainer>;
+
+    template
+    class HashColumnTJoin<Hash32DenseContainer>;
+
+    template
+    class HashColumnTJoin<Hash32MapHeapContainer>;
+
+    template
+    class HashColumnTJoin<Hash32MapPageContainer>;
+
+    template
+    class ParquetHashColumnTJoin<Hash32SparseContainer>;
+
+    template
+    class ParquetHashColumnTJoin<Hash32DenseContainer>;
+
+    template
+    class ParquetHashColumnTJoin<Hash32MapHeapContainer>;
+
+    template
+    class ParquetHashColumnTJoin<Hash32MapPageContainer>;
+
     template<typename Container>
     HashBasedTJoin<Container>::HashBasedTJoin(uint32_t lki, uint32_t rki, JoinBuilder *builder,
                                               uint32_t expect_size)

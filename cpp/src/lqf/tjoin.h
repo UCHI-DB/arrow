@@ -83,27 +83,6 @@ namespace lqf {
     protected:
         shared_ptr<Block> probe(const shared_ptr<Block> &) override;
     };
-
-    /**
-     * Instantiate templates
-     */
-    template
-    class HashTJoin<Hash32SparseContainer>;
-
-    template
-    class HashTJoin<Hash32DenseContainer>;
-
-    template
-    class HashColumnTJoin<Hash32SparseContainer>;
-
-    template
-    class HashColumnTJoin<Hash32DenseContainer>;
-
-    template
-    class ParquetHashColumnTJoin<Hash32SparseContainer>;
-
-    template
-    class ParquetHashColumnTJoin<Hash32DenseContainer>;
 }
 
 #endif //LQF_TJOIN_H
