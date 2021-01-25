@@ -96,11 +96,11 @@ namespace lqf {
                                          {lineorderTable});
 
             auto orderSupplierJoin = graph.add(
-                    new HashJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder()),
+                    new ParquetHashColumnTJoin<Hash32SparseContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithCityColBuilder()),
                     {orderFilter, supplierFilter});
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
-            auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
+            auto allJoin = graph.add(new HashColumnTJoin<Hash32SparseContainer>(0, Customer::CUSTKEY, new ColumnBuilder(
                     {JRR(Customer::NATION), JL(1), JL(2), JL(3)}),true),
                                      {orderSupplierJoin, custFilter});
 

@@ -15,7 +15,7 @@ namespace lqf {
 
                 void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
                     target[0] = udf::date2year(left[LineOrder::ORDERDATE].asByteArray());
-                    target[1] = right(Customer::NATION).asInt();
+                    target[1] = right[0].asInt();
                     target[2] = left[LineOrder::REVENUE].asDouble() - left[LineOrder::SUPPLYCOST].asDouble();
                 }
             };
@@ -53,7 +53,7 @@ namespace lqf {
             FilterJoin suppFilterJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY);
             auto orderOnValidSupp = suppFilterJoin.join(*lineorderTable, *filteredSupp);
 
-            FilterJoin partFilterJoin(LineOrder::PARTKEY, Part::PARTKEY);
+            FilterTJoin<Hash32SetPredicate> partFilterJoin(LineOrder::PARTKEY, Part::PARTKEY);
             auto orderOnValidSP = partFilterJoin.join(*orderOnValidSupp, *filteredPart);
 
             HashJoin withCustJoin(LineOrder::CUSTKEY, Customer::CUSTKEY, new OrderProfitBuilder());
@@ -110,11 +110,11 @@ namespace lqf {
                     new ColFilter(new SBoostByteArrayPredicate(Part::MFGR, bind(ByteArrayDictMultiEq::build, pred))),
                     {partTable});
 
-            auto suppFilterJoin = graph.add(new FilterJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY),
+            auto suppFilterJoin = graph.add(new FilterTJoin<Hash32SetPredicate>(LineOrder::SUPPKEY, Supplier::SUPPKEY),
                                             {lineorderTable, suppFilter});
-            auto partFilterJoin = graph.add(new FilterJoin(LineOrder::PARTKEY, Part::PARTKEY),
+            auto partFilterJoin = graph.add(new FilterTJoin<Hash32Predicate>(LineOrder::PARTKEY, Part::PARTKEY),
                                             {suppFilterJoin, partFilter});
-            auto withCustJoin = graph.add(new HashJoin(LineOrder::CUSTKEY, Customer::CUSTKEY, new OrderProfitBuilder()),
+            auto withCustJoin = graph.add(new HashTJoin<Hash32SparseContainer>(LineOrder::CUSTKEY, Customer::CUSTKEY, new OrderProfitBuilder()),
                                           {partFilterJoin, custFilter});
 
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {

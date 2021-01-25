@@ -11,6 +11,20 @@ namespace lqf {
             ByteArray date_from("19920101");
             ByteArray date_to("19971231");
 
+            class WithNationBuilder : public RowBuilder {
+            public:
+                WithNationBuilder() : RowBuilder(
+                        {JL(LineOrder::CUSTKEY), JRR(Supplier::NATION),
+                         JL(LineOrder::ORDERDATE), JL(LineOrder::REVENUE)}, false, true) {}
+
+                void build(DataRow &target, DataRow &left, DataRow &right, int32_t key) override {
+                    target[0] = left[LineOrder::CUSTKEY].asInt();
+                    target[1] = right[0].asInt();
+                    target[2] = udf::date2year(left[LineOrder::ORDERDATE].asByteArray());
+                    target[3] = left[LineOrder::REVENUE].asDouble();
+                }
+            };
+
             class WithNationColBuilder : public ColumnBuilder {
             public:
                 WithNationColBuilder() : ColumnBuilder({JL(LineOrder::CUSTKEY), JRR(Supplier::NATION),
@@ -63,11 +77,64 @@ namespace lqf {
                                                  bind(ByteArrayDictBetween::build, date_from, date_to)));
             auto filteredOrder = orderFilter.filter(*lineorderTable);
 
-            HashJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder());
+            HashTJoin<Hash32SparseContainer> orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY,
+                                                                new WithNationBuilder(), nullptr, 10000);
             // CUSTKEY, S_NATION, YEAR, REVENUE
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
-            HashColumnJoin allJoin(0, Customer::CUSTKEY,
+            HashColumnTJoin<Hash32SparseContainer> allJoin(0, Customer::CUSTKEY,
+                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true);
+            auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
+
+            function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
+                return (data[0].asInt() << 22) + (data[1].asInt() << 12) + data[2].asInt();
+            };
+            function<vector<AggField *>()> aggFields = []() {
+                return vector<AggField *>{new DoubleSum(3)};
+            };
+            HashAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)
+                    ->field(F_REGULAR, 1, 1)
+                    ->field(F_REGULAR, 2, 2)->buildSnapshot(), aggFields);
+            auto agged = agg.agg(*allJoined);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SILE(2) || (SIE(2) && SDGE(3));
+            };
+            SmallSort sort(comparator);
+            auto sorted = sort.sort(*agged);
+
+            // TODO use dictionary to print column 1
+            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
+            printer.print(*sorted);
+        }
+
+        void executeQ3_1Column() {
+            auto customerTable = ParquetTable::Open(Customer::path,
+                                                    {Customer::NATION, Customer::REGION, Customer::CUSTKEY});
+            auto lineorderTable = ParquetTable::Open(LineOrder::path,
+                                                     {LineOrder::CUSTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE,
+                                                      LineOrder::REVENUE});
+            auto supplierTable = ParquetTable::Open(Supplier::path,
+                                                    {Supplier::SUPPKEY, Supplier::NATION, Supplier::REGION});
+
+            ColFilter supplierFilter(
+                    new SBoostByteArrayPredicate(Supplier::REGION, bind(ByteArrayDictEq::build, region)));
+            auto filteredSupplier = supplierFilter.filter(*supplierTable);
+
+            ColFilter custFilter(
+                    new SBoostByteArrayPredicate(Customer::REGION, bind(ByteArrayDictEq::build, region)));
+            auto filteredCustomer = custFilter.filter(*customerTable);
+
+            ColFilter orderFilter(
+                    new SBoostByteArrayPredicate(LineOrder::ORDERDATE,
+                                                 bind(ByteArrayDictBetween::build, date_from, date_to)));
+            auto filteredOrder = orderFilter.filter(*lineorderTable);
+
+            ParquetHashColumnTJoin<Hash32SparseContainer> orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationColBuilder());
+            // CUSTKEY, S_NATION, YEAR, REVENUE
+            auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
+
+            HashColumnTJoin<Hash32SparseContainer> allJoin(0, Customer::CUSTKEY,
                                    new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true);
             auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
 
@@ -94,58 +161,6 @@ namespace lqf {
         }
 
         void executeQ3_1() {
-            auto customerTable = ParquetTable::Open(Customer::path,
-                                                    {Customer::NATION, Customer::REGION, Customer::CUSTKEY});
-            auto lineorderTable = ParquetTable::Open(LineOrder::path,
-                                                     {LineOrder::CUSTKEY, LineOrder::SUPPKEY, LineOrder::ORDERDATE,
-                                                      LineOrder::REVENUE});
-            auto supplierTable = ParquetTable::Open(Supplier::path,
-                                                    {Supplier::SUPPKEY, Supplier::NATION, Supplier::REGION});
-
-            ColFilter supplierFilter(
-                    new SBoostByteArrayPredicate(Supplier::REGION, bind(ByteArrayDictEq::build, region)));
-            auto filteredSupplier = supplierFilter.filter(*supplierTable);
-
-            ColFilter custFilter(
-                    new SBoostByteArrayPredicate(Customer::REGION, bind(ByteArrayDictEq::build, region)));
-            auto filteredCustomer = custFilter.filter(*customerTable);
-
-            ColFilter orderFilter(
-                    new SBoostByteArrayPredicate(LineOrder::ORDERDATE,
-                                                 bind(ByteArrayDictBetween::build, date_from, date_to)));
-            auto filteredOrder = orderFilter.filter(*lineorderTable);
-
-            ParquetHashColumnJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationColBuilder());
-            // CUSTKEY, S_NATION, YEAR, REVENUE
-            auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
-
-            HashColumnJoin allJoin(0, Customer::CUSTKEY,
-                                   new ColumnBuilder({JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true);
-            auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
-
-            function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
-                return (data[0].asInt() << 22) + (data[1].asInt() << 12) + data[2].asInt();
-            };
-            function<vector<AggField *>()> aggFields = []() {
-                return vector<AggField *>{new DoubleSum(3)};
-            };
-            HashAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 0, 0)
-                    ->field(F_REGULAR, 1, 1)
-                    ->field(F_REGULAR, 2, 2)->buildSnapshot(), aggFields);
-            auto agged = agg.agg(*allJoined);
-
-            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
-                return SILE(2) || (SIE(2) && SDGE(3));
-            };
-            SmallSort sort(comparator);
-            auto sorted = sort.sort(*agged);
-
-            // TODO use dictionary to print column 1
-            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
-            printer.print(*sorted);
-        }
-
-        void executeQ3_1Graph() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path,
@@ -171,16 +186,16 @@ namespace lqf {
                                                  bind(ByteArrayDictBetween::build, date_from, date_to))),
                                          {lineorderTable});
 
-            auto orderSupplierJoin = graph.add(
-                    new HashJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder()),
-                    {orderFilter, supplierFilter});
 //            auto orderSupplierJoin = graph.add(
-//                    new ParquetHashColumnJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationColBuilder()),
+//                    new HashTJoin<Hash32SparseContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder()),
 //                    {orderFilter, supplierFilter});
+            auto orderSupplierJoin = graph.add(
+                    new ParquetHashColumnTJoin<Hash32SparseContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationColBuilder()),
+                    {orderFilter, supplierFilter});
 
             // CUSTKEY, S_NATION, YEAR, REVENUE
 
-            auto allJoin = graph.add(new HashColumnJoin(0, Customer::CUSTKEY, new ColumnBuilder(
+            auto allJoin = graph.add(new HashColumnTJoin<Hash32SparseContainer>(0, Customer::CUSTKEY, new ColumnBuilder(
                     {JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true),
                                      {orderSupplierJoin, custFilter});
 
@@ -231,18 +246,11 @@ namespace lqf {
             builder.on(*filteredOrder, *filteredSupplier);
             builder.init();
 
+            std::cout << filteredCustomer->size() << endl;
 //            auto container = HashBuilder::buildContainer(*filteredSupplier, Supplier::SUPPKEY, builder.snapshoter(),
 //                                                         1048576);
 //            cout<< container->size() << endl;
 //cout << filteredOrder->blocks()->collect()->size() << endl;
-
-            HashJoin orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder());
-//             CUSTKEY, S_NATION, YEAR, REVENUE
-            auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
-////
-            cout << orderWithSupp->size() << endl;
-//            Printer printer(PBEGIN PI(0) PI(1) PI(2) PD(3) PEND);
-//            printer.print(*orderWithSupp);
 
             /*
             HashColumnJoin allJoin(0, Customer::CUSTKEY,

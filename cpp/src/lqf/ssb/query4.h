@@ -9,6 +9,7 @@
 #include "../filter.h"
 #include "../agg.h"
 #include "../join.h"
+#include "../tjoin.h"
 #include "../print.h"
 #include "../sort.h"
 #include "ssbquery.h"

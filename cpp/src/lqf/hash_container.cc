@@ -39,6 +39,30 @@ namespace lqf {
         template
         class HashPredicate<Int64>;
 
+        template<typename DTYPE>
+        HashSetPredicate<DTYPE>::HashSetPredicate():min_(DTYPE::max), max_(DTYPE::min) {}
+
+        template<typename DTYPE>
+        HashSetPredicate<DTYPE>::HashSetPredicate(uint32_t size):content_(size), min_(DTYPE::max), max_(DTYPE::min) {}
+
+        template<typename DTYPE>
+        void HashSetPredicate<DTYPE>::add(ktype val) {
+            // Update range
+            content_.insert(val);
+        }
+
+        template<typename DTYPE>
+        bool HashSetPredicate<DTYPE>::test(ktype val) {
+            return content_.find(val) != content_.end();
+        }
+
+        template
+        class HashSetPredicate<Int32>;
+
+        template
+        class HashSetPredicate<Int64>;
+
+
         BitmapPredicate::BitmapPredicate(uint32_t size) : bitmap_(size) {}
 
         void BitmapPredicate::add(int32_t val) {
@@ -178,7 +202,9 @@ namespace lqf {
                 : Hash32MapHeapContainer(offset, CONTAINER_SIZE) {}
 
         Hash32MapHeapContainer::Hash32MapHeapContainer(const vector<uint32_t> &offset, uint32_t size) :
-                col_offset_(offset), map_(size) {}
+                col_offset_(offset), map_(size) {
+            map_.set_empty_key(-1);
+        }
 
         Hash32MapHeapContainer::~Hash32MapHeapContainer() noexcept {
             for (auto &p:map_) {
@@ -400,6 +426,44 @@ namespace lqf {
             input.blocks()->foreach(processor);
             return retval;
         }
+
+
+        template<>
+        shared_ptr<Hash32Predicate>
+        PredicateBuilder::build<Hash32Predicate>(Table &input, uint32_t keyIndex, uint32_t expect_size) {
+            Hash32Predicate *pred = new Hash32Predicate(expect_size);
+            shared_ptr<Hash32Predicate> retval = shared_ptr<Hash32Predicate>(pred);
+
+            function<void(const shared_ptr<Block> &)> processor =
+                    [&pred, &retval, keyIndex](const shared_ptr<Block> &block) {
+                        auto col = block->col(keyIndex);
+                        uint32_t block_size = block->size();
+                        for (uint32_t i = 0; i < block_size; ++i) {
+                            pred->add(col->next().asInt());
+                        }
+                    };
+            input.blocks()->foreach(processor);
+            return retval;
+        }
+
+        template<>
+        shared_ptr<Hash32SetPredicate>
+        PredicateBuilder::build<Hash32SetPredicate>(Table &input, uint32_t keyIndex, uint32_t expect_size) {
+            Hash32SetPredicate *pred = new Hash32SetPredicate(expect_size);
+            shared_ptr<Hash32SetPredicate> retval = shared_ptr<Hash32SetPredicate>(pred);
+
+            function<void(const shared_ptr<Block> &)> processor =
+                    [&pred, &retval, keyIndex](const shared_ptr<Block> &block) {
+                        auto col = block->col(keyIndex);
+                        uint32_t block_size = block->size();
+                        for (uint32_t i = 0; i < block_size; ++i) {
+                            pred->add(col->next().asInt());
+                        }
+                    };
+            input.blocks()->sequential()->foreach(processor);
+            return retval;
+        }
+
 
         template<typename C32>
         shared_ptr<C32> buildContainerP32(Table &input, uint32_t keyIndex, Snapshoter *builder,

@@ -83,6 +83,28 @@ namespace lqf {
     protected:
         shared_ptr<Block> probe(const shared_ptr<Block> &) override;
     };
+
+    template <typename Container>
+    class FilterTJoin : public Join {
+    protected:
+        uint32_t left_key_index_;
+        uint32_t right_key_index_;
+        uint32_t expect_size_;
+        shared_ptr<Container> predicate_;
+        bool anti_ = false;
+        bool useBitmap_;
+    public:
+        FilterTJoin(uint32_t, uint32_t, uint32_t expect_size = CONTAINER_SIZE);
+
+        virtual ~FilterTJoin() = default;
+
+        virtual shared_ptr<Table> join(Table &left, Table &right) override;
+
+        void useAnti() { anti_ = true; }
+
+    protected:
+        virtual shared_ptr<Block> probe(const shared_ptr<Block> &);
+    };
 }
 
 #endif //LQF_TJOIN_H

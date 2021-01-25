@@ -59,6 +59,35 @@ namespace lqf {
         using Hash32Predicate = HashPredicate<Int32>;
         using Hash64Predicate = HashPredicate<Int64>;
 
+        template<typename DTYPE>
+        class HashSetPredicate : public IntPredicate<DTYPE> {
+            using ktype = typename DTYPE::type;
+        private:
+            unordered_set<ktype> content_;
+            atomic<ktype> min_;
+            atomic<ktype> max_;
+        public:
+            HashSetPredicate();
+
+            HashSetPredicate(uint32_t size);
+
+            virtual ~HashSetPredicate() = default;
+
+            void add(ktype);
+
+            bool test(ktype) override;
+
+            inline uint32_t size() { return content_.size(); }
+
+            inline ktype max() { return max_.load(); }
+
+            inline ktype min() { return min_.load(); }
+        };
+
+        using Hash32SetPredicate = HashSetPredicate<Int32>;
+        using Hash64SetPredicate = HashSetPredicate<Int64>;
+
+
         class BitmapPredicate : public Int32Predicate {
         private:
             ConcurrentBitmap bitmap_;
@@ -113,6 +142,7 @@ namespace lqf {
 
         using Hash32SparseContainer = HashSparseContainer<Int32>;
         using Hash64SparseContainer = HashSparseContainer<Int64>;
+
         /**
          * PhaseConcurrentMap based page allocation container
          * @tparam DTYPE
@@ -254,6 +284,22 @@ namespace lqf {
                            uint32_t expect_size = CONTAINER_SIZE);
         };
 
+        class PredicateBuilder {
+        public:
+            template<typename P32>
+            static shared_ptr<P32> build(Table &input, uint32_t, uint32_t expect_size = CONTAINER_SIZE) {
+                return nullptr;
+            }
+        };
+
+        // Specializations
+        template<>
+        shared_ptr<Hash32Predicate> PredicateBuilder::build<Hash32Predicate>(Table &, uint32_t, uint32_t);
+
+        template<>
+        shared_ptr<Hash32SetPredicate> PredicateBuilder::build<Hash32SetPredicate>(Table &, uint32_t, uint32_t);
+
+
         // TODO Use this to replace the one in HashBuilder
         class ContainerBuilder {
         public:
@@ -271,6 +317,39 @@ namespace lqf {
                 return nullptr;
             }
         };
+
+        // Specializations
+        template<>
+        shared_ptr<Hash32SparseContainer>
+        ContainerBuilder::build<Hash32SparseContainer>(Table &input, uint32_t keyIndex,
+                                                       Snapshoter *builder, uint32_t expect_size);
+
+        template<>
+        shared_ptr<Hash64SparseContainer>
+        ContainerBuilder::build<Hash64SparseContainer>(Table &input,
+                                                       function<int64_t(DataRow &)> key_maker,
+                                                       Snapshoter *builder, uint32_t expect_size);
+
+        template<>
+        shared_ptr<Hash32DenseContainer>
+        ContainerBuilder::build<Hash32DenseContainer>(Table &input, uint32_t keyIndex,
+                                                      Snapshoter *builder, uint32_t expect_size);
+
+        template<>
+        shared_ptr<Hash64DenseContainer>
+        ContainerBuilder::build<Hash64DenseContainer>(Table &input,
+                                                      function<int64_t(DataRow &)> key_maker,
+                                                      Snapshoter *builder, uint32_t expect_size);
+
+        template<>
+        shared_ptr<Hash32MapHeapContainer>
+        ContainerBuilder::build<Hash32MapHeapContainer>(Table &input, uint32_t keyIndex,
+                                                        Snapshoter *builder, uint32_t expect_size);
+
+        template<>
+        shared_ptr<Hash32MapPageContainer>
+        ContainerBuilder::build<Hash32MapPageContainer>(Table &input, uint32_t keyIndex,
+                                                        Snapshoter *builder, uint32_t expect_size);
 
     }
 }

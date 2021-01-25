@@ -14,6 +14,24 @@ namespace lqf {
      * Instantiate templates
      */
     template
+    class FilterTJoin<Hash32Predicate>;
+
+    template
+    class FilterTJoin<Hash32SetPredicate>;
+
+    template
+    class HashBasedTJoin<Hash32SparseContainer>;
+
+    template
+    class HashBasedTJoin<Hash32DenseContainer>;
+
+    template
+    class HashBasedTJoin<Hash32MapHeapContainer>;
+
+    template
+    class HashBasedTJoin<Hash32MapPageContainer>;
+
+    template
     class HashTJoin<Hash32SparseContainer>;
 
     template
@@ -255,5 +273,49 @@ namespace lqf {
 
         HashColumnTJoin<Container>::columnBuilder_->buildFromMem(*newvblock, *leftCacheBlock, probed);
         return newvblock;
+    }
+
+    template<typename Container>
+    FilterTJoin<Container>::FilterTJoin(uint32_t lki, uint32_t rki, uint32_t expect_size)
+            : left_key_index_(lki), right_key_index_(rki), expect_size_(expect_size) {}
+
+
+    template<typename Container>
+    shared_ptr<Table> FilterTJoin<Container>::join(Table &left, Table &right) {
+#ifdef LQF_NODE_TIMING
+        auto start = high_resolution_clock::now();
+#endif
+        predicate_ = PredicateBuilder::build<Container>(right, right_key_index_, expect_size_);
+
+        function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&FilterTJoin<Container>::probe, this, _1);
+#ifdef LQF_NODE_TIMING
+        auto stop = high_resolution_clock::now();
+        auto duration = duration_cast<microseconds>(stop - start);
+        cout << "Filter Join " << name_ << " Time taken: " << duration.count() << " microseconds" << endl;
+#endif
+        return make_shared<TableView>(left.type(), left.colSize(), left.blocks()->map(prober));
+    }
+
+    template <typename Container>
+    shared_ptr<Block> FilterTJoin<Container>::probe(const shared_ptr<Block> &leftBlock) {
+        auto col = leftBlock->col(left_key_index_);
+        auto bitmap = make_shared<SimpleBitmap>(leftBlock->limit());
+        uint32_t size = leftBlock->size();
+        if (anti_) {
+            for (uint32_t i = 0; i < size; ++i) {
+                auto key = col->next().asInt();
+                if (!predicate_->test(key)) {
+                    bitmap->put(col->pos());
+                }
+            }
+        } else {
+            for (uint32_t i = 0; i < size; ++i) {
+                auto key = col->next().asInt();
+                if (predicate_->test(key)) {
+                    bitmap->put(col->pos());
+                }
+            }
+        }
+        return leftBlock->mask(bitmap);
     }
 }
