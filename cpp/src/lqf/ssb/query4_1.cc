@@ -112,7 +112,7 @@ namespace lqf {
 
             auto suppFilterJoin = graph.add(new FilterTJoin<Hash32SetPredicate>(LineOrder::SUPPKEY, Supplier::SUPPKEY),
                                             {lineorderTable, suppFilter});
-            auto partFilterJoin = graph.add(new FilterTJoin<Hash32Predicate>(LineOrder::PARTKEY, Part::PARTKEY),
+            auto partFilterJoin = graph.add(new FilterTJoin<Hash32SetPredicate>(LineOrder::PARTKEY, Part::PARTKEY),
                                             {suppFilterJoin, partFilter});
             auto withCustJoin = graph.add(new HashTJoin<Hash32SparseContainer>(LineOrder::CUSTKEY, Customer::CUSTKEY, new OrderProfitBuilder()),
                                           {partFilterJoin, custFilter});

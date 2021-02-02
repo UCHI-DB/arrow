@@ -6,6 +6,8 @@
 #include "../env.h"
 #include <chrono>
 #include <iostream>
+#include <sys/resource.h>
+#include <sys/time.h>
 
 using namespace std;
 using namespace std::chrono;
@@ -18,7 +20,7 @@ int main() {
 
     // Call the function,
     env_init();
-    executeQ4_1();
+    executeQ1_1();
     env_cleanup();
 
 
@@ -26,4 +28,8 @@ int main() {
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<microseconds>(stop - start);
     cout << "Time taken: " << duration.count() << " microseconds" << endl;
+
+    struct rusage usage;
+    getrusage(RUSAGE_SELF, &usage);
+    cout << "Maximum Resident Size: " << usage.ru_maxrss << "\n";
 }

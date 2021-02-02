@@ -156,6 +156,7 @@ namespace lqf {
 
         virtual uint64_t pos() = 0;
 
+        virtual void close() {}
     };
 
     class ColumnIterator {
@@ -171,6 +172,8 @@ namespace lqf {
         }
 
         virtual uint64_t pos() = 0;
+
+        virtual void close() {}
     };
 
     class Table;

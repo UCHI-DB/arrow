@@ -55,6 +55,8 @@ set(LQF_SRCS
         bitmap.cc
         concurrent.cc
         data_model.cc
+        data_model_enc.cc
+        encoding.cc
         filter.cc
         filter_executor.cc
         join.cc
@@ -113,6 +115,7 @@ set(LQF_TEST_SRC
         dict_test.cc
         data_container_test.cc
         hash_container_test.cc
+        data_model_enc_test.cc
         )
 
 add_test_case(all-test
