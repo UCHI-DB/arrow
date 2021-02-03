@@ -98,6 +98,7 @@ namespace lqf {
         void close() override {
             if (!read_) {
                 // Write buffer
+                write_buffer();
                 while (block_.content_.size() <= col_index_) {
                     block_.content_.push_back(nullptr);
                 }
