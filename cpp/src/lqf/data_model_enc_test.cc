@@ -6,11 +6,10 @@
 #include "data_model_enc.cc"
 
 using namespace lqf;
-using namespace parquet;
 
 TEST(EncMemvBlockTest, WriteCol) {
     auto block = shared_ptr<EncMemvBlock>(
-            new EncMemvBlock({Encoding::type::RLE_DICTIONARY, Encoding::type::RLE_DICTIONARY}));
+            new EncMemvBlock({encoding::Type::DICTIONARY, encoding::Type::DICTIONARY}));
 
     auto col = block->col(0);
 
@@ -24,7 +23,7 @@ TEST(EncMemvBlockTest, WriteCol) {
 
 TEST(EncMemvBlockTest, WriteAndReadCol) {
     auto block = shared_ptr<EncMemvBlock>(
-            new EncMemvBlock({Encoding::type::RLE_DICTIONARY, Encoding::type::RLE_DICTIONARY}));
+            new EncMemvBlock({encoding::Type::DICTIONARY, encoding::Type::DICTIONARY}));
 
     auto writecol = block->col(0);
 

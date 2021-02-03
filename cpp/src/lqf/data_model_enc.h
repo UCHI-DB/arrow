@@ -8,19 +8,21 @@
 #define LQF_DATA_MODEL_ENC_H
 
 #include "data_model.h"
+#include "encoding.h"
 
 namespace lqf {
+
 
     class EncMemvColumnIterator;
 
     class EncMemvBlock : public Block {
     private:
         uint32_t size_;
-        vector<parquet::Encoding::type> types_;
-        vector<shared_ptr<Buffer>> content_;
+        vector<encoding::Type> types_;
+        vector<shared_ptr<vector<shared_ptr<Buffer>>>> content_;
         friend EncMemvColumnIterator;
     public:
-        EncMemvBlock(initializer_list<parquet::Encoding::type>);
+        EncMemvBlock(initializer_list<encoding::Type>);
 
         virtual ~EncMemvBlock() = default;
 

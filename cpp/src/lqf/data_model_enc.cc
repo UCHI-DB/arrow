@@ -6,7 +6,7 @@
 
 namespace lqf {
 
-    EncMemvBlock::EncMemvBlock(initializer_list<parquet::Encoding::type> type)
+    EncMemvBlock::EncMemvBlock(initializer_list<encoding::Type> type)
             : size_(0), types_(type) {}
 
     uint64_t EncMemvBlock::size() {
@@ -30,9 +30,9 @@ namespace lqf {
         uint32_t buffer_end_ = 0;
 
         bool read_ = false;
-        parquet::Encoding::type type_;
-        unique_ptr<EncodingTraits<Int32Type>::Encoder> encoder_;
-        unique_ptr<EncodingTraits<Int32Type>::Decoder> decoder_;
+        encoding::Type type_;
+        unique_ptr<encoding::Encoder> encoder_;
+        unique_ptr<encoding::Decoder> decoder_;
 
         void read_buffer() {
             while (buffer_end_ <= row_index_) {
@@ -44,7 +44,7 @@ namespace lqf {
         }
 
         void write_buffer() {
-            encoder_->Put(buffer_, 1);
+            encoder_->Add(buffer_[0]);
         }
 
     public:
@@ -55,19 +55,12 @@ namespace lqf {
             read_ = block.size_ > 0;
             if (read_) {
                 // read mode
-                if (type_ == parquet::Encoding::RLE_DICTIONARY) {
-                    decoder_ = parquet::MakeDictDecoder<Int32Type>();
-                } else {
-                    decoder_ = parquet::MakeTypedDecoder<Int32Type>(type_);
-                }
+                decoder_ = GetDecoder(type_);
                 auto buffer = block_.content_[col_index_];
-                decoder_->SetData(block_.size_, buffer->data(), buffer->size());
+                decoder_->SetData(buffer);
             } else {
                 // write mode
-                if (type_ == parquet::Encoding::RLE_DICTIONARY)
-                    encoder_ = parquet::MakeTypedEncoder<Int32Type>(type_, true);
-                else
-                    encoder_ = parquet::MakeTypedEncoder<Int32Type>(type_);
+                encoder_ = GetEncoder(type_);
             }
         }
 
@@ -108,7 +101,7 @@ namespace lqf {
                 while (block_.content_.size() <= col_index_) {
                     block_.content_.push_back(nullptr);
                 }
-                block_.content_[col_index_] = encoder_->FlushValues();
+                block_.content_[col_index_] = encoder_->Dump();
             }
         }
     };
