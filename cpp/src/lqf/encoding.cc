@@ -115,7 +115,7 @@ namespace lqf {
                 }
                 uint32_t loaded = decoder_->GetBatch(dest, expect);
                 // Translate using dictionary
-                for (auto i = 0; i < loaded; ++i) {
+                for (uint32_t i = 0; i < loaded; ++i) {
                     dest[i] = dictionary_[dest[i]];
                 }
                 if (loaded < expect) {
