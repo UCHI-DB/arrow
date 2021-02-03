@@ -57,6 +57,7 @@ set(LQF_SRCS
         data_model.cc
         data_model_enc.cc
         encoding.cc
+        operator_enc.cc
         filter.cc
         filter_executor.cc
         join.cc

@@ -3,6 +3,7 @@
 //
 
 #include "query2.h"
+#include "../operator_enc.h"
 #include <iostream>
 
 namespace lqf {
@@ -17,6 +18,7 @@ namespace lqf {
         using namespace q2_1;
         using namespace sboost;
         using namespace parallel;
+        using namespace encopr;
 
         void executeQ2_1Plain() {
             auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
@@ -37,6 +39,53 @@ namespace lqf {
             HashJoin partJoin(LineOrder::PARTKEY, Part::PARTKEY, new Q2RowBuilder());
             auto withPart = partJoin.join(*filteredLineorder, *filteredPart);
 
+            function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
+                return (data(1).asInt() << 16) + data(2).asInt();
+            };
+            function<vector<AggField *>()> aggFields = []() {
+                return vector<AggField *>{new DoubleSum(0)};
+            };
+            HashAgg agg(hasher, RowCopyFactory().field(F_REGULAR, 1, 0)
+                                ->field(F_REGULAR, 2, 1)->buildSnapshot(),
+                        aggFields);
+            auto agged = agg.agg(*withPart);
+
+            function<bool(DataRow *, DataRow *)> comparator = [](DataRow *a, DataRow *b) {
+                return SILE(0) || (SIE(0) && SILE(1));
+            };
+            SmallSort sort(comparator);
+            auto sorted = sort.sort(*agged);
+
+            auto brandDict = partTable->LoadDictionary<ByteArrayType>(Part::BRAND);
+            // TODO use dictionary to print column 1
+            Printer printer(PBEGIN PD(2) PI(0) PI(1) PEND);
+            printer.print(*sorted);
+        }
+
+        void executeQ2_1() {
+            auto supplierTable = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});
+            auto partTable = ParquetTable::Open(Part::path, {Part::PARTKEY, Part::CATEGORY, Part::BRAND});
+            auto lineorderTable = ParquetTable::Open(LineOrder::path, {LineOrder::PARTKEY, LineOrder::SUPPKEY,
+                                                                       LineOrder::ORDERDATE, LineOrder::REVENUE});
+
+            ColFilter partFilter(new SboostPredicate<ByteArrayType>(
+                    Part::CATEGORY, bind(ByteArrayDictEq::build, category)));
+            auto filteredPart = partFilter.filter(*partTable);
+
+            ColFilter suppFilter(new SBoostByteArrayPredicate(Supplier::REGION, bind(ByteArrayDictEq::build, region)));
+            auto filteredSupplier = suppFilter.filter(*supplierTable);
+
+            FilterJoin suppFilterJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY);
+            auto filteredLineorder = suppFilterJoin.join(*lineorderTable, *filteredSupplier);
+
+            encopr::EncHashJoin partJoin(LineOrder::PARTKEY, Part::PARTKEY, new Q2RowBuilder(),
+                                         {parquet::Type::type::DOUBLE, parquet::Type::type::INT32,
+                                          parquet::Type::type::INT32},
+                                         {encoding::EncodingType::PLAIN, encoding::EncodingType::DICTIONARY,
+                                          encoding::EncodingType::DICTIONARY});
+            auto withPart = partJoin.join(*filteredLineorder, *filteredPart);
+
+//            cout << withPart->size() << endl;
             function<uint64_t(DataRow &)> hasher = [](DataRow &data) {
                 return (data(1).asInt() << 16) + data(2).asInt();
             };
@@ -107,7 +156,7 @@ namespace lqf {
             graph.execute(true);
         }
 
-        void executeQ2_1() {
+        void executeQ2_1Graph() {
             ExecutionGraph graph;
 
             auto supplier = ParquetTable::Open(Supplier::path, {Supplier::SUPPKEY, Supplier::REGION});

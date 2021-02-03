@@ -9,6 +9,7 @@
 #include <memory>
 #include <vector>
 #include <arrow/buffer.h>
+#include <parquet/types.h>
 
 #ifndef LQF_ENCODING_H
 #define LQF_ENCODING_H
@@ -19,27 +20,37 @@ namespace lqf {
         using namespace std;
         using namespace arrow;
 
+        enum EncodingType {
+            PLAIN, DICTIONARY
+        };
+
+        // Instead of having a template for each Encoder/Decoder
+        // we choose to just overload the method.
+
+        template<typename DT>
         class Encoder {
+            using dtype = typename DT::c_type;
         public:
-            virtual void Add(int32_t value) = 0;
+            virtual void Add(dtype) = 0;
 
             virtual shared_ptr<vector<shared_ptr<Buffer>>> Dump() = 0;
         };
 
+        template<typename DT>
         class Decoder {
+            using dtype = typename DT::c_type;
         public:
             virtual void SetData(shared_ptr<vector<shared_ptr<Buffer>>> data) = 0;
 
-            virtual uint32_t Decode(int32_t *dest, uint32_t expect) = 0;
+            virtual uint32_t Decode(dtype *dest, uint32_t expect) = 0;
         };
 
-        enum Type {
-            DICTIONARY
-        };
+        template<typename DT>
+        unique_ptr<Encoder<DT>> GetEncoder(EncodingType type);
 
-        unique_ptr<Encoder> GetEncoder(Type type);
+        template<typename DT>
+        unique_ptr<Decoder<DT>> GetDecoder(EncodingType type);
 
-        unique_ptr<Decoder> GetDecoder(Type type);
     }
 }
 

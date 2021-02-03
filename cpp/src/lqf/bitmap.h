@@ -76,7 +76,6 @@ namespace lqf {
         virtual uint64_t next() override;
     };
 
-
     class FullBitmapIterator : public BitmapIterator {
     private:
         uint64_t size_;
@@ -201,7 +200,6 @@ namespace lqf {
         uint64_t *raw();
     };
 
-
     /**
      * Support non-blocking concurrent append
      */
@@ -213,6 +211,7 @@ namespace lqf {
 
         void put(uint64_t) override;
     };
+
 
     class FullBitmap : public Bitmap {
     public:

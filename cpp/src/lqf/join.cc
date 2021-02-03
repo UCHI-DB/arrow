@@ -292,8 +292,9 @@ namespace lqf {
                 }
             }
         }
-        resultblock->resize(counter);
 
+        writer->close();
+        resultblock->resize(counter);
         return resultblock;
     }
 

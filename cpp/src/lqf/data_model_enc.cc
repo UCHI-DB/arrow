@@ -3,11 +3,16 @@
 //
 
 #include "data_model_enc.h"
+#include <type_traits>
 
 namespace lqf {
 
-    EncMemvBlock::EncMemvBlock(initializer_list<encoding::Type> type)
-            : size_(0), types_(type) {}
+    EncMemvBlock::EncMemvBlock(initializer_list<parquet::Type::type> data_type,
+                               initializer_list<encoding::EncodingType> enc_type)
+            : size_(0), data_types_(data_type), encoding_types_(enc_type) {}
+
+    EncMemvBlock::EncMemvBlock(vector<parquet::Type::type> data_type, vector<encoding::EncodingType> enc_type)
+            : size_(0), data_types_(data_type), encoding_types_(enc_type) {}
 
     uint64_t EncMemvBlock::size() {
         return size_;
@@ -17,22 +22,24 @@ namespace lqf {
         // Not supported
     }
 
+    template<typename DT>
     class EncMemvColumnIterator : public ColumnIterator {
+        using data_type = typename DT::c_type;
     private:
         EncMemvBlock &block_;
         uint32_t col_index_;
 
         uint64_t row_index_;
         DataField view_;
-        int32_t buffer_[10];
+        data_type buffer_[10];
 
         uint32_t buffer_start_ = 0;
         uint32_t buffer_end_ = 0;
 
         bool read_ = false;
-        encoding::Type type_;
-        unique_ptr<encoding::Encoder> encoder_;
-        unique_ptr<encoding::Decoder> decoder_;
+        encoding::EncodingType type_;
+        unique_ptr<encoding::Encoder<DT>> encoder_;
+        unique_ptr<encoding::Decoder<DT>> decoder_;
 
         void read_buffer() {
             while (buffer_end_ <= row_index_) {
@@ -49,18 +56,18 @@ namespace lqf {
 
     public:
         EncMemvColumnIterator(EncMemvBlock &block, uint32_t col_index)
-                : block_(block), col_index_(col_index), row_index_(-1), type_(block.types_[col_index]) {
+                : block_(block), col_index_(col_index), row_index_(-1), type_(block.encoding_types_[col_index]) {
             view_.size_ = 1;
             view_ = (uint64_t *) buffer_;
             read_ = block.size_ > 0;
             if (read_) {
                 // read mode
-                decoder_ = GetDecoder(type_);
+                decoder_ = encoding::GetDecoder<DT>(type_);
                 auto buffer = block_.content_[col_index_];
                 decoder_->SetData(buffer);
             } else {
                 // write mode
-                encoder_ = GetEncoder(type_);
+                encoder_ = encoding::GetEncoder<DT>(type_);
             }
         }
 
@@ -184,7 +191,7 @@ namespace lqf {
 
     unique_ptr<DataRowIterator> EncMemvBlock::rows() {
         vector<unique_ptr<ColumnIterator>> cols;
-        for (uint32_t i = 0; i < types_.size(); ++i) {
+        for (uint32_t i = 0; i < data_types_.size(); ++i) {
             auto coli = col(i);
             cols.push_back(move(coli));
         }
@@ -192,7 +199,15 @@ namespace lqf {
     }
 
     unique_ptr<ColumnIterator> EncMemvBlock::col(uint32_t col_index) {
-        return unique_ptr<ColumnIterator>(new EncMemvColumnIterator(*this, col_index));
+        auto type = data_types_[col_index];
+        switch (type) {
+            case parquet::Type::type::INT32:
+                return unique_ptr<ColumnIterator>(new EncMemvColumnIterator<parquet::Int32Type>(*this, col_index));
+            case parquet::Type::type::DOUBLE:
+                return unique_ptr<ColumnIterator>(new EncMemvColumnIterator<parquet::DoubleType>(*this, col_index));
+            default:
+                return nullptr;
+        }
     }
 
     shared_ptr<Block> EncMemvBlock::mask(shared_ptr<Bitmap> mask) {

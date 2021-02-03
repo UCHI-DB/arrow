@@ -10,19 +10,28 @@
 #include "data_model.h"
 #include "encoding.h"
 
+
 namespace lqf {
 
 
+    template<typename DT>
     class EncMemvColumnIterator;
 
     class EncMemvBlock : public Block {
     private:
         uint32_t size_;
-        vector<encoding::Type> types_;
+        vector<parquet::Type::type> data_types_;
+        vector<encoding::EncodingType> encoding_types_;
         vector<shared_ptr<vector<shared_ptr<Buffer>>>> content_;
-        friend EncMemvColumnIterator;
+
+        template<typename DT>
+        friend
+        class EncMemvColumnIterator;
+
     public:
-        EncMemvBlock(initializer_list<encoding::Type>);
+        EncMemvBlock(vector<parquet::Type::type>, vector<encoding::EncodingType>);
+
+        EncMemvBlock(initializer_list<parquet::Type::type>, initializer_list<encoding::EncodingType>);
 
         virtual ~EncMemvBlock() = default;
 

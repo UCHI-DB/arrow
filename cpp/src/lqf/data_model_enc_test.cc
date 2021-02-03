@@ -6,10 +6,12 @@
 #include "data_model_enc.cc"
 
 using namespace lqf;
+using namespace parquet;
 
 TEST(EncMemvBlockTest, WriteCol) {
     auto block = shared_ptr<EncMemvBlock>(
-            new EncMemvBlock({encoding::Type::DICTIONARY, encoding::Type::DICTIONARY}));
+            new EncMemvBlock({Type::type::INT32, Type::type::INT32},
+                             {encoding::EncodingType::DICTIONARY, encoding::EncodingType::PLAIN}));
 
     auto col = block->col(0);
 
@@ -19,23 +21,37 @@ TEST(EncMemvBlockTest, WriteCol) {
     col->close();
 
     EXPECT_EQ(block->size(), 100);
+
+    auto block2 = shared_ptr<EncMemvBlock>(
+            new EncMemvBlock({Type::type::INT32, Type::type::INT32},
+                             {encoding::EncodingType::DICTIONARY, encoding::EncodingType::PLAIN}));
+
+    auto col2 = block2->col(1);
+
+    for (int i = 0; i < 100; ++i) {
+        col2->next() = i;
+    }
+    col2->close();
+
+    EXPECT_EQ(block2->size(), 100);
 }
 
 TEST(EncMemvBlockTest, WriteAndReadCol) {
     auto block = shared_ptr<EncMemvBlock>(
-            new EncMemvBlock({encoding::Type::DICTIONARY, encoding::Type::DICTIONARY}));
+            new EncMemvBlock({Type::type::INT32, Type::type::INT32},
+                             {encoding::EncodingType::DICTIONARY, encoding::EncodingType::DICTIONARY}));
 
     auto writecol = block->col(0);
 
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 50000; ++i) {
         writecol->next() = i;
     }
     writecol->close();
 
-    EXPECT_EQ(block->size(), 100);
+    EXPECT_EQ(block->size(), 50000);
 
     auto readcol = block->col(0);
-    for (auto i = 0; i < 100; ++i) {
+    for (auto i = 0; i < 50000; ++i) {
         EXPECT_EQ(i, readcol->next().asInt());
     }
     readcol->close();
