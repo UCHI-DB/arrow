@@ -396,7 +396,7 @@ namespace lqf {
                 left = middle;
             }
         }
-        return -left - 2;
+        return -left - 1;
     }
 
     RleBitmap::RleBitmap(uint64_t size) : size_(size) {}
