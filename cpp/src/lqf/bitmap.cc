@@ -383,7 +383,7 @@ namespace lqf {
         uint32_t left = 0; // item before left is less than target
         uint32_t right = data_.size() - 1; // item after right is greater than target
 
-        while (left < right) {
+        while (left <= right) {
             auto middle = (left + right + 1) / 2;
             auto val = data_[middle].first;
 
