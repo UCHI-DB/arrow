@@ -8,6 +8,35 @@
 
 using namespace lqf;
 
+class RleBitmapForTest : public RleBitmap {
+public:
+    RleBitmapForTest(uint64_t size) : RleBitmap(size) {}
+
+    uint32_t search(uint64_t pos) {
+        return _search(pos);
+    }
+};
+
+TEST(RleBitmap, Search) {
+    RleBitmapForTest bitmap(1000);
+
+    for (int i = 0; i < 1000; ++i) {
+        if (i % 2) {
+            bitmap.put(i);
+        }
+    }
+
+    for (int i = 0; i < 1000; ++i) {
+        auto res = bitmap.search(i);
+        if (i % 2) {
+            ASSERT_EQ(res, i / 2);
+        } else {
+            ASSERT_EQ(-res - 1, i / 2);
+        }
+    }
+
+}
+
 TEST(FullBitmap, Cardinality) {
     auto bitmap = make_shared<FullBitmap>(1000);
     ASSERT_EQ(1000, bitmap->cardinality());

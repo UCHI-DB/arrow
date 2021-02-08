@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <cstring>
+#include <algorithm>
 #include <immintrin.h>
 #include "validate.h"
 #include "bitmap.h"
@@ -248,10 +249,10 @@ namespace lqf {
         uint64_t limit = (array_size_ >> 3) << 3;
         uint64_t i = 0;
         for (i = 0; i < limit; i += 8) {
-            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
-            __m512i b = _mm512_load_si512((__m512i *) (sx1.bitmap_ + i));
+            __m512i a = _mm512_load_si512((__m512i * )(this->bitmap_ + i));
+            __m512i b = _mm512_load_si512((__m512i * )(sx1.bitmap_ + i));
             __m512i res = _mm512_xor_si512(a, b);
-            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
+            _mm512_store_si512((__m512i * )(this->bitmap_ + i), res);
         }
         for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= sx1.bitmap_[i];
@@ -266,9 +267,9 @@ namespace lqf {
         uint64_t i = 0;
         __m512i ONE = _mm512_set1_epi64(-1);
         for (i = 0; i < limit; i += 8) {
-            __m512i a = _mm512_load_si512((__m512i *) (this->bitmap_ + i));
+            __m512i a = _mm512_load_si512((__m512i * )(this->bitmap_ + i));
             __m512i res = _mm512_xor_si512(a, ONE);
-            _mm512_store_si512((__m512i *) (this->bitmap_ + i), res);
+            _mm512_store_si512((__m512i * )(this->bitmap_ + i), res);
         }
         for (; i < array_size_; ++i) {
             this->bitmap_[i] ^= -1;
@@ -279,17 +280,17 @@ namespace lqf {
 
     uint64_t SimpleBitmap::cardinality() {
 //        if (dirty_) {
-            uint64_t counter = 0;
-            uint64_t limit = size_ / 64;
-            uint64_t offset = size_ & 0x3F;
-            for (uint64_t i = 0; i < limit; i++) {
-                counter += _mm_popcnt_u64(bitmap_[i]);
-            }
-            if (offset > 0) {
-                auto last = bitmap_[limit] & ((1L << offset) - 1);
-                counter += _mm_popcnt_u64(last);
-            }
-            return counter;
+        uint64_t counter = 0;
+        uint64_t limit = size_ / 64;
+        uint64_t offset = size_ & 0x3F;
+        for (uint64_t i = 0; i < limit; i++) {
+            counter += _mm_popcnt_u64(bitmap_[i]);
+        }
+        if (offset > 0) {
+            auto last = bitmap_[limit] & ((1L << offset) - 1);
+            counter += _mm_popcnt_u64(last);
+        }
+        return counter;
 //            cached_cardinality_ = counter;
 //            dirty_ = false;
 //        }
@@ -369,8 +370,147 @@ namespace lqf {
                                               std::memory_order_seq_cst, std::memory_order_seq_cst));
     }
 
-    FullBitmap::FullBitmap(uint64_t
-                           size) {
+    uint32_t RleBitmap::_search(uint64_t target) {
+        if (data_.empty()) {
+            return -1;
+        }
+        if (data_[0].first > target) {
+            return -1;
+        }
+        if (data_[data_.size() - 1].first < target) {
+            return -(data_.size() + 1) - 1;
+        }
+        uint32_t left = 0; // item before left is less than target
+        uint32_t right = data_.size() - 1; // item after right is greater than target
+
+        while (left < right) {
+            auto middle = (left + right + 1) / 2;
+            auto val = data_[middle].first;
+
+            if (val == target) {
+                return middle;
+            }
+            if (val > target) {
+                right = middle - 1;
+            } else {
+                left = middle;
+            }
+        }
+        return -left - 2;
+    }
+
+    RleBitmap::RleBitmap(uint64_t size) : size_(size) {}
+
+    bool RleBitmap::check(uint64_t pos) {
+        auto index = _search(pos);
+        if (index >= 0) {
+            return true;
+        } else {
+            auto lessthan = -index - 1;
+            if (lessthan == 0) {
+                return false;
+            }
+            if (lessthan == data_.size()) {
+                lessthan -= 1;
+            }
+            auto entry = data_[lessthan];
+            return entry.first + entry.second > pos;
+        }
+    }
+
+    void RleBitmap::put(uint64_t pos) {
+        if (data_.empty()) {
+            data_.push_back(pair(pos, 1));
+            return;
+        }
+        auto last = data_[data_.size() - 1];
+        // Fast insert path for continuous insert
+        if (last.first + last.second == pos) {
+            last.second++;
+            return;
+        } else if (pos > last.first + last.second) {
+            data_.push_back(pair(pos, 1));
+            return;
+        }
+        // Look for position
+        // TODO If we want to do better we should check if the new pos merges two existing RLE entry. Not doing it now
+        auto index = _search(pos);
+        if (index < 0) { // do nothing for >=0 as it already exists
+            auto lessthan = -index - 1;
+            if (lessthan == 0) {
+                data_.emplace(data_.begin(), pos, 1);
+                return;
+            }
+            auto entry = data_[lessthan - 1];
+            auto boundary = entry.first + entry.second;
+            if (boundary == pos) {
+                entry.second++;
+            }
+            if (boundary < pos) {
+                // need new entry
+                data_.emplace(data_.begin() + lessthan + 1, pair<uint64_t, uint32_t>(pos, 1));
+            }
+        }
+    }
+
+    void RleBitmap::clear() {
+        data_.clear();
+    }
+
+    uint64_t RleBitmap::cardinality() {
+        uint64_t sum = 0L;
+        for (auto &data: data_) {
+            sum += data.second;
+        }
+        return sum;
+    }
+
+    uint64_t RleBitmap::size() {
+        return size_;
+    }
+
+    bool RleBitmap::isFull() {
+        // TODO Beware of overflow
+        return data_[0].first == 0 && data_[0].second == size_;
+    }
+
+    bool RleBitmap::isEmpty() {
+        return data_.empty();
+    }
+
+    double RleBitmap::ratio() {
+        return ((double) cardinality()) / size();
+    }
+
+    shared_ptr<Bitmap> RleBitmap::operator&(Bitmap &x1) {
+        throw "not implemented";
+    }
+
+    shared_ptr<Bitmap> RleBitmap::operator^(Bitmap &x1) {
+        throw "not implemented";
+    }
+
+    shared_ptr<Bitmap> RleBitmap::operator|(Bitmap &x1) {
+        throw "not implemented";
+    }
+
+    shared_ptr<Bitmap> RleBitmap::operator~() {
+        throw "not implemented";
+    }
+
+    std::unique_ptr<BitmapIterator> RleBitmap::iterator() {
+        throw "not implemented";
+    }
+
+    std::unique_ptr<BitmapIterator> RleBitmap::inv_iterator() {
+        throw "not implemented";
+    }
+
+    shared_ptr<Bitmap> RleBitmap::mask(Bitmap &) {
+        throw "not implemented";
+    }
+
+    FullBitmap::FullBitmap(uint64_t size) {
         this->size_ = size;
     }
 

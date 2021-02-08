@@ -154,6 +154,7 @@ namespace lqf {
 //        bool dirty_ = true;
 
         void erase(uint64_t pos);
+
     public:
         SimpleBitmap(uint64_t size);
 
@@ -212,6 +213,48 @@ namespace lqf {
         void put(uint64_t) override;
     };
 
+    class RleBitmap : public Bitmap {
+    protected:
+        uint64_t size_;
+        vector<pair<uint64_t, uint32_t>> data_;
+
+        // Binary search for a position good for inserting the target
+        uint32_t _search(uint64_t target);
+    public:
+        RleBitmap(uint64_t);
+
+        virtual ~RleBitmap() = default;
+
+        bool check(uint64_t pos) override;
+
+        virtual void put(uint64_t pos) override;
+
+        void clear() override;
+
+        shared_ptr<Bitmap> operator&(Bitmap &x1) override;
+
+        shared_ptr<Bitmap> operator|(Bitmap &x1) override;
+
+        shared_ptr<Bitmap> operator^(Bitmap &x1) override;
+
+        shared_ptr<Bitmap> operator~() override;
+
+        uint64_t cardinality() override;
+
+        uint64_t size() override;
+
+        bool isFull() override;
+
+        bool isEmpty() override;
+
+        double ratio() override;
+
+        std::unique_ptr<BitmapIterator> iterator() override;
+
+        std::unique_ptr<BitmapIterator> inv_iterator() override;
+
+        shared_ptr<Bitmap> mask(Bitmap &) override;
+    };
 
     class FullBitmap : public Bitmap {
     public:
