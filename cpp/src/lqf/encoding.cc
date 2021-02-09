@@ -3,6 +3,8 @@
 //
 
 #include "encoding.h"
+#include <sboost/byteutils.h>
+#include <sboost/unpacker.h>
 #include <parquet/encoding.h>
 #include <arrow/util/rle_encoding.h>
 #include <parquet/platform.h>
@@ -185,7 +187,7 @@ namespace lqf {
                             break; // no more block
                     }
 
-                    auto inblock_load = block_remain_ >= data_remain ? data_remain: block_remain_;
+                    auto inblock_load = block_remain_ >= data_remain ? data_remain : block_remain_;
                     auto inblock_remain = inblock_load;
                     while (inblock_remain > 0) {
                         auto batch_size = inblock_remain > 1024 ? 1024 : inblock_remain;
@@ -209,6 +211,129 @@ namespace lqf {
             }
         };
 
+        static int BP_BLOCK_SIZE = 4096;
+
+        class BitpackEncoder : Encoder<parquet::Int32Type> {
+        protected:
+            vector<shared_ptr<Buffer>> blocks_;
+            vector<int32_t> buffer_;
+
+            void DumpBlock() {
+                auto min = INT32_MAX;
+                auto max = INT32_MIN;
+                for (auto &item: buffer_) {
+                    min = item < min ? item : min;
+                    max = item > max ? item : max;
+                }
+                auto diff = max - min;
+                auto bit_width = parquet::BitUtil::Log2(diff);
+
+                for (uint32_t i = 0; i < buffer_.size(); ++i) {
+                    buffer_[i] -= min;
+                }
+
+                auto real_num_entry = buffer_.size();
+                auto num_group = ((buffer_.size() + 7) >> 3);
+                auto num_entry = num_group << 3;
+                // Filler
+                for (int i = 0; i < num_entry - real_num_entry; i++) {
+                    buffer_.push_back(0);
+                }
+                // Bit-pack the delta
+
+                auto size_in_byte = num_group * bit_width;
+
+                size_in_byte += 4; // num_entry;
+                size_in_byte += 4; //min_value
+                size_in_byte += 1;  // bit_width
+                auto block = AllocateBuffer(default_memory_pool(), size_in_byte);
+                auto intview = reinterpret_cast<int32_t *>(block->mutable_data());
+                intview[0] = real_num_entry;
+                intview[1] = min;
+                block->mutable_data()[8] = bit_width;
+
+                ::sboost::byteutils::bitpack(reinterpret_cast<uint32_t *>(buffer_.data()), num_entry, bit_width,
+                                             block->mutable_data() + 9);
+
+                blocks_.push_back(block);
+                buffer_.clear();
+            }
+
+        public:
+            void Add(int32_t value) override {
+                buffer_.push_back(value);
+                if (buffer_.size() >= BP_BLOCK_SIZE) {
+                    DumpBlock();
+                }
+            }
+
+            shared_ptr<vector<shared_ptr<Buffer>>> Dump() {
+                DumpBlock();
+
+                auto ret = make_shared<vector<shared_ptr<Buffer>>>(move(blocks_));
+                return ret;
+            }
+        };
+
+        class BitpackDecoder : Decoder<parquet::Int32Type> {
+        protected:
+            shared_ptr<vector<shared_ptr<Buffer>>> data_;
+
+            uint32_t current_block_index_ = -1;
+            ::sboost::Unpacker *unpacker_ = nullptr;
+            uint32_t block_num_entry_;
+            __m256i block_min_;
+            uint32_t block_counter_;
+            uint32_t block_bit_width_;
+            uint8_t *block_pointer_;
+
+            bool LoadNextBlock() {
+                current_block_index_++;
+                if (current_block_index_ >= data_->size()) {
+                    unpacker_ = nullptr;
+                    return false;
+                }
+                auto current_buffer = (*data_)[current_block_index_].get();
+                auto raw_data = current_buffer->data();
+
+                auto intview = reinterpret_cast<const int32_t *>(raw_data);
+                block_num_entry_ = intview[0];
+                block_min_ = _mm256_set1_epi32(intview[1]);
+                block_bit_width_ = raw_data[8];
+                block_pointer_ = (uint8_t *) (raw_data + 9);
+
+                unpacker_ = ::sboost::unpackers[block_bit_width_];
+                block_counter_ = 0;
+
+                return true;
+            }
+
+        public:
+            void SetData(shared_ptr<vector<shared_ptr<Buffer>>> data) override {
+                data_ = move(data);
+                LoadNextBlock();
+            }
+
+            uint32_t Decode(int32_t *dest, uint32_t expect) override {
+                assert(expect == 8);
+                if (unpacker_ == nullptr) {
+                    return 0;
+                }
+                auto value = unpacker_->unpack(block_pointer_);
+                _mm256_add_epi32(value, block_min_);
+                _mm256_store_epi64(reinterpret_cast<void *>(*dest), value);
+
+                block_pointer_ += block_bit_width_;
+                if (block_counter_ >= block_num_entry_) {
+                    auto loaded = block_num_entry_ % 8;
+                    LoadNextBlock();
+                    return loaded;
+                } else {
+                    return 8;
+                }
+            }
+        };
+
         template<typename DT>
         unique_ptr<Encoder<DT>> GetEncoder(EncodingType type) {
             switch (type) {
@@ -216,6 +341,8 @@ namespace lqf {
                     return unique_ptr<Encoder<DT>>(new DictEncoder<DT>());
                 case PLAIN:
                     return unique_ptr<Encoder<DT>>(new PlainEncoder<DT>());
+                case BITPACK:
+                    return unique_ptr<BitpackEncoder>(new BitpackEncoder());
                 default:
                     return nullptr;
             }

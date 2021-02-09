@@ -19,7 +19,7 @@ namespace lqf {
     }
 
     void EncMemvBlock::resize(uint32_t newsize) {
-        // Not supported
+        size_ = newsize;
     }
 
     template<typename DT>

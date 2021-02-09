@@ -40,7 +40,7 @@ namespace lqf {
 
         Dictionary(shared_ptr<DictionaryPage> data);
 
-        Dictionary(void *buffer);
+        Dictionary(void *buffer, uint32_t size);
 
         Dictionary(Dictionary &) = delete;
 

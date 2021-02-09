@@ -32,9 +32,9 @@ namespace lqf {
 
         virtual shared_ptr<Block> probe(const shared_ptr<Block> &leftBlock) = 0;
 
-        shared_ptr<Block> makeBlock(uint32_t);
+        virtual shared_ptr<Block> makeBlock(uint32_t);
 
-        shared_ptr<TableView> makeTable(unique_ptr<Stream<shared_ptr<Block>>>);
+        virtual shared_ptr<TableView> makeTable(unique_ptr<Stream<shared_ptr<Block>>>);
     };
 
     template<typename Container>

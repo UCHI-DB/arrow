@@ -33,6 +33,12 @@ namespace lqf {
     }
 
     template<typename DTYPE>
+    Dictionary<DTYPE>::Dictionary(void *buffer, uint32_t size) {
+        buffer_ = reinterpret_cast<T *>(buffer);
+        size_ = size;
+    }
+
+    template<typename DTYPE>
     Dictionary<DTYPE>::~Dictionary() {
         if (nullptr != buffer_)
             free(buffer_);

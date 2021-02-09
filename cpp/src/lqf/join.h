@@ -114,6 +114,10 @@ namespace lqf {
 
             // The left table is a memory cache
             virtual void buildFromMem(MemvBlock &, MemvBlock &, MemvBlock &);
+
+            inline vector<pair<uint8_t, uint8_t>> &leftMergeInst() { return left_merge_inst_; }
+
+            inline vector<pair<uint8_t, uint8_t>> &rightMergeInst() { return right_merge_inst_; }
         };
 
     }

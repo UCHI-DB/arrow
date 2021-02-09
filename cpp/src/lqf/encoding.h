@@ -21,7 +21,7 @@ namespace lqf {
         using namespace arrow;
 
         enum EncodingType {
-            PLAIN, DICTIONARY
+            PLAIN, DICTIONARY, BITPACK
         };
 
         // Instead of having a template for each Encoder/Decoder
