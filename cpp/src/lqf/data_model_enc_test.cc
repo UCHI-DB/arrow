@@ -8,7 +8,7 @@
 using namespace lqf;
 using namespace parquet;
 
-TEST(EncMemvBlockTest, WriteCol) {
+TEST(EncMemvBlockTest, WriteDictCol) {
     auto block = shared_ptr<EncMemvBlock>(
             new EncMemvBlock({Type::type::INT32, Type::type::INT32},
                              {encoding::EncodingType::DICTIONARY, encoding::EncodingType::PLAIN}));

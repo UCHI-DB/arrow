@@ -33,6 +33,8 @@ namespace lqf {
 
         EncMemvBlock(initializer_list<parquet::Type::type>, initializer_list<encoding::EncodingType>);
 
+        EncMemvBlock(EncMemvBlock&);
+
         virtual ~EncMemvBlock() = default;
 
         uint64_t size() override;

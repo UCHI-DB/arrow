@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <immintrin.h>
 #include <arrow/buffer.h>
 #include <parquet/types.h>
 
@@ -48,9 +49,14 @@ namespace lqf {
         template<typename DT>
         unique_ptr<Encoder<DT>> GetEncoder(EncodingType type);
 
+        template<>
+        unique_ptr<Encoder<parquet::Int32Type>> GetEncoder<parquet::Int32Type>(EncodingType type);
+
         template<typename DT>
         unique_ptr<Decoder<DT>> GetDecoder(EncodingType type);
 
+        template<>
+        unique_ptr<Decoder<parquet::Int32Type>> GetDecoder<parquet::Int32Type>(EncodingType type);
     }
 }
 

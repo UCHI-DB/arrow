@@ -223,7 +223,7 @@ namespace lqf {
 //        dirty_ = false;
     }
 
-    shared_ptr<Bitmap> SimpleBitmap::operator&(Bitmap &another) {
+    shared_ptr <Bitmap> SimpleBitmap::operator&(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         assert(size_ == sx1.size_);
         this->first_valid_ = -1;
@@ -232,7 +232,7 @@ namespace lqf {
         return shared_from_this();
     }
 
-    shared_ptr<Bitmap> SimpleBitmap::operator|(Bitmap &another) {
+    shared_ptr <Bitmap> SimpleBitmap::operator|(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         assert(size_ == sx1.size_);
         this->first_valid_ = -1;
@@ -241,7 +241,7 @@ namespace lqf {
         return shared_from_this();
     }
 
-    shared_ptr<Bitmap> SimpleBitmap::operator^(Bitmap &another) {
+    shared_ptr <Bitmap> SimpleBitmap::operator^(Bitmap &another) {
         SimpleBitmap &sx1 = static_cast<SimpleBitmap &>(another);
         assert(size_ == sx1.size_);
 //        validate_true(size_ == sx1.size_, "size not the same");
@@ -261,7 +261,7 @@ namespace lqf {
         return shared_from_this();
     }
 
-    shared_ptr<Bitmap> SimpleBitmap::operator~() {
+    shared_ptr <Bitmap> SimpleBitmap::operator~() {
         this->first_valid_ = -1;
         uint64_t limit = (array_size_ >> 3) << 3;
         uint64_t i = 0;
@@ -313,17 +313,17 @@ namespace lqf {
         return (double) cardinality() / size_;
     }
 
-    std::unique_ptr<BitmapIterator> SimpleBitmap::iterator() {
+    std::unique_ptr <BitmapIterator> SimpleBitmap::iterator() {
         return std::unique_ptr<BitmapIterator>(
                 new SimpleBitmapIterator(this->bitmap_, this->array_size_, this->size_));
     }
 
-    std::unique_ptr<BitmapIterator> SimpleBitmap::inv_iterator() {
+    std::unique_ptr <BitmapIterator> SimpleBitmap::inv_iterator() {
         return std::unique_ptr<BitmapIterator>(
                 new SimpleBitmapInvIterator(this->bitmap_, this->array_size_, this->size_));
     }
 
-    shared_ptr<Bitmap> SimpleBitmap::mask(Bitmap &input) {
+    shared_ptr <Bitmap> SimpleBitmap::mask(Bitmap &input) {
         auto ite = iterator();
         auto input_zeroite = input.inv_iterator();
         auto ite_size = input.size();
@@ -384,7 +384,7 @@ namespace lqf {
         uint32_t right = data_.size() - 1; // item after right is greater than target
 
         while (left <= right) {
-            auto middle = (left + right + 1) / 2;
+            auto middle = (left + right) / 2;
             auto val = data_[middle].first;
 
             if (val == target) {
@@ -393,7 +393,7 @@ namespace lqf {
             if (val > target) {
                 right = middle - 1;
             } else {
-                left = middle;
+                left = middle + 1;
             }
         }
         return -left - 1;
@@ -482,31 +482,31 @@ namespace lqf {
         return ((double) cardinality()) / size();
     }
 
-    shared_ptr<Bitmap> RleBitmap::operator&(Bitmap &x1) {
+    shared_ptr <Bitmap> RleBitmap::operator&(Bitmap &x1) {
         throw "not implemented";
     }
 
-    shared_ptr<Bitmap> RleBitmap::operator^(Bitmap &x1) {
+    shared_ptr <Bitmap> RleBitmap::operator^(Bitmap &x1) {
         throw "not implemented";
     }
 
-    shared_ptr<Bitmap> RleBitmap::operator|(Bitmap &x1) {
+    shared_ptr <Bitmap> RleBitmap::operator|(Bitmap &x1) {
         throw "not implemented";
     }
 
-    shared_ptr<Bitmap> RleBitmap::operator~() {
+    shared_ptr <Bitmap> RleBitmap::operator~() {
         throw "not implemented";
     }
 
-    std::unique_ptr<BitmapIterator> RleBitmap::iterator() {
+    std::unique_ptr <BitmapIterator> RleBitmap::iterator() {
         throw "not implemented";
     }
 
-    std::unique_ptr<BitmapIterator> RleBitmap::inv_iterator() {
+    std::unique_ptr <BitmapIterator> RleBitmap::inv_iterator() {
         throw "not implemented";
     }
 
-    shared_ptr<Bitmap> RleBitmap::mask(Bitmap &) {
+    shared_ptr <Bitmap> RleBitmap::mask(Bitmap &) {
         throw "not implemented";
     }
 
@@ -526,19 +526,19 @@ namespace lqf {
         throw std::invalid_argument("");
     }
 
-    shared_ptr<Bitmap> FullBitmap::operator&(Bitmap &x1) {
+    shared_ptr <Bitmap> FullBitmap::operator&(Bitmap &x1) {
         return x1.shared_from_this();
     }
 
-    shared_ptr<Bitmap> FullBitmap::operator|(Bitmap &x1) {
+    shared_ptr <Bitmap> FullBitmap::operator|(Bitmap &x1) {
         return shared_from_this();
     }
 
-    shared_ptr<Bitmap> FullBitmap::operator^(Bitmap &x1) {
+    shared_ptr <Bitmap> FullBitmap::operator^(Bitmap &x1) {
         return ~x1;
     }
 
-    shared_ptr<Bitmap> FullBitmap::operator~() {
+    shared_ptr <Bitmap> FullBitmap::operator~() {
         return make_shared<SimpleBitmap>(size_);
     }
 
@@ -562,15 +562,15 @@ namespace lqf {
         return 1;
     }
 
-    std::unique_ptr<BitmapIterator> FullBitmap::iterator() {
+    std::unique_ptr <BitmapIterator> FullBitmap::iterator() {
         return std::unique_ptr<BitmapIterator>(new FullBitmapIterator(this->size_));
     }
 
-    std::unique_ptr<BitmapIterator> FullBitmap::inv_iterator() {
+    std::unique_ptr <BitmapIterator> FullBitmap::inv_iterator() {
         return std::unique_ptr<BitmapIterator>(new EmptyBitmapIterator());
     }
 
-    shared_ptr<Bitmap> FullBitmap::mask(Bitmap &input) {
+    shared_ptr <Bitmap> FullBitmap::mask(Bitmap &input) {
         return input.shared_from_this();
     }
 

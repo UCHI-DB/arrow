@@ -114,6 +114,8 @@ set(LQF_TEST_SRC
         parallel_test.cc
         rowcopy_test.cc
         dict_test.cc
+        encoding_test.cc
+        operator_enc_test.cc
         data_container_test.cc
         hash_container_test.cc
         data_model_enc_test.cc

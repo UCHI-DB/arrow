@@ -34,11 +34,13 @@ namespace lqf {
                 buffer_.push_back(value);
             }
 
-            virtual shared_ptr<vector<shared_ptr<Buffer>>> Dump() override {
+            virtual shared_ptr <vector<shared_ptr < Buffer>>>
+
+            Dump() override {
                 auto result = parquet::AllocateBuffer(default_memory_pool(), sizeof(data_type) * buffer_.size());
                 memcpy(result->mutable_data(), buffer_.data(), result->size());
 
-                auto resvec = make_shared<vector<shared_ptr<Buffer>>>();
+                auto resvec = make_shared < vector < shared_ptr < Buffer>>>();
                 resvec->push_back(result);
                 return resvec;
             }
@@ -48,13 +50,15 @@ namespace lqf {
         class PlainDecoder : public Decoder<DT> {
             using data_type = typename DT::c_type;
         protected:
-            shared_ptr<Buffer> buffer_;
+            shared_ptr <Buffer> buffer_;
             const data_type *view_;
             uint32_t position_ = 0;
             uint32_t left_ = 0;
 
         public:
-            virtual void SetData(shared_ptr<vector<shared_ptr<Buffer>>> data) override {
+            virtual void SetData(shared_ptr <vector<shared_ptr < Buffer>>
+
+            > data) override {
                 buffer_ = move((*data)[0]);
                 view_ = reinterpret_cast<const data_type *>(buffer_->data());
                 left_ = buffer_->size() / sizeof(data_type);
@@ -81,9 +85,9 @@ namespace lqf {
         class DictEncoder : public Encoder<DT> {
             using data_type = typename DT::c_type;
         protected:
-            unordered_map<data_type, int32_t> dictionary_;
-            vector<int32_t> indices_;
-            vector<shared_ptr<Buffer>> blocks_;
+            unordered_map <data_type, int32_t> dictionary_;
+            vector <int32_t> indices_;
+            vector <shared_ptr<Buffer>> blocks_;
 
             void DumpBlock() {
                 auto bit_width = BitUtil::Log2(dictionary_.size());
@@ -94,7 +98,7 @@ namespace lqf {
                         AllocateBuffer(default_memory_pool(), block_size);
                 auto header = buffer->mutable_data();
                 header[0] = bit_width;
-                ((uint32_t *) (header + 1))[0] = indices_.size();
+                ((uint32_t * )(header + 1))[0] = indices_.size();
                 arrow::util::RleEncoder rleEncoder(header + 5, buffer->size(), bit_width);
                 for (auto &index:indices_) {
                     rleEncoder.Put(index);
@@ -126,7 +130,9 @@ namespace lqf {
                 WriteIndex(index);
             }
 
-            shared_ptr<vector<shared_ptr<Buffer>>> Dump() override {
+            shared_ptr <vector<shared_ptr < Buffer>>>
+
+            Dump() override {
                 DumpBlock();
                 // Write Dictionary Block
                 auto dictblock = AllocateBuffer(default_memory_pool(), sizeof(data_type) * dictionary_.size());
@@ -136,7 +142,7 @@ namespace lqf {
                 }
                 blocks_.push_back(dictblock);
 
-                auto ret = make_shared<vector<shared_ptr<Buffer>>>(move(blocks_));
+                auto ret = make_shared < vector < shared_ptr < Buffer>>>(move(blocks_));
                 return ret;
             }
         };
@@ -145,10 +151,11 @@ namespace lqf {
         class DictDecoder : public Decoder<DT> {
             using data_type = typename DT::c_type;
         protected:
-            shared_ptr<vector<shared_ptr<Buffer>>> blocks_;
+            shared_ptr <vector<shared_ptr < Buffer>>>
+            blocks_;
             const data_type *dictionary_;
 
-            unique_ptr<arrow::util::RleDecoder> decoder_ = nullptr;
+            unique_ptr <arrow::util::RleDecoder> decoder_ = nullptr;
             uint32_t block_index_ = -1;
             uint32_t block_remain_ = 0;
 
@@ -162,7 +169,7 @@ namespace lqf {
                 }
                 auto buffer = (*blocks_)[block_index_];
                 auto bitwidth = buffer->data()[0];
-                block_remain_ = ((uint32_t *) (buffer->data() + 1))[0];
+                block_remain_ = ((uint32_t * )(buffer->data() + 1))[0];
                 decoder_ = unique_ptr<arrow::util::RleDecoder>(
                         new arrow::util::RleDecoder(buffer->data() + 5, buffer->size() - 5, bitwidth));
                 return true;
@@ -171,7 +178,9 @@ namespace lqf {
         public:
             DictDecoder() {}
 
-            virtual void SetData(shared_ptr<vector<shared_ptr<Buffer>>> data) override {
+            virtual void SetData(shared_ptr <vector<shared_ptr < Buffer>>
+
+            > data) override {
                 blocks_ = move(data);
                 dictionary_ = reinterpret_cast<const data_type *>((*blocks_)[blocks_->size() - 1]->data());
             }
@@ -211,12 +220,12 @@ namespace lqf {
             }
         };
 
-        static int BP_BLOCK_SIZE = 4096;
+        static uint32_t BP_BLOCK_SIZE = 512;
 
-        class BitpackEncoder : Encoder<parquet::Int32Type> {
+        class BitpackEncoder : public Encoder<parquet::Int32Type> {
         protected:
-            vector<shared_ptr<Buffer>> blocks_;
-            vector<int32_t> buffer_;
+            vector <shared_ptr<Buffer>> blocks_;
+            vector <int32_t> buffer_;
 
             void DumpBlock() {
                 auto min = INT32_MAX;
@@ -234,9 +243,11 @@ namespace lqf {
 
                 auto real_num_entry = buffer_.size();
                 auto num_group = ((buffer_.size() + 7) >> 3);
+                if (num_group % 2)
+                    num_group++; // Align with 512
                 auto num_entry = num_group << 3;
                 // Filler
-                for (int i = 0; i < num_entry - real_num_entry; i++) {
+                for (uint32_t i = 0; i < num_entry - real_num_entry; i++) {
                     buffer_.push_back(0);
                 }
                 // Bit-pack the delta
@@ -247,6 +258,7 @@ namespace lqf {
                 size_in_byte += 4; //min_value
                 size_in_byte += 1;  // bit_width
                 auto block = AllocateBuffer(default_memory_pool(), size_in_byte);
+                memset(block->mutable_data(), 0, size_in_byte);
                 auto intview = reinterpret_cast<int32_t *>(block->mutable_data());
                 intview[0] = real_num_entry;
                 intview[1] = min;
@@ -267,17 +279,20 @@ namespace lqf {
                 }
             }
 
-            shared_ptr<vector<shared_ptr<Buffer>>> Dump() {
+            shared_ptr <vector<shared_ptr < Buffer>>>
+
+            Dump() override {
                 DumpBlock();
 
-                auto ret = make_shared<vector<shared_ptr<Buffer>>>(move(blocks_));
+                auto ret = make_shared < vector < shared_ptr < Buffer>>>(move(blocks_));
                 return ret;
             }
         };
 
-        class BitpackDecoder : Decoder<parquet::Int32Type> {
+        class BitpackDecoder : public Decoder<parquet::Int32Type> {
         protected:
-            shared_ptr<vector<shared_ptr<Buffer>>> data_;
+            shared_ptr <vector<shared_ptr < Buffer>>>
+            data_;
 
             uint32_t current_block_index_ = -1;
             ::sboost::Unpacker *unpacker_ = nullptr;
@@ -300,7 +315,7 @@ namespace lqf {
                 block_num_entry_ = intview[0];
                 block_min_ = _mm256_set1_epi32(intview[1]);
                 block_bit_width_ = raw_data[8];
-                block_pointer_ = (uint8_t *) (raw_data + 9);
+                block_pointer_ = (uint8_t * )(raw_data + 9);
 
                 unpacker_ = ::sboost::unpackers[block_bit_width_];
                 block_counter_ = 0;
@@ -309,7 +324,9 @@ namespace lqf {
             }
 
         public:
-            void SetData(shared_ptr<vector<shared_ptr<Buffer>>> data) override {
+            void SetData(shared_ptr <vector<shared_ptr < Buffer>>
+
+            > data) override {
                 data_ = move(data);
                 LoadNextBlock();
             }
@@ -320,10 +337,11 @@ namespace lqf {
                     return 0;
                 }
                 auto value = unpacker_->unpack(block_pointer_);
-                _mm256_add_epi32(value, block_min_);
-                _mm256_store_epi64(reinterpret_cast<void *>(*dest), value);
+                value = _mm256_add_epi32(value, block_min_);
+                _mm256_store_epi64(reinterpret_cast<void *>(dest), value);
 
                 block_pointer_ += block_bit_width_;
+                block_counter_ += 8;
                 if (block_counter_ >= block_num_entry_) {
                     auto loaded = block_num_entry_ % 8;
                     LoadNextBlock();
@@ -335,25 +353,35 @@ namespace lqf {
         };
 
         template<typename DT>
-        unique_ptr<Encoder<DT>> GetEncoder(EncodingType type) {
+        unique_ptr <Encoder<DT>> GetEncoder(EncodingType type) {
             switch (type) {
                 case DICTIONARY:
                     return unique_ptr<Encoder<DT>>(new DictEncoder<DT>());
                 case PLAIN:
                     return unique_ptr<Encoder<DT>>(new PlainEncoder<DT>());
-                case BITPACK:
-                    return unique_ptr<BitpackEncoder>(new BitpackEncoder());
                 default:
                     return nullptr;
             }
         }
 
-        template unique_ptr<Encoder<parquet::Int32Type>> GetEncoder(EncodingType);
+        template<>
+        unique_ptr <Encoder<parquet::Int32Type>> GetEncoder(EncodingType type) {
+            switch (type) {
+                case DICTIONARY:
+                    return unique_ptr<Encoder<parquet::Int32Type>>(new DictEncoder<parquet::Int32Type>());
+                case PLAIN:
+                    return unique_ptr<Encoder<parquet::Int32Type>>(new PlainEncoder<parquet::Int32Type>());
+                case BITPACK:
+                    return unique_ptr<Encoder<parquet::Int32Type>>(new BitpackEncoder());
+                default:
+                    return nullptr;
+            }
+        }
 
-        template unique_ptr<Encoder<parquet::DoubleType>> GetEncoder(EncodingType);
+        template unique_ptr <Encoder<parquet::DoubleType>> GetEncoder(EncodingType);
 
         template<typename DT>
-        unique_ptr<Decoder<DT>> GetDecoder(EncodingType type) {
+        unique_ptr <Decoder<DT>> GetDecoder(EncodingType type) {
             switch (type) {
                 case DICTIONARY:
                     return unique_ptr<Decoder<DT>>(new DictDecoder<DT>());
@@ -364,8 +392,20 @@ namespace lqf {
             }
         }
 
-        template unique_ptr<Decoder<parquet::Int32Type>> GetDecoder(EncodingType);
+        template<>
+        unique_ptr <Decoder<parquet::Int32Type>> GetDecoder(EncodingType type) {
+            switch (type) {
+                case DICTIONARY:
+                    return unique_ptr<Decoder<parquet::Int32Type>>(new DictDecoder<parquet::Int32Type>());
+                case PLAIN:
+                    return unique_ptr<Decoder<parquet::Int32Type>>(new PlainDecoder<parquet::Int32Type>());
+                case BITPACK:
+                    return unique_ptr<Decoder<parquet::Int32Type>>(new BitpackDecoder());
+                default:
+                    return nullptr;
+            }
+        }
 
-        template unique_ptr<Decoder<parquet::DoubleType>> GetDecoder(EncodingType);
+        template unique_ptr <Decoder<parquet::DoubleType>> GetDecoder(EncodingType);
     }
 }

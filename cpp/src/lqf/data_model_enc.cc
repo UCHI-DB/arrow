@@ -14,6 +14,8 @@ namespace lqf {
     EncMemvBlock::EncMemvBlock(vector<parquet::Type::type> data_type, vector<encoding::EncodingType> enc_type)
             : size_(0), data_types_(data_type), encoding_types_(enc_type) {}
 
+    EncMemvBlock::EncMemvBlock(EncMemvBlock &ref): EncMemvBlock(ref.data_types_,ref.encoding_types_) {}
+
     uint64_t EncMemvBlock::size() {
         return size_;
     }

@@ -25,7 +25,7 @@ namespace lqf {
 
     class Filter : public Node {
     protected:
-        shared_ptr<Block> processBlock(const shared_ptr<Block> &);
+        virtual shared_ptr<Block> processBlock(const shared_ptr<Block> &);
 
         virtual shared_ptr<Bitmap> filterBlock(Block &) = 0;
 
