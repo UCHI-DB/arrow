@@ -331,6 +331,11 @@ namespace lqf {
         return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
+    uint64_t MemBlock::memrss() {
+        return content_.size() * sizeof(uint64_t);
+    }
+
+
     MemvBlock::MemvBlock(uint32_t size, const vector<uint32_t> &col_size) : size_(size), col_size_(col_size) {
         uint8_t num_fields = col_size.size();
         for (uint8_t i = 0; i < num_fields; ++i) {
@@ -474,6 +479,14 @@ namespace lqf {
         }
         // The old memblock is discarded
         another.content_.clear();
+    }
+
+    uint64_t MemvBlock::memrss() {
+        uint64_t count = 0;
+        for (auto &item:content_) {
+            count += item->size();
+        }
+        return count * sizeof(uint64_t);
     }
 
     MemDataRowPointer::MemDataRowPointer(const vector<uint32_t> &col_offset)
@@ -643,6 +656,14 @@ namespace lqf {
         return unique_ptr<DataRowIterator>(new FlexRowIterator(memory_, col_offset_, stripe_size_));
     }
 
+    uint64_t MemFlexBlock::memrss() {
+        uint64_t count = 0;
+        for (auto &item:memory_) {
+            count += item->size();
+        }
+        return count * sizeof(uint64_t);
+    }
+
     MaskedBlock::MaskedBlock(shared_ptr<Block> inner, shared_ptr<Bitmap> mask)
             : inner_(inner), mask_(mask) {}
 
@@ -714,6 +735,11 @@ namespace lqf {
             this->mask_ = mask_->mask(*mask);
         }
         return this->shared_from_this();
+    }
+
+    uint64_t MaskedBlock::memrss() {
+        // Inner block size + mask size
+        return inner_->memrss() + (mask_->size() >> 3);
     }
 
     ParquetBlock::ParquetBlock(ParquetTable *owner, shared_ptr<RowGroupReader> rowGroup, uint32_t index,
@@ -1056,6 +1082,14 @@ namespace lqf {
     const vector<uint32_t> &MemTable::colSize() { return col_size_; }
 
     const vector<uint32_t> &MemTable::colOffset() { return col_offset_; }
+
+    uint64_t MemTable::memrss() {
+        uint64_t size = 0;
+        for (auto &block: blocks_) {
+            size += block->memrss();
+        }
+        return size;
+    }
 
 /**
  * Initialize the templates

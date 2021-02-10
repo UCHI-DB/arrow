@@ -6,7 +6,7 @@
 #define LQF_ENV_H
 
 #include "filter_executor.h"
-
+#include "stat.h"
 
 namespace lqf {
     /**
@@ -14,6 +14,7 @@ namespace lqf {
      */
 
     void env_init() {
+        stat::MemEstimator::INST.Reset();
     }
 
     void env_cleanup() {

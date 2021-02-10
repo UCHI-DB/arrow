@@ -56,3 +56,24 @@ TEST(EncMemvBlockTest, WriteAndReadCol) {
     }
     readcol->close();
 }
+
+TEST(EncMemvBlockTest, WriteAndReadBitpackCol) {
+    auto block = shared_ptr<EncMemvBlock>(
+            new EncMemvBlock({Type::type::INT32, Type::type::INT32},
+                             {encoding::EncodingType::BITPACK, encoding::EncodingType::BITPACK}));
+
+    auto writecol = block->col(0);
+
+    for (int i = 0; i < 50000; ++i) {
+        writecol->next() = i;
+    }
+    writecol->close();
+
+    EXPECT_EQ(block->size(), 50000);
+
+    auto readcol = block->col(0);
+    for (auto i = 0; i < 50000; ++i) {
+        ASSERT_EQ(i, readcol->next().asInt()) << i;
+    }
+    readcol->close();
+}

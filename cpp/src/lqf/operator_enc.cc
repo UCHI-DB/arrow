@@ -5,6 +5,9 @@
 #include "operator_enc.h"
 #include <sboost/unpacker.h>
 #include <immintrin.h>
+#ifdef LQF_STAT
+#include "stat.h"
+#endif
 
 namespace lqf {
     namespace encopr {
@@ -134,7 +137,7 @@ namespace lqf {
                     auto ge = _mm512_cmp_epi32_mask(loaded, lower_512, _MM_CMPINT_NLT);
                     auto res = le & ge;
 
-                    auto item_start = item_counter;
+                    auto batch_start = total_count;
                     if (item_counter + 16 > num_entry) {
                         auto remain = num_entry - item_counter;
                         res &= (1 << remain) - 1;
@@ -152,7 +155,7 @@ namespace lqf {
 
                         for (uint32_t j = 0; j < num_col; ++j) {
                             if (j != col_index_) {
-                                row[j] = (*readers[j])[item_start + next];
+                                row[j] = (*readers[j])[batch_start + next];
                             } else {
                                 auto value = (int32_t) ((loaded[next / 2] >> ((next % 2) * 32)) & 0xFFFFFFFF);
                                 row[j] = value;
@@ -164,6 +167,9 @@ namespace lqf {
             }
 
             writer->close();
+#ifdef LQF_STAT
+            lqf::stat::MemEstimator::INST.Record("EncMatBetweenFilter", outputblock->memrss());
+#endif
             return outputblock;
         }
     }

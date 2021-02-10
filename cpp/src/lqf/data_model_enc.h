@@ -48,6 +48,8 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
 
         inline shared_ptr<vector<shared_ptr<Buffer>>> rawcol(uint32_t index) { return content_[index]; }
+
+        uint64_t memrss() override;
     };
 }
 

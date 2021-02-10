@@ -68,6 +68,7 @@ set(LQF_SRCS
         util.cc
         union.cc
         dict.cc
+        stat.cc
         container.cc
         parallel.cc
         hash.cc
@@ -95,6 +96,9 @@ add_arrow_lib(lqf
 target_compile_options(lqf_objlib PUBLIC ${LQF_SIMD_FLAGS})
 if(${LQF_PARALLEL})
     target_compile_definitions(lqf_objlib PUBLIC LQF_PARALLEL)
+endif()
+if(${LQF_STAT})
+    target_compile_definitions(lqf_objlib PUBLIC LQF_STAT)
 endif()
 
 

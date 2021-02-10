@@ -5,6 +5,10 @@
 #include "agg.h"
 #include <cstring>
 
+#ifdef LQF_STAT
+#include "stat.h"
+#endif
+
 namespace lqf {
     using namespace rowcopy;
     namespace agg {
@@ -997,7 +1001,9 @@ namespace lqf {
 
         auto result = MemTable::Make(col_size_, vertical_);
         merged->dump(*result, predicate_);
-
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("Agg", result->memrss());
+#endif
         return result;
     }
 
@@ -1134,6 +1140,9 @@ namespace lqf {
         for (auto &core: *cores) {
             core->dump(*outputTable, predicate_);
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("StripeHashAgg", outputTable->memrss());
+#endif
         return outputTable;
     }
 

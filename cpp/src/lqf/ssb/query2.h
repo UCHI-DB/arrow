@@ -11,6 +11,7 @@
 #include "../join.h"
 #include "../print.h"
 #include "../sort.h"
+#include "../operator_enc.h"
 #include "ssbquery.h"
 
 namespace lqf {

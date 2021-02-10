@@ -14,7 +14,7 @@ namespace lqf {
     EncMemvBlock::EncMemvBlock(vector<parquet::Type::type> data_type, vector<encoding::EncodingType> enc_type)
             : size_(0), data_types_(data_type), encoding_types_(enc_type) {}
 
-    EncMemvBlock::EncMemvBlock(EncMemvBlock &ref): EncMemvBlock(ref.data_types_,ref.encoding_types_) {}
+    EncMemvBlock::EncMemvBlock(EncMemvBlock &ref) : EncMemvBlock(ref.data_types_, ref.encoding_types_) {}
 
     uint64_t EncMemvBlock::size() {
         return size_;
@@ -33,7 +33,7 @@ namespace lqf {
 
         uint64_t row_index_;
         DataField view_;
-        data_type buffer_[10];
+        data_type *buffer_;
 
         uint32_t buffer_start_ = 0;
         uint32_t buffer_end_ = 0;
@@ -45,7 +45,7 @@ namespace lqf {
 
         void read_buffer() {
             while (buffer_end_ <= row_index_) {
-                auto decoded = decoder_->Decode(buffer_, 10);
+                auto decoded = decoder_->Decode(buffer_, 16);
                 buffer_start_ = buffer_end_;
                 buffer_end_ += decoded;
             }
@@ -59,6 +59,7 @@ namespace lqf {
     public:
         EncMemvColumnIterator(EncMemvBlock &block, uint32_t col_index)
                 : block_(block), col_index_(col_index), row_index_(-1), type_(block.encoding_types_[col_index]) {
+            buffer_ = (data_type *) aligned_alloc(64, sizeof(data_type) * 16);
             view_.size_ = 1;
             view_ = (uint64_t *) buffer_;
             read_ = block.size_ > 0;
@@ -71,6 +72,10 @@ namespace lqf {
                 // write mode
                 encoder_ = encoding::GetEncoder<DT>(type_);
             }
+        }
+
+        virtual ~EncMemvColumnIterator() noexcept {
+            free(buffer_);
         }
 
         DataField &operator[](uint64_t idx) override {
@@ -217,4 +222,13 @@ namespace lqf {
         return make_shared<MaskedBlock>(shared_from_this(), mask);
     }
 
+    uint64_t EncMemvBlock::memrss() {
+        uint64_t size = 0;
+        for (auto &b: content_) {
+            for(auto& buffer: *b) {
+                size += buffer->size();
+            }
+        }
+        return size;
+    }
 }

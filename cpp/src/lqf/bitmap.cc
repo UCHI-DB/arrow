@@ -92,7 +92,7 @@ namespace lqf {
         // The unused part of bitmap is filled with 0, need to exclude them
         this->content_size_ = (num_bits + 63) >> 6;
         this->num_bits_ = num_bits;
-        this->final_mask_ = ~((1L << (num_bits & 0x3f)) - 1);
+        this->final_mask_ = ~((uint64_t(1) << (num_bits & 0x3f)) - 1);
 
         for (pointer_ = 0; pointer_ < content_size_; ++pointer_) {
             if ((cached_ = content_[pointer_]) != MINUS_ONE) {
@@ -287,7 +287,7 @@ namespace lqf {
             counter += _mm_popcnt_u64(bitmap_[i]);
         }
         if (offset > 0) {
-            auto last = bitmap_[limit] & ((1L << offset) - 1);
+            auto last = bitmap_[limit] & ((uint64_t(1) << offset) - 1);
             counter += _mm_popcnt_u64(last);
         }
         return counter;

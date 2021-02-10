@@ -5,6 +5,12 @@
 #include "join.h"
 #include "rowcopy.h"
 
+#ifdef LQF_STAT
+
+#include "stat.h"
+
+#endif
+
 using namespace std;
 using namespace std::placeholders;
 using namespace lqf::rowcopy;
@@ -173,7 +179,7 @@ namespace lqf {
             for (uint32_t index = 0; index < left_merge_inst_.size(); ++index) {
                 auto src_index = left_merge_inst_[index].first;
                 auto target_index = index;
-                copyColumn(block_size, *memcache,target_index,input,src_index);
+                copyColumn(block_size, *memcache, target_index, input, src_index);
             }
             return memcache;
         }
@@ -295,6 +301,9 @@ namespace lqf {
 
         writer->close();
         resultblock->resize(counter);
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("HashJoin", resultblock->memrss());
+#endif
         return resultblock;
     }
 
@@ -342,6 +351,9 @@ namespace lqf {
                 }
             }
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("FilterJoin", bitmap->size() >> 3);
+#endif
         return leftBlock->mask(bitmap);
     }
 
@@ -376,6 +388,9 @@ namespace lqf {
                 }
             }
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("FilterTransformJoin", memblock->memrss());
+#endif
         return memblock;
     }
 
@@ -408,6 +423,9 @@ namespace lqf {
             while (bitmapite->hasNext()) {
                 (*writerows)[writecount++] = *container_->get(static_cast<int32_t>(bitmapite->next()));
             }
+#ifdef LQF_STAT
+            lqf::stat::MemEstimator::INST.Record("HashExistJoin", memTable->memrss());
+#endif
             return memTable;
         } else {
             function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&HashExistJoin::probe, this, _1);
@@ -454,6 +472,9 @@ namespace lqf {
             }
         }
         resultblock->resize(counter);
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("HashExistJoin", resultblock->memrss());
+#endif
         return resultblock;
     }
 
@@ -507,6 +528,9 @@ namespace lqf {
                 writeRows->next() = entry.second;
             }
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("HashNotExistJoin", memTable->memrss());
+#endif
         return memTable;
     }
 
@@ -575,7 +599,7 @@ namespace lqf {
                 }
             }
         }
-
+        writer->close();
         auto newblock = makeBlock(0);
         // Merge result block with original block
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
@@ -584,6 +608,9 @@ namespace lqf {
         if (need_filter_) {
             return newvblock->mask(~(*filter));
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("HashColumnJoin", newvblock->memrss());
+#endif
         return newvblock;
     }
 
@@ -616,6 +643,7 @@ namespace lqf {
                 filter->put(i);
             }
         }
+        writer->close();
         probed.resize(counter);
         ~(*filter);
         auto maskedParquet = leftBlock->mask(filter);
@@ -627,6 +655,9 @@ namespace lqf {
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
         columnBuilder_->buildFromMem(*newvblock, *leftCacheBlock, probed);
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("ParquetHashColumnJoin", newvblock->memrss());
+#endif
         return newvblock;
     }
 

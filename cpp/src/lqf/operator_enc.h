@@ -17,15 +17,15 @@ namespace lqf {
 
         class EncHashJoin : public HashJoin {
         protected:
-            vector <parquet::Type::type> data_types_;
-            vector <encoding::EncodingType> enc_types_;
+            vector<parquet::Type::type> data_types_;
+            vector<encoding::EncodingType> enc_types_;
 
-            shared_ptr <Block> makeBlock(uint32_t size) override;
+            shared_ptr<Block> makeBlock(uint32_t size) override;
 
         public:
             EncHashJoin(uint32_t, uint32_t, RowBuilder *,
-                        initializer_list <parquet::Type::type> data_type,
-                        initializer_list <encoding::EncodingType> enc_type,
+                        initializer_list<parquet::Type::type> data_type,
+                        initializer_list<encoding::EncodingType> enc_type,
                         function<bool(DataRow &, DataRow &)> pred = nullptr,
                         uint32_t expect_size = CONTAINER_SIZE);
         };
@@ -33,15 +33,15 @@ namespace lqf {
         template<typename Container>
         class EncHashTJoin : public HashTJoin<Container> {
         protected:
-            vector <parquet::Type::type> data_types_;
-            vector <encoding::EncodingType> enc_types_;
+            vector<parquet::Type::type> data_types_;
+            vector<encoding::EncodingType> enc_types_;
 
-            shared_ptr <Block> makeBlock(uint32_t size) override;
+            shared_ptr<Block> makeBlock(uint32_t size) override;
 
         public:
             EncHashTJoin(uint32_t, uint32_t, RowBuilder *,
-                         initializer_list <parquet::Type::type> data_type,
-                         initializer_list <encoding::EncodingType> enc_type,
+                         initializer_list<parquet::Type::type> data_type,
+                         initializer_list<encoding::EncodingType> enc_type,
                          function<bool(DataRow &, DataRow &)> pred = nullptr,
                          uint32_t expect_size = CONTAINER_SIZE);
         };
@@ -57,7 +57,7 @@ namespace lqf {
         public:
             EncMemBetweenPredicate(uint32_t index, int32_t from, int32_t to);
 
-            virtual shared_ptr <Bitmap> filterBlock(Block &, Bitmap &) override;
+            virtual shared_ptr<Bitmap> filterBlock(Block &, Bitmap &) override;
         };
 
         /**
@@ -65,20 +65,21 @@ namespace lqf {
          */
         class EncMatBetweenFilter : public Filter {
         protected:
-            vector <parquet::Type::type> data_types_;
-            vector <encoding::EncodingType> encodings_;
+            vector<parquet::Type::type> data_types_;
+            vector<encoding::EncodingType> encodings_;
 
             uint32_t col_index_;
             int32_t lower_val_;
             int32_t upper_val_;
             int32_t *buffer_;
 
-            shared_ptr <Block> processBlock(const shared_ptr <Block> &) override;
+            shared_ptr<Block> processBlock(const shared_ptr<Block> &) override;
 
             shared_ptr<Bitmap> filterBlock(Block &) override { return nullptr; }
+
         public:
-            EncMatBetweenFilter(initializer_list <parquet::Type::type> types,
-                                initializer_list <encoding::EncodingType> encs,
+            EncMatBetweenFilter(initializer_list<parquet::Type::type> types,
+                                initializer_list<encoding::EncodingType> encs,
                                 uint32_t col_index, int32_t, int32_t);
 
             virtual ~EncMatBetweenFilter() noexcept;

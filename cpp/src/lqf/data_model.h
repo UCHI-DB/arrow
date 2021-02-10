@@ -210,6 +210,9 @@ namespace lqf {
         virtual shared_ptr<Block> mask(shared_ptr<Bitmap> mask) = 0;
 
         virtual void resize(uint32_t newsize) {}
+
+        // Mem Resident Size
+        virtual uint64_t memrss() { return 0; }
     };
 
     class MemBlock : public Block {
@@ -239,6 +242,8 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
 
         inline const vector<uint32_t> &col_offset() { return col_offset_; }
+
+        uint64_t memrss() override;
     };
 
     class MemvBlock : public Block {
@@ -265,6 +270,8 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
 
         void merge(MemvBlock &, const vector<pair<uint8_t, uint8_t>> &);
+
+        uint64_t memrss() override;
     };
 
 #define FLEX_SLAB_SIZE_ 131072
@@ -328,6 +335,8 @@ namespace lqf {
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
 
         inline const vector<uint32_t> &col_offset() { return col_offset_; }
+
+        uint64_t memrss() override;
     };
 
     template<typename DTYPE>
@@ -420,6 +429,8 @@ namespace lqf {
         unique_ptr<DataRowIterator> rows() override;
 
         shared_ptr<Block> mask(shared_ptr<Bitmap> mask) override;
+
+        uint64_t memrss() override;
     };
 
     enum TABLE_TYPE {
@@ -545,6 +556,9 @@ namespace lqf {
         const vector<uint32_t> &colOffset();
 
         inline bool isVertical() { return vertical_; }
+
+        // Memory Resident Size
+        uint64_t memrss();
     };
 
     using TableOutput = parallel::TypedOutput<shared_ptr<Table>>;

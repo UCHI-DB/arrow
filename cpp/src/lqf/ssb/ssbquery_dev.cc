@@ -4,6 +4,7 @@
 
 #include "ssbquery.h"
 #include "../env.h"
+#include "../stat.h"
 #include <chrono>
 #include <iostream>
 #include <sys/resource.h>
@@ -20,7 +21,7 @@ int main() {
 
     // Call the function,
     env_init();
-    executeQ3_3();
+    executeQ4_3();
     env_cleanup();
 
 
@@ -31,5 +32,7 @@ int main() {
 
     struct rusage usage;
     getrusage(RUSAGE_SELF, &usage);
-    cout << "Maximum Resident Size: " << usage.ru_maxrss << "\n";
+    cout << "Maximum Resident Size: " << usage.ru_maxrss << " KB\n";
+
+    stat::MemEstimator::INST.Report();
 }

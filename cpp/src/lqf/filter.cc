@@ -10,6 +10,9 @@
 #include <sboost/simd.h>
 #include <sboost/bitmap_writer.h>
 #include <sboost/encoding/encoding_utils.h>
+#ifdef LQF_STAT
+#include "stat.h"
+#endif
 
 using namespace std;
 using namespace std::placeholders;
@@ -34,6 +37,9 @@ namespace lqf {
 
     shared_ptr<Block> Filter::processBlock(const shared_ptr<Block> &input) {
         shared_ptr<Bitmap> result = filterBlock(*input);
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("Filter", result->size()>>3);
+#endif
         return input->mask(result);
     }
 

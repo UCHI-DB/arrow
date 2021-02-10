@@ -3,6 +3,9 @@
 //
 
 #include "tjoin.h"
+#ifdef LQF_STAT
+#include "stat.h"
+#endif
 
 using namespace std;
 using namespace std::placeholders;
@@ -106,17 +109,17 @@ namespace lqf {
     shared_ptr<Block> HashTJoin<Container>::probe(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(HashBasedTJoin<Container>::left_key_index_);
         auto leftrows = leftBlock->rows();
-        auto resultblock = HashBasedTJoin<Container>::makeBlock(leftBlock->size());
+        auto resultblock = this->makeBlock(leftBlock->size());
         uint32_t counter = 0;
         auto writer = resultblock->rows();
 
         auto left_block_size = leftBlock->size();
         if (predicate_) {
-            if (HashBasedTJoin<Container>::outer_) {
+            if (this->outer_) {
                 for (uint32_t i = 0; i < left_block_size; ++i) {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
-                    auto result = HashBasedTJoin<Container>::container_->get(leftval);
+                    auto result = this->container_->get(leftval);
                     DataRow &leftrow = (*leftrows)[leftkeys->pos()];
                     DataRow &right = result ? *result : MemDataRow::EMPTY;
                     if (predicate_(leftrow, right)) {
@@ -127,7 +130,7 @@ namespace lqf {
                 for (uint32_t i = 0; i < left_block_size; ++i) {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
-                    auto result = HashBasedTJoin<Container>::container_->get(leftval);
+                    auto result = this->container_->get(leftval);
                     if (result) {
                         DataRow &row = (*leftrows)[leftkeys->pos()];
                         if (predicate_(row, *result)) {
@@ -137,12 +140,12 @@ namespace lqf {
                 }
             }
         } else {
-            if (HashBasedTJoin<Container>::outer_) {
+            if (this->outer_) {
                 for (uint32_t i = 0; i < left_block_size; ++i) {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
                     DataRow &leftrow = (*leftrows)[leftkeys->pos()];
-                    auto result = HashBasedTJoin<Container>::container_->get(leftval);
+                    auto result = this->container_->get(leftval);
                     DataRow &right = result ? *result : MemDataRow::EMPTY;
                     rowBuilder_->build((*writer)[counter++], leftrow, right, leftval);
                 }
@@ -150,7 +153,7 @@ namespace lqf {
                 for (uint32_t i = 0; i < left_block_size; ++i) {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
-                    auto result = HashBasedTJoin<Container>::container_->get(leftval);
+                    auto result = this->container_->get(leftval);
                     if (result) {
                         DataRow &row = (*leftrows)[leftkeys->pos()];
                         rowBuilder_->build((*writer)[counter++], row, *result, leftval);
@@ -158,8 +161,11 @@ namespace lqf {
                 }
             }
         }
+        writer->close();
         resultblock->resize(counter);
-
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("HashTJoin", resultblock->memrss());
+#endif
         return resultblock;
     }
 
@@ -176,7 +182,7 @@ namespace lqf {
         /// Make sure the cast is valid
         assert(leftvBlock.get() != nullptr);
 
-        auto leftkeys = leftBlock->col(HashBasedTJoin<Container>::left_key_index_);
+        auto leftkeys = leftBlock->col(this->left_key_index_);
 
         MemvBlock vblock(leftBlock->size(), columnBuilder_->rightColSize());
         auto writer = vblock.rows();
@@ -188,12 +194,12 @@ namespace lqf {
             filter = make_shared<SimpleBitmap>(left_block_size);
         }
 
-        if (HashBasedTJoin<Container>::outer_) {
+        if (this->outer_) {
             for (uint32_t i = 0; i < left_block_size; ++i) {
                 DataField &key = leftkeys->next();
                 auto leftval = key.asInt();
 
-                auto result = HashBasedTJoin<Container>::container_->get(leftval);
+                auto result = this->container_->get(leftval);
                 if (result)
                     (*writer)[i] = *result;
             }
@@ -203,7 +209,7 @@ namespace lqf {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
 
-                    auto result = HashBasedTJoin<Container>::container_->get(leftval);
+                    auto result = this->container_->get(leftval);
                     if (result) {
                         (*writer)[i] = *move(result);
                     } else {
@@ -215,13 +221,14 @@ namespace lqf {
                 for (uint32_t i = 0; i < left_block_size; ++i) {
                     DataField &key = leftkeys->next();
                     auto leftval = key.asInt();
-                    auto result = move(HashBasedTJoin<Container>::container_->get(leftval));
+                    auto result = move(this->container_->get(leftval));
                     (*writer)[i] = *result;
                 }
             }
         }
+        writer->close();
 
-        auto newblock = HashBasedTJoin<Container>::makeBlock(0);
+        auto newblock = this->makeBlock(0);
         // Merge result block with original block
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
@@ -229,6 +236,9 @@ namespace lqf {
         if (need_filter_) {
             return newvblock->mask(~(*filter));
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("HashColumnTJoin", newvblock->memrss());
+#endif
         return newvblock;
     }
 
@@ -241,7 +251,7 @@ namespace lqf {
     shared_ptr<Block> ParquetHashColumnTJoin<Container>::probe(const shared_ptr<Block> &leftBlock) {
         auto leftkeys = leftBlock->col(HashBasedTJoin<Container>::left_key_index_);
 
-        MemvBlock probed(leftBlock->size(), HashColumnTJoin<Container>::columnBuilder_->rightColSize());
+        MemvBlock probed(leftBlock->size(), this->columnBuilder_->rightColSize());
         auto writer = probed.rows();
 
         auto left_block_size = leftBlock->size();
@@ -253,7 +263,7 @@ namespace lqf {
             DataField &key = leftkeys->next();
             auto leftval = key.asInt();
 
-            auto result = HashBasedTJoin<Container>::container_->get(leftval);
+            auto result = this->container_->get(leftval);
             if (result) {
                 (*writer)[counter++] = *move(result);
             } else {
@@ -261,17 +271,22 @@ namespace lqf {
                 filter->put(i);
             }
         }
+        writer->close();
+
         probed.resize(counter);
         ~(*filter);
         auto maskedParquet = leftBlock->mask(filter);
         // Load columns into memory from left side
-        auto leftCacheBlock = HashColumnTJoin<Container>::columnBuilder_->cacheToMem(*maskedParquet);
+        auto leftCacheBlock = this->columnBuilder_->cacheToMem(*maskedParquet);
 
-        auto newblock = HashBasedTJoin<Container>::makeBlock(0);
+        auto newblock = this->makeBlock(0);
         // Merge result block with original block
         auto newvblock = static_pointer_cast<MemvBlock>(newblock);
 
-        HashColumnTJoin<Container>::columnBuilder_->buildFromMem(*newvblock, *leftCacheBlock, probed);
+        this->columnBuilder_->buildFromMem(*newvblock, *leftCacheBlock, probed);
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("ParquetHashColumnTJoin", newvblock->memrss());
+#endif
         return newvblock;
     }
 
@@ -316,6 +331,9 @@ namespace lqf {
                 }
             }
         }
+#ifdef LQF_STAT
+        lqf::stat::MemEstimator::INST.Record("FilterTJoin", bitmap->size() >> 3);
+#endif
         return leftBlock->mask(bitmap);
     }
 }
