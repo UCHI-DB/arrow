@@ -141,8 +141,10 @@ add_test_case(all-test
 arrow_install_all_headers(lqf)
 
 add_custom_target(lqf-benchmarks)
+set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} tpch_static)
 
-set(LQF_BENCHMARK_LINK_LIBS ${LQF_BENCHMARK_LINK_LIBS} lqf_objlib)
+add_subdirectory(tpch)
+add_subdirectory(ssb)
 
 add_lqf_benchmark(container_benchmark)
 add_lqf_benchmark(aggv_benchmark)
@@ -154,11 +156,6 @@ add_lqf_benchmark(rowcopy_benchmark)
 add_lqf_benchmark(memtable_benchmark)
 add_lqf_benchmark(data_container_benchmark)
 add_lqf_benchmark(hash_container_benchmark)
-
-add_subdirectory(micro)
-add_subdirectory(tpch)
-add_subdirectory(ssb)
-
 
 add_executable(lqf_playground playground.cc)
 target_link_libraries(lqf_playground lqf_static)
