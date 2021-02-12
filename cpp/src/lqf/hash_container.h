@@ -5,6 +5,8 @@
 #ifndef ARROW_HASH_CONTAINER_H
 #define ARROW_HASH_CONTAINER_H
 
+#include <cuckoohash_map.hh>
+#include <sparsehash/dense_hash_set>
 #include "container.h"
 #include "data_model.h"
 #include "rowcopy.h"
@@ -36,8 +38,6 @@ namespace lqf {
             using ktype = typename DTYPE::type;
         private:
             PhaseConcurrentHashSet<DTYPE> content_;
-            atomic<ktype> min_;
-            atomic<ktype> max_;
         public:
             HashPredicate();
 
@@ -51,9 +51,6 @@ namespace lqf {
 
             inline uint32_t size() { return content_.size(); }
 
-            inline ktype max() { return max_.load(); }
-
-            inline ktype min() { return min_.load(); }
         };
 
         using Hash32Predicate = HashPredicate<Int32>;
@@ -64,8 +61,6 @@ namespace lqf {
             using ktype = typename DTYPE::type;
         private:
             unordered_set<ktype> content_;
-            atomic<ktype> min_;
-            atomic<ktype> max_;
         public:
             HashSetPredicate();
 
@@ -78,15 +73,67 @@ namespace lqf {
             bool test(ktype) override;
 
             inline uint32_t size() { return content_.size(); }
-
-            inline ktype max() { return max_.load(); }
-
-            inline ktype min() { return min_.load(); }
         };
 
         using Hash32SetPredicate = HashSetPredicate<Int32>;
         using Hash64SetPredicate = HashSetPredicate<Int64>;
 
+        template<typename DTYPE>
+        class HashGooglePredicate : public IntPredicate<DTYPE> {
+            using ktype = typename DTYPE::type;
+        private:
+            google::dense_hash_set<ktype> content_;
+        public:
+            HashGooglePredicate() : HashGooglePredicate(CONTAINER_SIZE) {}
+
+            HashGooglePredicate(uint32_t size) {}
+
+            virtual ~HashGooglePredicate() = default;
+
+            void add(ktype value) {
+                content_.insert(value);
+            }
+
+            bool test(ktype value) override {
+                return content_.find(value) != content_.end();
+            }
+
+            inline uint32_t size() { return content_.size(); }
+        };
+
+        using Hash32GooglePredicate = HashGooglePredicate<Int32>;
+        using Hash64GooglePredicate = HashGooglePredicate<Int64>;
+
+        template<typename DTYPE>
+        class HashCuckooPredicate : public IntPredicate<DTYPE> {
+            using ktype = typename DTYPE::type;
+        private:
+            libcuckoo::cuckoohash_map<ktype, ktype> content_;
+        public:
+            HashCuckooPredicate() {}
+
+            HashCuckooPredicate(uint32_t size) {}
+
+            virtual ~HashCuckooPredicate() = default;
+
+            void add(ktype value) {
+                content_.template insert(value, value);
+            }
+
+            bool test(ktype value) override {
+                try {
+                    content_.find(value);
+                    return true;
+                } catch (...) {
+                    return false;
+                }
+            }
+
+            inline uint32_t size() { return content_.size(); }
+        };
+
+        using Hash32CuckooPredicate = HashCuckooPredicate<Int32>;
+        using Hash64CuckooPredicate = HashCuckooPredicate<Int64>;
 
         class BitmapPredicate : public Int32Predicate {
         private:
@@ -198,7 +245,7 @@ namespace lqf {
 
             Hash32MapHeapContainer(const vector<uint32_t> &, uint32_t size);
 
-            virtual ~Hash32MapHeapContainer();
+            virtual ~Hash32MapHeapContainer() noexcept;
 
             DataRow &add(int32_t key);
 
@@ -250,6 +297,41 @@ namespace lqf {
             inline int32_t max() { return max_.load(); }
         };
 
+        /**
+          * A 32-bit cuckoo map based heap allocation container
+          */
+        class Hash32CuckooHeapContainer : public IntPredicate<Int32> {
+        protected:
+            vector<uint32_t> col_offset_;
+            libcuckoo::cuckoohash_map<int32_t, shared_ptr<MemDataRow>> map_;
+            atomic<int32_t> min_;
+            atomic<int32_t> max_;
+
+        public:
+            Hash32CuckooHeapContainer(const vector<uint32_t> &);
+
+            Hash32CuckooHeapContainer(const vector<uint32_t> &, uint32_t size);
+
+            virtual ~Hash32CuckooHeapContainer() noexcept;
+
+            DataRow &add(int32_t key);
+
+            bool test(int32_t) override;
+
+            DataRow *get(int32_t key);
+
+            unique_ptr<DataRow> remove(int32_t key);
+
+            unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> iterator();
+
+            inline uint32_t size() { return map_.size(); }
+
+            inline int32_t min() { return min_.load(); }
+
+            inline int32_t max() { return max_.load(); }
+        };
+
+
         using Hash32Container = Hash32SparseContainer;
         using Hash64Container = Hash64SparseContainer;
 
@@ -298,6 +380,15 @@ namespace lqf {
 
         template<>
         shared_ptr<Hash32SetPredicate> PredicateBuilder::build<Hash32SetPredicate>(Table &, uint32_t, uint32_t);
+
+        // Specializations
+        template<>
+        shared_ptr<Hash32CuckooPredicate> PredicateBuilder::build<Hash32CuckooPredicate>(Table &, uint32_t, uint32_t);
+
+        template<>
+        shared_ptr<Hash32GooglePredicate> PredicateBuilder::build<Hash32GooglePredicate>(Table &, uint32_t, uint32_t);
+
+
 
 
         // TODO Use this to replace the one in HashBuilder
@@ -350,6 +441,11 @@ namespace lqf {
         shared_ptr<Hash32MapPageContainer>
         ContainerBuilder::build<Hash32MapPageContainer>(Table &input, uint32_t keyIndex,
                                                         Snapshoter *builder, uint32_t expect_size);
+
+        template<>
+        shared_ptr<Hash32CuckooHeapContainer>
+        ContainerBuilder::build<Hash32CuckooHeapContainer>(Table &input, uint32_t keyIndex,
+                                                           Snapshoter *builder, uint32_t expect_size);
 
     }
 }

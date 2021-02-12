@@ -8,29 +8,26 @@ namespace lqf {
     namespace hashcontainer {
 
         template<typename DTYPE>
-        HashPredicate<DTYPE>::HashPredicate():min_(DTYPE::max), max_(DTYPE::min) {}
+        HashPredicate<DTYPE>::HashPredicate() {}
 
         template<typename DTYPE>
-        HashPredicate<DTYPE>::HashPredicate(uint32_t size):content_(size), min_(DTYPE::max), max_(DTYPE::min) {}
+        HashPredicate<DTYPE>::HashPredicate(uint32_t size):content_(size) {}
 
         template<typename DTYPE>
         void HashPredicate<DTYPE>::add(ktype val) {
             // Update range
-            ktype current;
-            current = min_.load();
-            while (val < current && !min_.compare_exchange_strong(current, val));
-
-            current = max_.load();
-            while (val > current && !max_.compare_exchange_strong(current, val));
+//            ktype current;
+//            current = min_.load();
+//            while (val < current && !min_.compare_exchange_strong(current, val));
+//
+//            current = max_.load();
+//            while (val > current && !max_.compare_exchange_strong(current, val));
             content_.add(val);
         }
 
         template<typename DTYPE>
         bool HashPredicate<DTYPE>::test(ktype val) {
-            if (val >= min_ && val <= max_) {
-                return content_.test(val);
-            }
-            return false;
+            return content_.test(val);
         }
 
         template
@@ -40,10 +37,10 @@ namespace lqf {
         class HashPredicate<Int64>;
 
         template<typename DTYPE>
-        HashSetPredicate<DTYPE>::HashSetPredicate():min_(DTYPE::max), max_(DTYPE::min) {}
+        HashSetPredicate<DTYPE>::HashSetPredicate() {}
 
         template<typename DTYPE>
-        HashSetPredicate<DTYPE>::HashSetPredicate(uint32_t size):content_(size), min_(DTYPE::max), max_(DTYPE::min) {}
+        HashSetPredicate<DTYPE>::HashSetPredicate(uint32_t size):content_(size) {}
 
         template<typename DTYPE>
         void HashSetPredicate<DTYPE>::add(ktype val) {
@@ -242,6 +239,43 @@ namespace lqf {
         }
 
         unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> Hash32MapHeapContainer::iterator() {
+            throw "Not implemented";
+        }
+
+        Hash32CuckooHeapContainer::Hash32CuckooHeapContainer(const vector<uint32_t> &offset)
+                : Hash32CuckooHeapContainer(offset, CONTAINER_SIZE) {}
+
+        Hash32CuckooHeapContainer::Hash32CuckooHeapContainer(const vector<uint32_t> &offset, uint32_t size) :
+                col_offset_(offset), map_(size) {
+        }
+
+        Hash32CuckooHeapContainer::~Hash32CuckooHeapContainer() noexcept {
+            map_.clear();
+        }
+
+        DataRow &Hash32CuckooHeapContainer::add(int32_t key) {
+            auto row = make_shared<MemDataRow>(col_offset_);
+            map_.insert(key, row);
+            return *row;
+        }
+
+        bool Hash32CuckooHeapContainer::test(int32_t key) {
+            return map_.contains(key);
+        }
+
+        DataRow *Hash32CuckooHeapContainer::get(int32_t key) {
+            try {
+                return map_.find(key).get();
+            } catch (...) {
+                return nullptr;
+            }
+        }
+
+        unique_ptr<DataRow> Hash32CuckooHeapContainer::remove(int32_t key) {
+            throw "Not implemented";
+        }
+
+        unique_ptr<lqf::Iterator<std::pair<int32_t, DataRow &> &>> Hash32CuckooHeapContainer::iterator() {
             throw "Not implemented";
         }
 
@@ -464,6 +498,41 @@ namespace lqf {
             return retval;
         }
 
+        template<>
+        shared_ptr<Hash32CuckooPredicate>
+        PredicateBuilder::build<Hash32CuckooPredicate>(Table &input, uint32_t keyIndex, uint32_t expect_size) {
+            Hash32CuckooPredicate *pred = new Hash32CuckooPredicate(expect_size);
+            shared_ptr<Hash32CuckooPredicate> retval = shared_ptr<Hash32CuckooPredicate>(pred);
+
+            function<void(const shared_ptr<Block> &)> processor =
+                    [&pred, &retval, keyIndex](const shared_ptr<Block> &block) {
+                        auto col = block->col(keyIndex);
+                        uint32_t block_size = block->size();
+                        for (uint32_t i = 0; i < block_size; ++i) {
+                            pred->add(col->next().asInt());
+                        }
+                    };
+            input.blocks()->foreach(processor);
+            return retval;
+        }
+
+        template<>
+        shared_ptr<Hash32GooglePredicate>
+        PredicateBuilder::build<Hash32GooglePredicate>(Table &input, uint32_t keyIndex, uint32_t expect_size) {
+            Hash32GooglePredicate *pred = new Hash32GooglePredicate(expect_size);
+            shared_ptr<Hash32GooglePredicate> retval = shared_ptr<Hash32GooglePredicate>(pred);
+
+            function<void(const shared_ptr<Block> &)> processor =
+                    [&pred, &retval, keyIndex](const shared_ptr<Block> &block) {
+                        auto col = block->col(keyIndex);
+                        uint32_t block_size = block->size();
+                        for (uint32_t i = 0; i < block_size; ++i) {
+                            pred->add(col->next().asInt());
+                        }
+                    };
+            input.blocks()->sequential()->foreach(processor);
+            return retval;
+        }
 
         template<typename C32>
         shared_ptr<C32> buildContainerP32(Table &input, uint32_t keyIndex, Snapshoter *builder,
@@ -580,6 +649,13 @@ namespace lqf {
         ContainerBuilder::build<Hash32MapPageContainer>(Table &input, uint32_t keyIndex,
                                                         Snapshoter *builder, uint32_t expect_size) {
             return buildContainerS32<Hash32MapPageContainer>(input, keyIndex, builder, expect_size);
+        }
+
+        template<>
+        shared_ptr<Hash32CuckooHeapContainer>
+        ContainerBuilder::build<Hash32CuckooHeapContainer>(Table &input, uint32_t keyIndex,
+                                                           Snapshoter *builder, uint32_t expect_size) {
+            return buildContainerP32<Hash32CuckooHeapContainer>(input, keyIndex, builder, expect_size);
         }
     }
 }

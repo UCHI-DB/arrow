@@ -297,17 +297,8 @@ namespace lqf {
 
     template<typename Container>
     shared_ptr<Table> FilterTJoin<Container>::join(Table &left, Table &right) {
-#ifdef LQF_NODE_TIMING
-        auto start = high_resolution_clock::now();
-#endif
         predicate_ = PredicateBuilder::build<Container>(right, right_key_index_, expect_size_);
-
         function<shared_ptr<Block>(const shared_ptr<Block> &)> prober = bind(&FilterTJoin<Container>::probe, this, _1);
-#ifdef LQF_NODE_TIMING
-        auto stop = high_resolution_clock::now();
-        auto duration = duration_cast<microseconds>(stop - start);
-        cout << "Filter Join " << name_ << " Time taken: " << duration.count() << " microseconds" << endl;
-#endif
         return make_shared<TableView>(left.type(), left.colSize(), left.blocks()->map(prober));
     }
 
