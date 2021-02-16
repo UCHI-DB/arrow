@@ -119,16 +119,11 @@ namespace lqf {
             virtual ~HashCuckooPredicate() = default;
 
             void add(ktype value) {
-                content_.template insert(value, value);
+                content_.insert(value, value);
             }
 
             bool test(ktype value) override {
-                try {
-                    content_.find(value);
-                    return true;
-                } catch (...) {
-                    return false;
-                }
+                return content_.contains(value);
             }
 
             inline uint32_t size() { return content_.size(); }
@@ -389,8 +384,6 @@ namespace lqf {
 
         template<>
         shared_ptr<Hash32GooglePredicate> PredicateBuilder::build<Hash32GooglePredicate>(Table &, uint32_t, uint32_t);
-
-
 
 
         // TODO Use this to replace the one in HashBuilder
