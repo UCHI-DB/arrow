@@ -3,8 +3,11 @@
 //
 
 #include "tjoin.h"
+
 #ifdef LQF_STAT
+
 #include "stat.h"
+
 #endif
 
 using namespace std;
@@ -21,6 +24,12 @@ namespace lqf {
 
     template
     class FilterTJoin<Hash32SetPredicate>;
+
+    template
+    class FilterTJoin<Hash32CuckooPredicate>;
+
+    template
+    class FilterTJoin<Hash32GooglePredicate>;
 
     template
     class HashBasedTJoin<Hash32SparseContainer>;
@@ -302,7 +311,7 @@ namespace lqf {
         return make_shared<TableView>(left.type(), left.colSize(), left.blocks()->map(prober));
     }
 
-    template <typename Container>
+    template<typename Container>
     shared_ptr<Block> FilterTJoin<Container>::probe(const shared_ptr<Block> &leftBlock) {
         auto col = leftBlock->col(left_key_index_);
         auto bitmap = make_shared<SimpleBitmap>(leftBlock->limit());

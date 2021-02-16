@@ -86,7 +86,9 @@ namespace lqf {
         public:
             HashGooglePredicate() : HashGooglePredicate(CONTAINER_SIZE) {}
 
-            HashGooglePredicate(uint32_t size) {}
+            HashGooglePredicate(uint32_t size) {
+                content_.set_empty_key(-1);
+            }
 
             virtual ~HashGooglePredicate() = default;
 

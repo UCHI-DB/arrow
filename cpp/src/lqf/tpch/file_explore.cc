@@ -5,6 +5,7 @@
 #include "../threadpool.h"
 #include "../data_model.h"
 #include "../join.h"
+#include "../tjoin.h"
 #include "../filter.h"
 #include "../agg.h"
 #include "../filter_executor.h"
@@ -22,29 +23,22 @@ using namespace lqf::tpch;
 using namespace lqf::sboost;
 
 int main() {
-//    ByteArray segment("HOUSEHOLD");
-//    auto start = high_resolution_clock::now();
-//
-//    for (int i = 0; i < 10; ++i) {
-//        //run your benchmark
-//        auto customerTable = ParquetTable::Open(Customer::path, {Customer::MKTSEGMENT, Customer::CUSTKEY});
-//
-//        ColFilter custFilter(
-//                {new SboostPredicate<ByteArrayType>(Customer::MKTSEGMENT, bind(&ByteArrayDictEq::build, segment))});
-//        auto filteredCustTable = custFilter.filter(*customerTable);
-//        cout << filteredCustTable->size() << '\n';
-//        FilterExecutor::inst->reset();
-//    }
-//    // Get ending timepoint
-//    auto stop = high_resolution_clock::now();
-//    auto duration = duration_cast<microseconds>(stop - start);
-//    cout << "Time taken: " << duration.count() / 10 << " microseconds" << endl;
+    ByteArray segment("HOUSEHOLD");
+    //run your benchmark
+    auto customerTable = ParquetTable::Open(Customer::path, {Customer::CUSTKEY, Customer::MKTSEGMENT});
+    auto orderTable = ParquetTable::Open(Orders::path, {Orders::CUSTKEY});
 
-    auto table = ParquetTable::Open(Orders::path,{Orders::CUSTKEY});
-    StripeHashAgg agg(16, COL_HASHER(Orders::CUSTKEY), COL_HASHER(0),
-                      RowCopyFactory().field(F_REGULAR, Orders::CUSTKEY, 0)->buildSnapshot(),
-                      RowCopyFactory().field(F_REGULAR, 0, 0)->buildSnapshot(),
-                      []() { return vector<AggField *>{new Count()}; });
-    auto result = agg.agg(*table);
-    cout << result->size() << '\n';
+    ColFilter custFilter(
+            {new SboostPredicate<ByteArrayType>(Customer::MKTSEGMENT, bind(&ByteArrayDictEq::build, segment))});
+    auto filteredCustTable = custFilter.filter(*customerTable);
+
+    HashTJoin<Hash32MapHeapContainer> orderOnCustJoin(
+            Orders::CUSTKEY, Customer::CUSTKEY, new RowBuilder({JL(Orders::ORDERKEY), JR(Customer::NATIONKEY)},
+                                                               false, true));
+
+    auto joined = orderOnCustJoin.join(*orderTable, *filteredCustTable);
+    cout << joined->size() << '\n';
+
+
+    FilterExecutor::inst->reset();
 }

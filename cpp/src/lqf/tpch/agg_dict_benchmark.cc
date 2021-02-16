@@ -12,6 +12,7 @@ protected:
 public:
 
     AggBenchmark() {
+//        Iterations(30);
     }
 
     virtual ~AggBenchmark() {
@@ -42,6 +43,21 @@ BENCHMARK_F(AggBenchmark, String)(benchmark::State &state) {
                        },
                        RowCopyFactory().field(F_STRING, LineItem::RECEIPTDATE, 0)->buildSnapshot(),
                        []() { return vector<AggField *>{new Count()}; });
+        auto result = agg.agg(*table);
+        size_ = result->size();
+    }
+}
+
+BENCHMARK_F(AggBenchmark, StringWithSparse)(benchmark::State &state) {
+    for (auto _ : state) {
+        //run your benchmark
+        auto table = ParquetTable::Open(LineItem::path, {LineItem::RECEIPTDATE});
+        HashDenseStrAgg agg([](DataRow &row) {
+                   ByteArray &date = row[LineItem::RECEIPTDATE].asByteArray();
+                   return string((char *) date.ptr, date.len);
+               },
+               RowCopyFactory().field(F_STRING, LineItem::RECEIPTDATE, 0)->buildSnapshot(),
+               []() { return vector<AggField *>{new Count()}; });
         auto result = agg.agg(*table);
         size_ = result->size();
     }

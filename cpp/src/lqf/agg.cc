@@ -6,7 +6,9 @@
 #include <cstring>
 
 #ifdef LQF_STAT
+
 #include "stat.h"
+
 #endif
 
 namespace lqf {
@@ -339,7 +341,7 @@ namespace lqf {
         void HashCore::reduce(DataRow &row) {
             auto key = hasher_(row);
             auto found = map_.find(key);
-            if (__builtin_expect(found != map_.cend(), 1)) {
+            if (__builtin_expect(found != map_.end(), 1)) {
                 found->second->reduce(row);
             } else {
                 DataRow &newstorage = rows_.push_back();
@@ -353,7 +355,7 @@ namespace lqf {
         void HashCore::merge(HashCore &another) {
             for (auto &ite: another.map_) {
                 auto exist = map_.find(ite.first);
-                if (exist != map_.cend()) {
+                if (exist != map_.end()) {
                     exist->second->merge(*ite.second);
                 } else {
                     DataRow &storage = rows_.push_back();
@@ -408,100 +410,6 @@ namespace lqf {
                 }
                 block->resize(counter);
             }
-        }
-
-        CuckooHashCore::CuckooHashCore(const vector<uint32_t> &col_offset,
-                                       function<unique_ptr<AggReducer>()> reducer_gen,
-                                       function<uint64_t(DataRow &)> &hasher,
-                                       function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
-                : CoreBase(move(row_copier), need_dump), reducer_gen_(reducer_gen), hasher_(hasher),
-                  col_offset_(col_offset), rows_(col_offset, 16384) {}
-
-        CuckooHashCore::~CuckooHashCore() {
-            for (auto p: clear_buffer_) {
-                delete p;
-            }
-        }
-
-        void CuckooHashCore::reduce(DataRow &row) {
-            auto key = hasher_(row);
-            AggReducer *ref;
-            auto found = map_.find(key, ref);
-            if (found) {
-                ref->reduce(row);
-            } else {
-                DataRow &newstorage = rows_.push_back();
-                auto reducer = reducer_gen_();
-                reducer->attach(newstorage.raw());
-                reducer->init(row);
-                AggReducer *released = reducer.release();
-                map_.insert(key, released);
-                clear_buffer_.push_back(released);
-            }
-        }
-
-        void CuckooHashCore::merge(CuckooHashCore &another) {
-            // Cuckoo cannot do merge because it does not have a iterator to
-            // access all keys
-
-
-//            for (auto &ite: another.map_) {
-//                auto exist = map_.find(ite.first);
-//                if (exist != map_.cend()) {
-//                    exist->second->merge(*ite.second);
-//                } else {
-//                    DataRow &storage = rows_.push_back();
-//                    memcpy((void *) storage.raw(), (void *) ite.second->storage()->raw(),
-//                           sizeof(uint64_t) * storage.size());
-//                    auto &reducer = ite.second;
-//                    reducer->attach(storage.raw());
-//                    map_[ite.first] = move(reducer);
-//                }
-//            }
-        }
-
-        void CuckooHashCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
-//            auto block = table.allocate(map_.size());
-//            auto writerows = block->rows();
-//            if (!pred) {
-//                if (need_dump_) {
-//                    for (auto &iterator:map_) {
-//                        iterator.second->dump();
-//                        DataRow &next = *(iterator.second->storage());
-//                        DataRow &to = writerows->next();
-//                        (*row_copier_)(to, next);
-//                    }
-//                } else {
-//                    for (auto &iterator:map_) {
-//                        DataRow &next = *(iterator.second->storage());
-//                        DataRow &to = writerows->next();
-//                        (*row_copier_)(to, next);
-//                    }
-//                }
-//            } else {
-//                int counter = 0;
-//                if (need_dump_) {
-//                    for (auto &iterator:map_) {
-//                        iterator.second->dump();
-//                        DataRow &next = *(iterator.second->storage());
-//                        if (pred(next)) {
-//                            DataRow &to = writerows->next();
-//                            (*row_copier_)(to, next);
-//                            ++counter;
-//                        }
-//                    }
-//                } else {
-//                    for (auto &iterator:map_) {
-//                        DataRow &next = *(iterator.second->storage());
-//                        if (pred(next)) {
-//                            DataRow &to = writerows->next();
-//                            (*row_copier_)(to, next);
-//                            ++counter;
-//                        }
-//                    }
-//                }
-//                block->resize(counter);
-//            }
         }
 
         DenseHashCore::DenseHashCore(const vector<uint32_t> &col_offset, function<unique_ptr<AggReducer>()> reducer_gen,
@@ -686,7 +594,7 @@ namespace lqf {
         void HashStrCore::reduce(DataRow &row) {
             auto key = hasher_(row);
             auto found = map_.find(key);
-            if (__builtin_expect(found != map_.cend(), 1)) {
+            if (__builtin_expect(found != map_.end(), 1)) {
                 found->second->reduce(row);
             } else {
                 DataRow &newstorage = rows_.push_back();
@@ -700,7 +608,7 @@ namespace lqf {
         void HashStrCore::merge(HashStrCore &another) {
             for (auto &ite: another.map_) {
                 auto exist = map_.find(ite.first);
-                if (exist != map_.cend()) {
+                if (exist != map_.end()) {
                     exist->second->merge(*ite.second);
                 } else {
                     DataRow &storage = rows_.push_back();
@@ -714,6 +622,97 @@ namespace lqf {
         }
 
         void HashStrCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
+            auto block = table.allocate(map_.size());
+            auto writerows = block->rows();
+            if (!pred) {
+                if (need_dump_) {
+                    for (auto &iterator:map_) {
+                        iterator.second->dump();
+                        DataRow &next = *(iterator.second->storage());
+                        DataRow &to = writerows->next();
+                        (*row_copier_)(to, next);
+                    }
+                } else {
+                    for (auto &iterator:map_) {
+                        DataRow &next = *(iterator.second->storage());
+                        DataRow &to = writerows->next();
+                        (*row_copier_)(to, next);
+                    }
+                }
+            } else {
+                int counter = 0;
+                if (need_dump_) {
+                    for (auto &iterator:map_) {
+                        iterator.second->dump();
+                        DataRow &next = *(iterator.second->storage());
+                        if (pred(next)) {
+                            DataRow &to = writerows->next();
+                            (*row_copier_)(to, next);
+                            ++counter;
+                        }
+                    }
+                } else {
+                    for (auto &iterator:map_) {
+                        DataRow &next = *(iterator.second->storage());
+                        if (pred(next)) {
+                            DataRow &to = writerows->next();
+                            (*row_copier_)(to, next);
+                            ++counter;
+                        }
+                    }
+                }
+                block->resize(counter);
+            }
+        }
+
+        HashDenseStrCore::HashDenseStrCore(const vector<uint32_t> &col_offset,
+                                           function<unique_ptr<AggReducer>()> reducer_gen,
+                                           function<string(DataRow &)> &hasher,
+                                           function<void(DataRow &, DataRow &)> *row_copier, bool need_dump)
+                : CoreBase(move(row_copier), need_dump), reducer_gen_(reducer_gen), hasher_(hasher),
+                  col_offset_(col_offset), rows_(col_offset, 16384) {
+            map_.set_empty_key("");
+        }
+
+        HashDenseStrCore::~HashDenseStrCore() {
+            for (auto &entry: map_) {
+                if (entry.second != nullptr)
+                    delete entry.second;
+            }
+        }
+
+        void HashDenseStrCore::reduce(DataRow &row) {
+            auto key = hasher_(row);
+            auto found = map_.find(key);
+            if (__builtin_expect(found != map_.end(), 1)) {
+                found->second->reduce(row);
+            } else {
+                DataRow &newstorage = rows_.push_back();
+                auto reducer = reducer_gen_();
+                reducer->attach(newstorage.raw());
+                reducer->init(row);
+                map_[key] = reducer.release();
+            }
+        }
+
+        void HashDenseStrCore::merge(HashDenseStrCore &another) {
+            for (auto &ite: another.map_) {
+                auto exist = map_.find(ite.first);
+                if (exist != map_.end()) {
+                    exist->second->merge(*ite.second);
+                } else {
+                    DataRow &storage = rows_.push_back();
+                    memcpy((void *) storage.raw(), (void *) ite.second->storage()->raw(),
+                           sizeof(uint64_t) * storage.size());
+                    auto &reducer = ite.second;
+                    reducer->attach(storage.raw());
+                    map_[ite.first] = reducer;
+                    ite.second = nullptr;
+                }
+            }
+        }
+
+        void HashDenseStrCore::dump(MemTable &table, function<bool(DataRow &)> pred) {
             auto block = table.allocate(map_.size());
             auto writerows = block->rows();
             if (!pred) {
@@ -1079,6 +1078,17 @@ namespace lqf {
         function<unique_ptr<AggReducer>()> rc = bind(&HashStrAgg::createReducer, this);
         return make_shared<HashStrCore>(col_offset_, rc, hasher_, row_copier_.get(), need_field_dump_);
     }
+
+    HashDenseStrAgg::HashDenseStrAgg(function<string(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
+                           function<vector<agg::AggField *>()> fields_gen,
+                           function<bool(DataRow &)> pred, bool vertical)
+            : Agg(move(header_copier), fields_gen, pred, vertical), hasher_(hasher) {}
+
+    shared_ptr<HashDenseStrCore> HashDenseStrAgg::makeCore() {
+        function<unique_ptr<AggReducer>()> rc = bind(&HashDenseStrAgg::createReducer, this);
+        return make_shared<HashDenseStrCore>(col_offset_, rc, hasher_, row_copier_.get(), need_field_dump_);
+    }
+
 
     RecordingHashAgg::RecordingHashAgg(function<uint64_t(DataRow &)> hasher, unique_ptr<Snapshoter> header_copier,
                                        function<RecordingAggField *()> field_gen,

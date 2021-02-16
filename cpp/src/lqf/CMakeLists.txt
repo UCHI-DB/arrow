@@ -159,3 +159,5 @@ add_lqf_benchmark(hash_container_benchmark)
 
 add_executable(lqf_playground playground.cc)
 target_link_libraries(lqf_playground lqf_static)
+
+add_subdirectory(encsel)

@@ -46,7 +46,8 @@ add_lqf_benchmark(filter_in_benchmark)
 add_lqf_benchmark(agg_dict_benchmark)
 add_lqf_benchmark(agg_stripe_benchmark)
 
-add_lqf_benchmark(join_con_benchmark)
+add_lqf_benchmark(filterjoin_benchmark)
+add_lqf_benchmark(hashjoin_benchmark)
 
 add_tpch_exec(lqf-tpch-query-dev tpchquery_dev.cc)
 add_tpch_exec(lqf-threadsanitizer-exp threadsanitizer_exp.cc)

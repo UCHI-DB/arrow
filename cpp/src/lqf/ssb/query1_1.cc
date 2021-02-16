@@ -28,8 +28,8 @@ namespace lqf {
 
 
             ColFilter colFilter(
-                    {new SboostPredicate<DoubleType>(LineOrder::DISCOUNT,
-                                                     bind(DoubleDictBetween::build, discount_from, discount_to)),
+                    {/*new SboostPredicate<DoubleType>(LineOrder::DISCOUNT,
+                                                     bind(DoubleDictBetween::build, discount_from, discount_to)),*/
                      new SboostPredicate<Int32Type>(LineOrder::QUANTITY,
                                                     bind(Int32DictLess::build, quantity_upper)),
                      new SboostPredicate<ByteArrayType>(LineOrder::ORDERDATE,
@@ -37,11 +37,12 @@ namespace lqf {
                     });
             auto filtered = colFilter.filter(*lineorderTable);
 
-            SimpleAgg agg([]() { return vector<AggField *>({new RevenueField()}); });
-            auto agged = agg.agg(*filtered);
-
-            Printer printer(PBEGIN PD(0) PEND);
-            printer.print(*agged);
+            cout << filtered->size()<<'\n';
+//            SimpleAgg agg([]() { return vector<AggField *>({new RevenueField()}); });
+//            auto agged = agg.agg(*filtered);
+//
+//            Printer printer(PBEGIN PD(0) PEND);
+//            printer.print(*agged);
         }
 
         void executeQ1_1() {
