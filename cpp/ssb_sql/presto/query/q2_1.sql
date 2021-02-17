@@ -7,6 +7,3 @@ where p_category = 'MFGR#12' and s_region = 'AMERICA'
 group by d_year, p_brand1
 order by d_year, p_brand1;
 
-
-SELECT last_statement_duration_us / 1000000.0 last_statement_duration_seconds
-FROM current_session;

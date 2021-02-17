@@ -77,12 +77,12 @@ namespace lqf {
                                                  bind(ByteArrayDictBetween::build, date_from, date_to)));
             auto filteredOrder = orderFilter.filter(*lineorderTable);
 
-            HashTJoin<Hash32SparseContainer> orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY,
-                                                               new WithNationBuilder(), nullptr, 10000);
+            ParquetHashColumnTJoin<Hash32MapHeapContainer> orderSupplierJoin(LineOrder::SUPPKEY, Supplier::SUPPKEY,
+                                                               new WithNationColBuilder());
             // CUSTKEY, S_NATION, YEAR, REVENUE
             auto orderWithSupp = orderSupplierJoin.join(*filteredOrder, *filteredSupplier);
 
-            HashColumnTJoin<Hash32SparseContainer> allJoin(0, Customer::CUSTKEY,
+            HashColumnTJoin<Hash32MapHeapContainer> allJoin(0, Customer::CUSTKEY,
                                                            new ColumnBuilder(
                                                                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true);
             auto allJoined = allJoin.join(*orderWithSupp, *filteredCustomer);
@@ -252,17 +252,20 @@ namespace lqf {
                                          {lineorderTable});
 
 //            auto orderSupplierJoin = graph.add(
-//                    new HashTJoin<Hash32SparseContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY, new WithNationBuilder()),
+//                    new HashTJoin<Hash32MapHeapContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY,
+//                                                         new WithNationBuilder()),
 //                    {orderFilter, supplierFilter});
 //             This has large mem size
             auto orderSupplierJoin = graph.add(
-                    new ParquetHashColumnTJoin<Hash32SparseContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY,
+                    new ParquetHashColumnTJoin<Hash32MapHeapContainer>(LineOrder::SUPPKEY, Supplier::SUPPKEY,
                                                                       new WithNationColBuilder()),
                     {orderFilter, supplierFilter});
 
             // CUSTKEY, S_NATION, YEAR, REVENUE
-
-            auto allJoin = graph.add(new HashColumnTJoin<Hash32SparseContainer>(0, Customer::CUSTKEY, new ColumnBuilder(
+//            auto allJoin = graph.add(new HashTJoin<Hash32MapHeapContainer>(0, Customer::CUSTKEY, new RowBuilder(
+//                    {JRR(Customer::NATION), JL(1), JL(2), JL(3)}, false, false)),
+//                                     {orderSupplierJoin, custFilter});
+            auto allJoin = graph.add(new HashColumnTJoin<Hash32MapHeapContainer>(0, Customer::CUSTKEY, new ColumnBuilder(
                     {JRR(Customer::NATION), JL(1), JL(2), JL(3)}), true),
                                      {orderSupplierJoin, custFilter});
 

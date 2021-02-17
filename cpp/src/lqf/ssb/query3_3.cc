@@ -208,7 +208,7 @@ namespace lqf {
             printer.print(*sorted);;
         }
 
-        void executeQ3_3Graph() {
+        void executeQ3_3() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path,
@@ -269,7 +269,7 @@ namespace lqf {
             graph.execute(true);
         }
 
-        void executeQ3_3() {
+        void executeQ3_3Enc() {
             ExecutionGraph graph;
 
             auto customer = ParquetTable::Open(Customer::path,

@@ -21,7 +21,7 @@ int main() {
 
     // Call the function,
     env_init();
-    executeQ1_1();
+    executeQ3_4();
     env_cleanup();
 
 

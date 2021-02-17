@@ -5,7 +5,7 @@ CREATE TABLE lineorder
     lo_custkey       INT,
     lo_partkey       INT,
     lo_suppkey       INT,
-    lo_orderdate     INT,
+    lo_orderdate     VARBINARY(10),
     lo_orderpriority VARBINARY(15),
     lo_shippriority  VARBINARY(1),
     lo_quantity      INT,
@@ -15,7 +15,7 @@ CREATE TABLE lineorder
     lo_revenue       FLOAT,
     lo_supplycost    FLOAT,
     lo_tax           FLOAT,
-    lo_commitdate    INT,
+    lo_commitdate    VARBINARY(10),
     lo_shipmode      VARBINARY(10)
 );
 

@@ -1,6 +1,6 @@
-CREATE TABLE date
+CREATE TABLE dates
 (
-    d_datekey INT,
+    d_datekey VARBINARY(10),
     d_date VARBINARY(18),
     d_dayofweek VARBINARY(8),
     d_month VARBINARY(9),
@@ -19,4 +19,4 @@ CREATE TABLE date
     d_weekdayfl BOOLEAN
 );
 
-COPY date FROM '/local/hajiang/ssb/10/date.tbl' DELIMITER '|' DIRECT;
+COPY dates FROM '/local/hajiang/ssb/10/date.tbl' DELIMITER '|' DIRECT;
